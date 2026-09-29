@@ -1,0 +1,109 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// USUÁRIOS MASTER DA PLATAFORMA
+// ==========================================
+model MasterAdmin {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==========================================
+// PLANOS DE ASSINATURA
+// ==========================================
+model Plan {
+  id           String       @id @default(uuid())
+  name         String
+  price        Decimal      @db.Decimal(10, 2)
+  modules      Json         // Array de módulos permitidos (ex: ["FINANCEIRO", "CRM"])
+  hasSupport   Boolean      @default(false)
+  supportPrice Decimal?     @db.Decimal(10, 2)
+  isActive     Boolean      @default(true)
+  
+  realEstates  RealEstate[] // Relacionamento com as imobiliárias
+
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+// ==========================================
+// FRANQUEADOS
+// ==========================================
+model Franchisee {
+  id                String   @id @default(uuid())
+  cnpj              String   @unique
+  corporateName     String   // Razão Social
+  tradeName         String   // Nome Fantasia
+  stateRegistration String?  // Inscrição Estadual
+  cityRegistration  String?  // Inscrição Municipal
+  cep               String
+  address           String   // Endereço Completo
+  phone             String
+  
+  // Dados do Responsável
+  respName          String
+  respCpf           String
+  respAddress       String
+  respPhone         String
+  
+  // Acesso à plataforma
+  email             String   @unique
+  password          String
+  contractUrl       String?  // Link do PDF do contrato no Storage (S3/Cloudinary)
+  isActive          Boolean  @default(true)
+
+  realEstates       RealEstate[] // Lojas vinculadas a este franqueado
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ==========================================
+// IMOBILIÁRIAS (LOJAS)
+// ==========================================
+model RealEstate {
+  id                String   @id @default(uuid())
+  cnpj              String   @unique
+  corporateName     String   // Razão Social
+  tradeName         String   // Nome Fantasia
+  stateRegistration String?
+  cityRegistration  String?
+  cep               String
+  address           String
+  phone             String
+  
+  // Dados do Responsável
+  respName          String
+  respCpf           String
+  respAddress       String
+  respPhone         String
+  
+  // Acesso da própria Imobiliária
+  email             String   @unique
+  password          String
+  contractUrl       String?  // Contrato da imobiliária
+  isActive          Boolean  @default(true)
+
+  // Relacionamentos
+  planId            String
+  plan              Plan     @relation(fields: [planId], references: [id])
+  
+  // Opcional: Se for nulo, pertence direto ao Master. Se preenchido, pertence ao Franqueado.
+  franchiseeId      String?  
+  franchisee        Franchisee? @relation(fields: [franchiseeId], references: [id])
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
