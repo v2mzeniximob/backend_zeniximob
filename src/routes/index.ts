@@ -1,29 +1,26 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
+import { PlanController } from '../controllers/PlanController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 
 const routes = Router();
 const authController = new AuthController();
+const planController = new PlanController();
 
-// ------------------------------------
-// ROTAS PÚBLICAS (Qualquer um acessa)
-// ------------------------------------
+// ==========================================
+// ROTAS PÚBLICAS (Login)
+// ==========================================
 routes.post('/login', authController.login);
 
-
-// ------------------------------------
-// ROTAS PROTEGIDAS (Precisa estar logado)
-// ------------------------------------
-routes.get('/me', authMiddleware, (req, res) => {
-  return res.json({ message: 'Você está autenticado!', user: req.user });
-});
-
-
-// ------------------------------------
+// ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
-// ------------------------------------
-routes.get('/master-only', authMiddleware, masterOnly, (req, res) => {
-  return res.json({ message: 'Bem-vindo à área de relatórios VIP do Master!' });
-});
+// ==========================================
+// Todas as rotas dentro deste bloco vão passar pelos 2 "seguranças" (authMiddleware e masterOnly)
+routes.use('/plans', authMiddleware, masterOnly); 
+
+routes.post('/plans', planController.create);         
+routes.get('/plans', planController.list);             
+routes.put('/plans/:id', planController.update);       
+routes.patch('/plans/:id/status', planController.toggleStatus); 
 
 export default routes;
