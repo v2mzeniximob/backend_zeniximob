@@ -1,26 +1,43 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { PlanController } from '../controllers/PlanController';
+import { FranchiseeController } from '../controllers/FranchiseeController';
+import { IntegrationController } from '../controllers/IntegrationController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 
 const routes = Router();
 const authController = new AuthController();
 const planController = new PlanController();
+const franchiseeController = new FranchiseeController();
+const integrationController = new IntegrationController();
 
 // ==========================================
-// ROTAS PÚBLICAS (Login)
+// ROTAS PÚBLICAS
 // ==========================================
 routes.post('/login', authController.login);
 
 // ==========================================
+// ROTAS PROTEGIDAS (Qualquer usuário logado)
+// ==========================================
+// O Frontend vai usar essas rotas para preencher formulários sozinhos
+routes.get('/integrations/cep/:cep', authMiddleware, integrationController.getCep);
+routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.getCnpj);
+
+
+// ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
-// Todas as rotas dentro deste bloco vão passar pelos 2 "seguranças" (authMiddleware e masterOnly)
 routes.use('/plans', authMiddleware, masterOnly); 
+routes.post('/plans', planController.create);
+routes.get('/plans', planController.list);
+routes.put('/plans/:id', planController.update);
+routes.patch('/plans/:id/status', planController.toggleStatus);
 
-routes.post('/plans', planController.create);         
-routes.get('/plans', planController.list);             
-routes.put('/plans/:id', planController.update);       
-routes.patch('/plans/:id/status', planController.toggleStatus); 
+// Rotas de Franqueados
+routes.use('/franchisees', authMiddleware, masterOnly);
+routes.post('/franchisees', franchiseeController.create);
+routes.get('/franchisees', franchiseeController.list);
+routes.put('/franchisees/:id', franchiseeController.update);
+routes.patch('/franchisees/:id/status', franchiseeController.toggleStatus);
 
 export default routes;

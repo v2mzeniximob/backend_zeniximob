@@ -45,16 +45,12 @@ export class PlanController {
     }
   }
 
-  // 3. EDITAR UM PLANO
+// 3. EDITAR UM PLANO
   async update(req: Request, res: Response): Promise<any> {
     try {
-      const { id } = req.params;
-      if (typeof id !== 'string') {
-        return res.status(400).json({ error: 'ID do plano inválido.' });
-      }
+      const id = req.params.id as string; // Correção aqui
       const { name, price, modules, hasSupport, supportPrice } = req.body;
 
-      // Verifica se o plano existe
       const planExists = await prisma.plan.findUnique({ where: { id } });
       if (!planExists) {
         return res.status(404).json({ error: 'Plano não encontrado.' });
@@ -78,20 +74,16 @@ export class PlanController {
     }
   }
 
-  // 4. ATIVAR / INATIVAR PLANO (Evita exclusão real para não quebrar notas fiscais/histórico)
+  // 4. ATIVAR / INATIVAR PLANO
   async toggleStatus(req: Request, res: Response): Promise<any> {
     try {
-      const { id } = req.params;
-      if (typeof id !== 'string') {
-        return res.status(400).json({ error: 'ID do plano inválido.' });
-      }
+      const id = req.params.id as string; // Correção aqui
 
       const plan = await prisma.plan.findUnique({ where: { id } });
       if (!plan) {
         return res.status(404).json({ error: 'Plano não encontrado.' });
       }
 
-      // Inverte o status atual (Se true vira false, se false vira true)
       const updatedPlan = await prisma.plan.update({
         where: { id },
         data: { isActive: !plan.isActive },
