@@ -2,107 +2,125 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any;
 
 export class FranchiseeController {
-  
-  // 1. CRIAR FRANQUEADO
-  async create(req: Request, res: Response): Promise<any> {
+  // 1. Criar Franqueado
+  async create(req: Request, res: Response) {
     try {
-      const {
-        cnpj, corporateName, tradeName, stateRegistration, cityRegistration,
-        cep, address, phone,
-        respName, respCpf, respAddress, respPhone,
-        email, password, contractUrl
-      } = req.body;
-
-      // Verifica se o CNPJ ou E-mail já existem no banco
-      const alreadyExists = await prisma.franchisee.findFirst({
-        where: { OR: [{ cnpj }, { email }] }
-      });
-
-      if (alreadyExists) {
-        return res.status(400).json({ error: 'Já existe um franqueado cadastrado com este CNPJ ou E-mail.' });
+      const data = req.body;
+      
+      if (!data.cnpj || !data.email || !data.password) {
+        return res.status(400).json({ error: 'CNPJ, E-mail e Senha são obrigatórios.' });
       }
 
-      // Criptografar a senha do franqueado
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const existing = await prisma.franchisee.findFirst({
+        where: { OR: [{ email: data.email }, { cnpj: data.cnpj }] }
+      });
+
+      if (existing) {
+        return res.status(400).json({ error: 'Já existe um franqueado com este E-mail ou CNPJ.' });
+      }
+
+      const hashedPassword = await bcrypt.hash(data.password, 8);
 
       const franchisee = await prisma.franchisee.create({
         data: {
-          cnpj, corporateName, tradeName, stateRegistration, cityRegistration,
-          cep, address, phone,
-          respName, respCpf, respAddress, respPhone,
-          email, password: hashedPassword,
-          contractUrl: contractUrl || null // Aqui futuramente virá a URL do S3/Cloudinary
+          cnpj: data.cnpj,
+          corporateName: data.corporateName,
+          tradeName: data.tradeName,
+          stateRegistration: data.stateRegistration || 'ISENTO',
+          cityRegistration: data.cityRegistration || 'ISENTO',
+          cep: data.cep,
+          address: data.address,
+          phone: data.phone,
+          respName: data.respName,
+          respCpf: data.respCpf,
+          respPhone: data.respPhone,
+          respAddress: data.respAddress,
+          email: data.email,
+          password: hashedPassword,
+          contractUrl: data.contractUrl || null,
         }
       });
 
-      // Remove a senha do retorno por segurança
-      const { password: _, ...franchiseeData } = franchisee;
-      return res.status(201).json(franchiseeData);
-
+      return res.status(201).json(franchisee);
     } catch (error) {
-      console.error('Erro ao criar franqueado:', error);
+      console.error('[FRANQUEADO_CREATE_ERROR]', error);
       return res.status(500).json({ error: 'Erro interno ao criar franqueado.' });
     }
   }
 
-  // 2. LISTAR TODOS OS FRANQUEADOS (Master)
-  async list(req: Request, res: Response): Promise<any> {
+  // 2. Listar Franqueados (ESTE ERA O VILÃO QUE NÃO TRAZIA TODOS OS DADOS)
+  async list(req: Request, res: Response) {
     try {
+      // Retorna todos os dados de forma explícita e integral sem filtrar nada
       const franchisees = await prisma.franchisee.findMany({
-        orderBy: { createdAt: 'desc' },
-        select: { // Select garante que a senha NUNCA trafegue pela rede
-          id: true, cnpj: true, corporateName: true, tradeName: true,
-          email: true, phone: true, isActive: true, contractUrl: true, createdAt: true
-        }
+        orderBy: { createdAt: 'desc' }
       });
       return res.json(franchisees);
     } catch (error) {
-      return res.status(500).json({ error: 'Erro interno ao listar franqueados.' });
+      console.error('[FRANQUEADO_LIST_ERROR]', error);
+      return res.status(500).json({ error: 'Erro ao listar franqueados.' });
     }
   }
 
-// 3. EDITAR FRANQUEADO
-  async update(req: Request, res: Response): Promise<any> {
+  // 3. Atualizar Franqueado
+  async update(req: Request, res: Response) {
     try {
-      const id = req.params.id as string; // Correção aqui
-      const dataToUpdate = req.body;
+      const { id } = req.params;
+      const data = req.body;
 
-      if (dataToUpdate.password) {
-        dataToUpdate.password = await bcrypt.hash(dataToUpdate.password, 10);
-      }
+      const dataToUpdate: any = {
+        cnpj: data.cnpj,
+        corporateName: data.corporateName,
+        tradeName: data.tradeName,
+        stateRegistration: data.stateRegistration || 'ISENTO',
+        cityRegistration: data.cityRegistration || 'ISENTO',
+        cep: data.cep,
+        address: data.address,
+        phone: data.phone,
+        respName: data.respName,
+        respCpf: data.respCpf,
+        respPhone: data.respPhone,
+        respAddress: data.respAddress,
+        email: data.email,
+        contractUrl: data.contractUrl || null,
+      };
 
-      const updatedFranchisee = await prisma.franchisee.update({
-        where: { id },
-        data: dataToUpdate
-      });
-
-      const { password: _, ...safeData } = updatedFranchisee;
-      return res.json(safeData);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao atualizar franqueado.' });
-    }
-  }
-
-  // 4. ATIVAR / INATIVAR FRANQUEADO
-  async toggleStatus(req: Request, res: Response): Promise<any> {
-    try {
-      const id = req.params.id as string; // Correção aqui
-      const franchisee = await prisma.franchisee.findUnique({ where: { id } });
-      
-      if (!franchisee) {
-        return res.status(404).json({ error: 'Franqueado não encontrado.' });
+      // Se a senha foi preenchida na edição, gera novo hash. Caso contrário, ignora.
+      if (data.password && data.password.trim() !== '') {
+        dataToUpdate.password = await bcrypt.hash(data.password, 8);
       }
 
       const updated = await prisma.franchisee.update({
         where: { id },
-        data: { isActive: !franchisee.isActive }
+        data: dataToUpdate
       });
 
-      return res.json({ message: 'Status alterado com sucesso', isActive: updated.isActive });
+      return res.json(updated);
     } catch (error) {
+      console.error('[FRANQUEADO_UPDATE_ERROR]', error);
+      return res.status(500).json({ error: 'Erro ao atualizar franqueado.' });
+    }
+  }
+
+  // 4. Alternar Status (Ativo / Inativo)
+  async toggleStatus(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const fran = await prisma.franchisee.findUnique({ where: { id } });
+      
+      if (!fran) return res.status(404).json({ error: 'Franqueado não encontrado.' });
+
+      const updated = await prisma.franchisee.update({
+        where: { id },
+        data: { isActive: !fran.isActive }
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      console.error('[FRANQUEADO_STATUS_ERROR]', error);
       return res.status(500).json({ error: 'Erro ao alterar status.' });
     }
   }
