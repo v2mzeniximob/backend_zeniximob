@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any; // Força o TypeScript a aceitar os modelos dinamicamente
 
 export class PropertyController {
-  // Criar Imóvel (Vinculado automaticamente à imobiliária do usuário logado)
+  // Criar Imóvel
   async create(req: Request, res: Response) {
     try {
       const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
@@ -14,7 +14,7 @@ export class PropertyController {
         return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
       }
 
-      const property = await (prisma as any).property.create({
+      const property = await prisma.property.create({
         data: {
           title,
           type,
@@ -45,7 +45,7 @@ export class PropertyController {
     try {
       const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
 
-      const properties = await (prisma as any).property.findMany({
+      const properties = await prisma.property.findMany({
         where: { realEstateId },
         orderBy: { createdAt: 'desc' }
       });
@@ -63,7 +63,7 @@ export class PropertyController {
       const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
       const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls } = req.body;
 
-      const property = await (prisma as any).property.update({
+      const property = await prisma.property.update({
         where: { id, realEstateId },
         data: {
           title,
@@ -94,10 +94,10 @@ export class PropertyController {
       const { id } = req.params;
       const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
 
-      const property = await (prisma as any).property.findUnique({ where: { id, realEstateId } });
+      const property = await prisma.property.findUnique({ where: { id, realEstateId } });
       if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
 
-      const updated = await (prisma as any).property.update({
+      const updated = await prisma.property.update({
         where: { id },
         data: { isActive: !property.isActive }
       });
@@ -112,17 +112,18 @@ export class PropertyController {
   async listPublicByStore(req: Request, res: Response) {
     try {
       const { slug } = req.params;
+      const slugStr = Array.isArray(slug) ? slug[0] : (slug as string);
 
-      const realEstate = await prisma.realEstate.findFirst({
-        where: { slug, isActive: true },
+      const realEstate = await prisma.realEstate.findUnique({
+        where: { slug: slugStr, isActive: true },
         select: { id: true, tradeName: true, corporateName: true, address: true, phone: true, email: true }
       });
 
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
       const [properties, brokers] = await Promise.all([
-        (prisma as any).property.findMany({ where: { realEstateId: realEstate.id, isActive: true }, orderBy: { createdAt: 'desc' } }),
-        (prisma as any).broker.findMany({ where: { realEstateId: realEstate.id, isActive: true }, select: { id: true, name: true, creci: true, phone: true } })
+        prisma.property.findMany({ where: { realEstateId: realEstate.id, isActive: true }, orderBy: { createdAt: 'desc' } }),
+        prisma.broker.findMany({ where: { realEstateId: realEstate.id, isActive: true }, select: { id: true, name: true, creci: true, phone: true } })
       ]);
 
       return res.json({ realEstate, properties, brokers });
