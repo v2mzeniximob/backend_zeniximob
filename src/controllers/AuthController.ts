@@ -15,89 +15,92 @@ export class AuthController {
         return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
       }
 
-      // 1. Verificar Master
+      // 1. Verificar se é o utilizador MASTER
       const masterEmail = process.env.MASTER_EMAIL || 'admin@zeniximob.com';
       const masterPassword = process.env.MASTER_PASSWORD || '123456';
 
-      if (email === masterEmail && password === masterPassword) {
-        console.log('[LOGIN] Acesso Master autorizado.');
-        const token = jwt.sign(
-          { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true },
-          process.env.JWT_SECRET || 'zeniximob-secret',
-          { expiresIn: '7d' }
-        );
-        return res.json({
-          token,
-          user: { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true }
-        });
-      }
-
-      // 2. Verificar na tabela de Imobiliárias (RealEstate)
-      const realEstate = await prisma.realEstate.findUnique({ where: { email } });
-      if (realEstate) {
-        console.log('[LOGIN] Imobiliária encontrada na base de dados:', realEstate.tradeName);
-        
-        if (!realEstate.isActive) {
-          console.log('[LOGIN] Tentativa de login em imobiliária inativa.');
-          return res.status(401).json({ error: 'Esta imobiliária encontra-se inativa.' });
-        }
-
-        const passwordMatch = await bcrypt.compare(password, realEstate.password);
-        console.log('[LOGIN] Senha confere?', passwordMatch);
-
-        if (passwordMatch) {
+      if (email === masterEmail) {
+        if (password === masterPassword) {
+          console.log('[LOGIN] Acesso Master autorizado.');
           const token = jwt.sign(
-            { id: realEstate.id, email: realEstate.email, realEstateId: realEstate.id, role: 'REAL_ESTATE' },
+            { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true },
             process.env.JWT_SECRET || 'zeniximob-secret',
             { expiresIn: '7d' }
           );
           return res.json({
             token,
-            user: { 
-              id: realEstate.id, 
-              name: realEstate.tradeName, 
-              email: realEstate.email, 
-              role: 'REAL_ESTATE', 
-              realEstateId: realEstate.id 
-            }
+            user: { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true }
           });
+        } else {
+          console.log('[LOGIN] Senha Master incorreta.');
+          return res.status(401).json({ error: 'Credenciais inválidas.' });
         }
-      } else {
-        console.log('[LOGIN] E-mail não encontrado na tabela RealEstate.');
+      }
+
+      // 2. Verificar na tabela de Imobiliárias (RealEstate)
+      const realEstate = await prisma.realEstate.findUnique({ where: { email } });
+      if (realEstate) {
+        console.log('[LOGIN] Imobiliária encontrada:', realEstate.tradeName);
+        
+        if (!realEstate.isActive) {
+          return res.status(401).json({ error: 'Esta imobiliária encontra-se inativa.' });
+        }
+
+        const passwordMatch = await bcrypt.compare(password, realEstate.password);
+        if (!passwordMatch) {
+          console.log('[LOGIN] Senha incorreta para a imobiliária.');
+          return res.status(401).json({ error: 'Credenciais inválidas.' });
+        }
+
+        const token = jwt.sign(
+          { id: realEstate.id, email: realEstate.email, realEstateId: realEstate.id, role: 'REAL_ESTATE' },
+          process.env.JWT_SECRET || 'zeniximob-secret',
+          { expiresIn: '7d' }
+        );
+        return res.json({
+          token,
+          user: { 
+            id: realEstate.id, 
+            name: realEstate.tradeName, 
+            email: realEstate.email, 
+            role: 'REAL_ESTATE', 
+            realEstateId: realEstate.id 
+          }
+        });
       }
 
       // 3. Verificar na tabela de Corretores (Broker)
       const broker = await prisma.broker.findUnique({ where: { email } });
       if (broker) {
-        console.log('[LOGIN] Corretor encontrado na base de dados:', broker.name);
+        console.log('[LOGIN] Corretor encontrado:', broker.name);
 
         if (!broker.isActive) {
           return res.status(401).json({ error: 'Este corretor encontra-se inativo.' });
         }
 
         const passwordMatch = await bcrypt.compare(password, broker.password);
-        if (passwordMatch) {
-          const token = jwt.sign(
-            { id: broker.id, email: broker.email, realEstateId: broker.realEstateId, role: 'BROKER' },
-            process.env.JWT_SECRET || 'zeniximob-secret',
-            { expiresIn: '7d' }
-          );
-          return res.json({
-            token,
-            user: { 
-              id: broker.id, 
-              name: broker.name, 
-              email: broker.email, 
-              role: 'BROKER', 
-              realEstateId: broker.realEstateId 
-            }
-          });
+        if (!passwordMatch) {
+          return res.status(401).json({ error: 'Credenciais inválidas.' });
         }
-      } else {
-        console.log('[LOGIN] E-mail não encontrado na tabela Broker.');
+
+        const token = jwt.sign(
+          { id: broker.id, email: broker.email, realEstateId: broker.realEstateId, role: 'BROKER' },
+          process.env.JWT_SECRET || 'zeniximob-secret',
+          { expiresIn: '7d' }
+        );
+        return res.json({
+          token,
+          user: { 
+            id: broker.id, 
+            name: broker.name, 
+            email: broker.email, 
+            role: 'BROKER', 
+            realEstateId: broker.realEstateId 
+          }
+        });
       }
 
-      console.log('[LOGIN] Falha: Credenciais inválidas.');
+      console.log('[LOGIN] E-mail não encontrado em nenhuma tabela.');
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     } catch (error) {
       console.error('[LOGIN_ERROR] Erro interno:', error);
