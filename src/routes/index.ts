@@ -5,6 +5,7 @@ import { FranchiseeController } from '../controllers/FranchiseeController';
 import { IntegrationController } from '../controllers/IntegrationController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 import { RealEstateController } from '../controllers/RealEstateController';
+import { DashboardController } from '../controllers/DashboardController';
 
 const routes = Router();
 const authController = new AuthController();
@@ -12,6 +13,7 @@ const planController = new PlanController();
 const franchiseeController = new FranchiseeController();
 const integrationController = new IntegrationController();
 const realEstateController = new RealEstateController();
+const dashboardController = new DashboardController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -50,5 +52,10 @@ routes.post('/real-estates', realEstateController.create);
 routes.get('/real-estates', realEstateController.list);
 routes.put('/real-estates/:id', realEstateController.update);
 routes.patch('/real-estates/:id/status', realEstateController.toggleStatus);
+
+// ==========================================
+// ROTAS DE DASHBOARD / B.I
+// ==========================================
+routes.get('/dashboard/master', authMiddleware, masterOnly, dashboardController.getMasterStats);
 
 export default routes;
