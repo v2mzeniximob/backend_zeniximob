@@ -190,4 +190,61 @@ export class RealEstateController {
       return res.status(500).json({ error: 'Erro ao alterar status da imobiliária.' });
     }
   }
+
+  // --- NOVAS FUNÇÕES PARA O PAINEL DA PRÓPRIA IMOBILIÁRIA ---
+
+  async getMyStore(req: Request, res: Response) {
+    try {
+      const id = (req as any).user?.realEstateId || (req as any).realEstateId;
+      if (!id) return res.status(401).json({ error: 'Não autorizado.' });
+
+      const store = await prisma.realEstate.findUnique({ where: { id } });
+      return res.json(store);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao buscar dados da loja.' });
+    }
+  }
+
+  async updateMyStore(req: Request, res: Response) {
+    try {
+      const id = (req as any).user?.realEstateId || (req as any).realEstateId;
+      if (!id) return res.status(401).json({ error: 'Não autorizado.' });
+
+      const data = req.body;
+      const dataToUpdate: any = {
+        tradeName: data.tradeName,
+        corporateName: data.corporateName,
+        slug: data.slug,
+        phone: data.phone,
+        email: data.email,
+        cep: data.cep,
+        address: data.address,
+      };
+
+      // Se enviou senha nova, atualiza o hash
+      if (data.password && data.password.trim() !== '') {
+        const bcrypt = require('bcryptjs');
+        dataToUpdate.password = await bcrypt.hash(data.password, 8);
+      }
+
+      // Verifica se o slug que a loja quer já está sendo usado por outra loja
+      if (data.slug) {
+        const existingSlug = await prisma.realEstate.findFirst({
+          where: { slug: data.slug, id: { not: id } }
+        });
+        if (existingSlug) {
+          return res.status(400).json({ error: 'Este slug/link já está em uso por outra loja.' });
+        }
+      }
+
+      const updated = await prisma.realEstate.update({
+        where: { id },
+        data: dataToUpdate
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar dados da loja.' });
+    }
+  }
 }

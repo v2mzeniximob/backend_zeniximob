@@ -75,6 +75,10 @@ routes.post('/brokers', authMiddleware, brokerController.create);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
 
+// Configurações da Própria Loja
+routes.get('/my-store', authMiddleware, realEstateController.getMyStore);
+routes.put('/my-store', authMiddleware, realEstateController.updateMyStore);
+
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
