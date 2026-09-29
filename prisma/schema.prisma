@@ -42,14 +42,14 @@ model Plan {
 // FRANQUEADOS
 // ==========================================
 model Franchisee {
-  id                String   @id @default(uuid())
-  cnpj              String   @unique
-  corporateName     String   // Razão Social
-  tradeName         String   // Nome Fantasia
-  stateRegistration String?  // Inscrição Estadual
-  cityRegistration  String?  // Inscrição Municipal
+  id                String       @id @default(uuid())
+  cnpj              String       @unique
+  corporateName     String       // Razão Social
+  tradeName         String       // Nome Fantasia
+  stateRegistration String?      // Inscrição Estadual
+  cityRegistration  String?      // Inscrição Municipal
   cep               String
-  address           String   // Endereço Completo
+  address           String       // Endereço Completo
   phone             String
   
   // Dados do Responsável
@@ -59,26 +59,26 @@ model Franchisee {
   respPhone         String
   
   // Acesso à plataforma
-  email             String   @unique
+  email             String       @unique
   password          String
-  contractUrl       String?  // Link do PDF do contrato no Storage (S3/Cloudinary)
-  isActive          Boolean  @default(true)
+  contractUrl       String?      // Link do PDF do contrato no Storage (S3/Cloudinary)
+  isActive          Boolean      @default(true)
 
   realEstates       RealEstate[] // Lojas vinculadas a este franqueado
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 // ==========================================
 // IMOBILIÁRIAS (LOJAS)
 // ==========================================
 model RealEstate {
-  id                String     @id @default(uuid())
-  cnpj              String     @unique
+  id                String       @id @default(uuid())
+  cnpj              String       @unique
   corporateName     String
   tradeName         String
-  slug              String     @unique 
+  slug              String       @unique 
   stateRegistration String
   cityRegistration  String
   cep               String
@@ -88,24 +88,51 @@ model RealEstate {
   respCpf           String
   respPhone         String
   respAddress       String
-  email             String     @unique
+  email             String       @unique
   password          String
   contractUrl       String?
-  isActive          Boolean    @default(true)
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   planId            String
-  plan              Plan       @relation(fields: [planId], references: [id])
+  plan              Plan         @relation(fields: [planId], references: [id])
   
   franchiseeId      String?
-  franchisee        Franchisee? @relation(fields: [franchiseeId], references: [id])
+  franchisee        Franchisee?  @relation(fields: [franchiseeId], references: [id])
 
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
 }
 
+// ==========================================
+// CORRETORES (Equipa da Loja)
+// ==========================================
+model Broker {
+  id           String     @id @default(uuid())
+  name         String
+  cpf          String     @unique
+  creci        String
+  phone        String
+  email        String     @unique
+  password     String
+  isActive     Boolean    @default(true)
+  
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  // ATUALIZAÇÃO: Relações com Imóveis e Leads
+  properties   Property[]
+  leads        Lead[]
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+// ==========================================
+// IMÓVEIS
+// ==========================================
 model Property {
   id            String      @id @default(uuid())
   title         String
@@ -126,11 +153,18 @@ model Property {
   realEstateId  String
   realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
+  // ATUALIZAÇÃO: Vinculação ao Corretor
+  brokerId      String?
+  broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+
   leads         Lead[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 }
 
+// ==========================================
+// LEADS (CRM)
+// ==========================================
 model Lead {
   id            String      @id @default(uuid())
   name          String
@@ -143,28 +177,13 @@ model Lead {
   propertyId    String?
   property      Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   
-  brokerId      String?
-  
   realEstateId  String
   realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
+  // ATUALIZAÇÃO: Vinculação ao Corretor que está atendendo
+  brokerId      String?
+  broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-}
-
-model Broker {
-  id           String     @id @default(uuid())
-  name         String
-  cpf          String     @unique
-  creci        String
-  phone        String
-  email        String     @unique
-  password     String
-  isActive     Boolean    @default(true)
-  
-  realEstateId String
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
-  
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
 }

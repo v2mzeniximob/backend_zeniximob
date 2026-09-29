@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient() as any;
 
+// Função auxiliar para descobrir de qual imobiliária o utilizador logado pertence
 async function getRealEstateId(req: Request): Promise<string | null> {
   const reqAny = req as any;
   if (reqAny.realEstateId) return reqAny.realEstateId;
@@ -21,6 +22,10 @@ async function getRealEstateId(req: Request): Promise<string | null> {
 }
 
 export class PropertyController {
+  
+  // ==========================================
+  // CRIAR IMÓVEL
+  // ==========================================
   async create(req: Request, res: Response) {
     try {
       const realEstateId = await getRealEstateId(req);
@@ -28,7 +33,8 @@ export class PropertyController {
         return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
       }
 
-      const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls } = req.body;
+      // Extrai os dados do body, incluindo o novo campo brokerId
+      const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls, brokerId } = req.body;
 
       const property = await prisma.property.create({
         data: {
@@ -45,7 +51,11 @@ export class PropertyController {
           address,
           description,
           imageUrls: imageUrls || [],
+          brokerId: brokerId || null, // <- ATUALIZAÇÃO AQUI
           realEstateId
+        },
+        include: {
+          broker: { select: { id: true, name: true, phone: true } } // Já devolve com os dados do corretor
         }
       });
 
@@ -56,6 +66,9 @@ export class PropertyController {
     }
   }
 
+  // ==========================================
+  // LISTAR IMÓVEIS (Da loja logada)
+  // ==========================================
   async list(req: Request, res: Response) {
     try {
       const realEstateId = await getRealEstateId(req);
@@ -65,7 +78,10 @@ export class PropertyController {
 
       const properties = await prisma.property.findMany({
         where: { realEstateId },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
+        include: {
+          broker: { select: { id: true, name: true, phone: true } } // <- ATUALIZAÇÃO AQUI: traz o corretor associado
+        }
       });
 
       return res.json(properties);
@@ -74,6 +90,9 @@ export class PropertyController {
     }
   }
 
+  // ==========================================
+  // ATUALIZAR IMÓVEL
+  // ==========================================
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -82,7 +101,7 @@ export class PropertyController {
         return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
       }
 
-      const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls } = req.body;
+      const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls, brokerId } = req.body;
 
       const property = await prisma.property.update({
         where: { id, realEstateId },
@@ -99,7 +118,11 @@ export class PropertyController {
           cep,
           address,
           description,
-          imageUrls: imageUrls || []
+          imageUrls: imageUrls || [],
+          brokerId: brokerId === "" ? null : brokerId, // <- ATUALIZAÇÃO AQUI
+        },
+        include: {
+          broker: { select: { id: true, name: true, phone: true } }
         }
       });
 
@@ -109,6 +132,9 @@ export class PropertyController {
     }
   }
 
+  // ==========================================
+  // ALTERAR STATUS DO IMÓVEL (Ativo/Inativo)
+  // ==========================================
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -131,6 +157,9 @@ export class PropertyController {
     }
   }
 
+  // ==========================================
+  // ROTA PÚBLICA: VITRINE DA LOJA
+  // ==========================================
   async listPublicByStore(req: Request, res: Response) {
     try {
       const { slug } = req.params;
@@ -143,9 +172,17 @@ export class PropertyController {
 
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
+      // Busca propriedades ativas e inclui os dados públicos do corretor responsável por cada uma
       const [properties, brokers] = await Promise.all([
-        prisma.property.findMany({ where: { realEstateId: realEstate.id, isActive: true }, orderBy: { createdAt: 'desc' } }),
-        prisma.broker.findMany({ where: { realEstateId: realEstate.id, isActive: true }, select: { id: true, name: true, creci: true, phone: true } })
+        prisma.property.findMany({ 
+          where: { realEstateId: realEstate.id, isActive: true }, 
+          orderBy: { createdAt: 'desc' },
+          include: { broker: { select: { name: true, creci: true, phone: true } } }
+        }),
+        prisma.broker.findMany({ 
+          where: { realEstateId: realEstate.id, isActive: true }, 
+          select: { id: true, name: true, creci: true, phone: true } 
+        })
       ]);
 
       return res.json({ realEstate, properties, brokers });

@@ -7,6 +7,7 @@ import { RealEstateController } from '../controllers/RealEstateController';
 import { DashboardController } from '../controllers/DashboardController';
 import { PropertyController } from '../controllers/PropertyController';
 import { LeadController } from '../controllers/LeadController';
+import { BrokerController } from '../controllers/BrokerController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 
 const routes = Router();
@@ -18,6 +19,7 @@ const realEstateController = new RealEstateController();
 const dashboardController = new DashboardController();
 const propertyController = new PropertyController();
 const leadController = new LeadController();
+const brokerController = new BrokerController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -25,6 +27,7 @@ const leadController = new LeadController();
 routes.post('/login', authController.login);
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 
+// Rota pública para leads (quando o cliente envia mensagem na vitrine)
 routes.post('/public/leads', async (req, res) => {
   try {
     const { name, phone, email, interest, status, notes, propertyId, realEstateId, brokerId } = req.body;
@@ -47,28 +50,33 @@ routes.post('/public/leads', async (req, res) => {
 });
 
 // ==========================================
-// ROTAS PROTEGIDAS
+// ROTAS PROTEGIDAS (Utilitários)
 // ==========================================
 routes.get('/integrations/cep/:cep', authMiddleware, integrationController.getCep);
 routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.getCnpj);
 
 // ==========================================
-// ROTAS DE IMÓVEIS (Imobiliária)
+// ROTAS DA IMOBILIÁRIA (Protegidas)
 // ==========================================
+// Imóveis
 routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
 routes.put('/properties/:id', authMiddleware, propertyController.update);
 routes.patch('/properties/:id/status', authMiddleware, propertyController.toggleStatus);
 
-// ==========================================
-// ROTAS DE LEADS (Imobiliária)
-// ==========================================
+// Leads
 routes.get('/leads', authMiddleware, leadController.list);
 routes.post('/leads', authMiddleware, leadController.create);
 routes.put('/leads/:id', authMiddleware, leadController.update);
 
+// Corretores
+routes.get('/brokers', authMiddleware, brokerController.list);
+routes.post('/brokers', authMiddleware, brokerController.create);
+routes.put('/brokers/:id', authMiddleware, brokerController.update);
+routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
+
 // ==========================================
-// ROTAS RESTRITAS (MASTER)
+// ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
 routes.use('/plans', authMiddleware, masterOnly); 
 routes.post('/plans', planController.create);
