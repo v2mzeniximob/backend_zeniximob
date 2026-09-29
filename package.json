@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "dev": "ts-node-dev --transpile-only --ignore-watch node_modules src/server.ts",
-    "build": "npx prisma generate && tsc",
-    "start": "node dist/server.js",
-    "db:push": "prisma db push",
-    "db:seed": "ts-node prisma/seed.ts"
-  },
+"scripts": {
+  "dev": "ts-node-dev --transpile-only --ignore-watch node_modules src/server.ts",
+  "build": "prisma generate && tsc",
+  "start": "node dist/server.js",
+  "db:push": "prisma db push",
+  "db:seed": "ts-node prisma/seed.ts"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
