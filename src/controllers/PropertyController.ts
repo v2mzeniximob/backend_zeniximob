@@ -1,18 +1,34 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient() as any; // Força o TypeScript a aceitar os modelos dinamicamente
+const prisma = new PrismaClient() as any;
+
+async function getRealEstateId(req: Request): Promise<string | null> {
+  const reqAny = req as any;
+  if (reqAny.realEstateId) return reqAny.realEstateId;
+  if (reqAny.user?.realEstateId) return reqAny.user.realEstateId;
+
+  const userId = reqAny.userId || reqAny.user?.id;
+  if (!userId) return null;
+
+  const store = await prisma.realEstate.findUnique({ where: { id: userId } });
+  if (store) return store.id;
+
+  const broker = await prisma.broker.findUnique({ where: { id: userId } });
+  if (broker) return broker.realEstateId;
+
+  return null;
+}
 
 export class PropertyController {
-  // Criar Imóvel
   async create(req: Request, res: Response) {
     try {
-      const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
-      const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls } = req.body;
-
+      const realEstateId = await getRealEstateId(req);
       if (!realEstateId) {
         return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
       }
+
+      const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls } = req.body;
 
       const property = await prisma.property.create({
         data: {
@@ -40,10 +56,12 @@ export class PropertyController {
     }
   }
 
-  // Listar Imóveis da Imobiliária Logada
   async list(req: Request, res: Response) {
     try {
-      const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
+      const realEstateId = await getRealEstateId(req);
+      if (!realEstateId) {
+        return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
+      }
 
       const properties = await prisma.property.findMany({
         where: { realEstateId },
@@ -56,11 +74,14 @@ export class PropertyController {
     }
   }
 
-  // Atualizar Imóvel
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
+      const realEstateId = await getRealEstateId(req);
+      if (!realEstateId) {
+        return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
+      }
+
       const { title, type, category, transaction, price, area, bedrooms, bathrooms, garage, cep, address, description, imageUrls } = req.body;
 
       const property = await prisma.property.update({
@@ -88,11 +109,13 @@ export class PropertyController {
     }
   }
 
-  // Alternar Status (Ativo / Inativo)
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const realEstateId = (req as any).realEstateId || (req as any).user?.realEstateId;
+      const realEstateId = await getRealEstateId(req);
+      if (!realEstateId) {
+        return res.status(401).json({ error: 'Imobiliária não identificada no token.' });
+      }
 
       const property = await prisma.property.findUnique({ where: { id, realEstateId } });
       if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
@@ -108,7 +131,6 @@ export class PropertyController {
     }
   }
 
-  // Rota Pública: Listar imóveis de uma loja específica pelo Slug
   async listPublicByStore(req: Request, res: Response) {
     try {
       const { slug } = req.params;
