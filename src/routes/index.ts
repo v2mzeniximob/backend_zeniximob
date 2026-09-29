@@ -4,12 +4,14 @@ import { PlanController } from '../controllers/PlanController';
 import { FranchiseeController } from '../controllers/FranchiseeController';
 import { IntegrationController } from '../controllers/IntegrationController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
+import { RealEstateController } from '../controllers/RealEstateController';
 
 const routes = Router();
 const authController = new AuthController();
 const planController = new PlanController();
 const franchiseeController = new FranchiseeController();
 const integrationController = new IntegrationController();
+const realEstateController = new RealEstateController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -39,5 +41,14 @@ routes.post('/franchisees', franchiseeController.create);
 routes.get('/franchisees', franchiseeController.list);
 routes.put('/franchisees/:id', franchiseeController.update);
 routes.patch('/franchisees/:id/status', franchiseeController.toggleStatus);
+
+// ==========================================
+// ROTAS DE IMOBILIÁRIAS (MASTER)
+// ==========================================
+routes.use('/real-estates', authMiddleware, masterOnly);
+routes.post('/real-estates', realEstateController.create);
+routes.get('/real-estates', realEstateController.list);
+routes.put('/real-estates/:id', realEstateController.update);
+routes.patch('/real-estates/:id/status', realEstateController.toggleStatus);
 
 export default routes;
