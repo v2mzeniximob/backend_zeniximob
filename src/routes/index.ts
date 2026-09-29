@@ -25,7 +25,12 @@ const brokerController = new BrokerController();
 // ROTAS PÚBLICAS
 // ==========================================
 routes.post('/login', authController.login);
+
+// Vitrine da Loja (Lista todos os imóveis ativos)
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
+
+// NOVO: Detalhes de um único imóvel na vitrine (Página detalhada)
+routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 
 // Rota pública para leads (quando o cliente envia mensagem na vitrine)
 routes.post('/public/leads', async (req, res) => {

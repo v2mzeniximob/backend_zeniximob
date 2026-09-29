@@ -131,7 +131,7 @@ model Broker {
 }
 
 // ==========================================
-// IMÓVEIS
+// IMÓVEIS (ATUALIZADO PARA PÁGINA DETALHADA)
 // ==========================================
 model Property {
   id            String      @id @default(uuid())
@@ -139,21 +139,38 @@ model Property {
   type          String      // Casa, Apartamento, Terreno, etc.
   category      String      // Residencial ou Comercial
   transaction   String      // Venda ou Aluguel
+  
+  // Valores
   price         Float
+  condoFee      Float?      @default(0) // Valor do Condomínio
+  iptu          Float?      @default(0) // Valor do IPTU Mensal/Anual
+  
+  // Detalhes Físicos
   area          Float
   bedrooms      Int         @default(0)
   bathrooms     Int         @default(0)
   garage        Int         @default(0)
+  yearBuilt     Int?        // Ano de construção
+  amenities     String[]    // Array com as características (ex: ["Piscina", "Academia", "Churrasqueira"])
+  
+  // Localização Detalhada
   cep           String
   address       String
+  neighborhood  String?     // Bairro (Usado para o mapa focar apenas na região)
+  city          String?     // Cidade
+  state         String?     // Estado (UF)
+  latitude      Float?      // Coordenada Y (Opcional, preenchido via API de CEP no front)
+  longitude     Float?      // Coordenada X (Opcional)
+  
+  // Mídia e Status
   description   String?
   imageUrls     String[]    // Array com as URLs das fotos
   isActive      Boolean     @default(true)
   
+  // Relacionamentos
   realEstateId  String
   realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  // ATUALIZAÇÃO: Vinculação ao Corretor
   brokerId      String?
   broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
 
