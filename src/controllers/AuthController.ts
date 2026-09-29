@@ -2,64 +2,92 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import process from 'process';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any;
 
 export class AuthController {
-  async login(req: Request, res: Response): Promise<any> {
+  async login(req: Request, res: Response) {
     try {
       const { email, password } = req.body;
 
       if (!email || !password) {
-        return res.status(400).json({ error: 'E-mail e senha são obrigatórios' });
+        return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
       }
 
-      // 1. Tentar encontrar o usuário no nível MasterAdmin
-      const masterUser = await prisma.masterAdmin.findUnique({ where: { email } });
+      // 1. Verificar se é o utilizador MASTER (configurado via variáveis de ambiente ou padrão)
+      const masterEmail = process.env.MASTER_EMAIL || 'admin@zeniximob.com';
+      const masterPassword = process.env.MASTER_PASSWORD || '123456';
 
-      if (!masterUser) {
-        // Futuramente, adicionaremos aqui a busca nas tabelas de Franchisee e RealEstate
-        return res.status(401).json({ error: 'Credenciais inválidas' });
+      if (email === masterEmail && password === masterPassword) {
+        const token = jwt.sign(
+          { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true },
+          process.env.JWT_SECRET || 'zeniximob-secret',
+          { expiresIn: '7d' }
+        );
+        return res.json({
+          token,
+          user: { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true }
+        });
       }
 
-      // 2. Verificar se o usuário está ativo
-      if (!masterUser.isActive) {
-        return res.status(401).json({ error: 'Usuário inativo' });
+      // 2. Verificar na tabela de Imobiliárias (RealEstate)
+      const realEstate = await prisma.realEstate.findUnique({ where: { email } });
+      if (realEstate) {
+        if (!realEstate.isActive) {
+          return res.status(401).json({ error: 'Esta imobiliária encontra-se inativa.' });
+        }
+
+        const passwordMatch = await bcrypt.compare(password, realEstate.password);
+        if (passwordMatch) {
+          const token = jwt.sign(
+            { id: realEstate.id, email: realEstate.email, realEstateId: realEstate.id, role: 'REAL_ESTATE' },
+            process.env.JWT_SECRET || 'zeniximob-secret',
+            { expiresIn: '7d' }
+          );
+          return res.json({
+            token,
+            user: { 
+              id: realEstate.id, 
+              name: realEstate.tradeName, 
+              email: realEstate.email, 
+              role: 'REAL_ESTATE', 
+              realEstateId: realEstate.id 
+            }
+          });
+        }
       }
 
-      // 3. Comparar a senha enviada com a senha criptografada no banco
-      const isValidPassword = await bcrypt.compare(password, masterUser.password);
-      if (!isValidPassword) {
-        return res.status(401).json({ error: 'Credenciais inválidas' });
+      // 3. Verificar na tabela de Corretores (Broker)
+      const broker = await prisma.broker.findUnique({ where: { email } });
+      if (broker) {
+        if (!broker.isActive) {
+          return res.status(401).json({ error: 'Este corretor encontra-se inativo.' });
+        }
+
+        const passwordMatch = await bcrypt.compare(password, broker.password);
+        if (passwordMatch) {
+          const token = jwt.sign(
+            { id: broker.id, email: broker.email, realEstateId: broker.realEstateId, role: 'BROKER' },
+            process.env.JWT_SECRET || 'zeniximob-secret',
+            { expiresIn: '7d' }
+          );
+          return res.json({
+            token,
+            user: { 
+              id: broker.id, 
+              name: broker.name, 
+              email: broker.email, 
+              role: 'BROKER', 
+              realEstateId: broker.realEstateId 
+            }
+          });
+        }
       }
 
-      // 4. Gerar o Token JWT
-      const secret = process.env.JWT_SECRET || 'zeniximob_super_secret_key_2024';
-      const token = jwt.sign(
-        { 
-          id: masterUser.id, 
-          email: masterUser.email, 
-          role: 'MASTER' // Isso vai ser crucial para travar o painel depois
-        },
-        secret,
-        { expiresIn: '1d' } // Token expira em 1 dia
-      );
-
-      // 5. Retornar os dados (sem a senha, obviamente) e o token
-      return res.json({
-        user: {
-          id: masterUser.id,
-          name: masterUser.name,
-          email: masterUser.email,
-          role: 'MASTER'
-        },
-        token
-      });
-
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
     } catch (error) {
       console.error('Erro no login:', error);
-      return res.status(500).json({ error: 'Erro interno no servidor' });
+      return res.status(500).json({ error: 'Erro interno no servidor ao realizar login.' });
     }
   }
 }
