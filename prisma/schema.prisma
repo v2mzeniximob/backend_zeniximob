@@ -74,36 +74,97 @@ model Franchisee {
 // IMOBILIÁRIAS (LOJAS)
 // ==========================================
 model RealEstate {
-  id                String   @id @default(uuid())
-  cnpj              String   @unique
-  corporateName     String   // Razão Social
-  tradeName         String   // Nome Fantasia
-  stateRegistration String?
-  cityRegistration  String?
+  id                String     @id @default(uuid())
+  cnpj              String     @unique
+  corporateName     String
+  tradeName         String
+  slug              String     @unique 
+  stateRegistration String
+  cityRegistration  String
   cep               String
   address           String
   phone             String
-  
-  // Dados do Responsável
   respName          String
   respCpf           String
-  respAddress       String
   respPhone         String
-  
-  // Acesso da própria Imobiliária
-  email             String   @unique
+  respAddress       String
+  email             String     @unique
   password          String
-  contractUrl       String?  // Contrato da imobiliária
-  isActive          Boolean  @default(true)
+  contractUrl       String?
+  isActive          Boolean    @default(true)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
 
-  // Relacionamentos
   planId            String
-  plan              Plan     @relation(fields: [planId], references: [id])
+  plan              Plan       @relation(fields: [planId], references: [id])
   
-  // Opcional: Se for nulo, pertence direto ao Master. Se preenchido, pertence ao Franqueado.
-  franchiseeId      String?  
+  franchiseeId      String?
   franchisee        Franchisee? @relation(fields: [franchiseeId], references: [id])
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  properties        Property[]
+  leads             Lead[]
+  brokers           Broker[]
+}
+
+model Property {
+  id            String      @id @default(uuid())
+  title         String
+  type          String      // Casa, Apartamento, Terreno, etc.
+  category      String      // Residencial ou Comercial
+  transaction   String      // Venda ou Aluguel
+  price         Float
+  area          Float
+  bedrooms      Int         @default(0)
+  bathrooms     Int         @default(0)
+  garage        Int         @default(0)
+  cep           String
+  address       String
+  description   String?
+  imageUrls     String[]    // Array com as URLs das fotos
+  isActive      Boolean     @default(true)
+  
+  realEstateId  String
+  realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  leads         Lead[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Lead {
+  id            String      @id @default(uuid())
+  name          String
+  phone         String
+  email         String?
+  interest      String      // Comprar, Alugar, etc.
+  status        String      @default("Novo") // Novo, Em Atendimento, Em Proposta, Fechado, Perdido
+  notes         String?
+  
+  propertyId    String?
+  property      Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  
+  brokerId      String?
+  
+  realEstateId  String
+  realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Broker {
+  id           String     @id @default(uuid())
+  name         String
+  cpf          String     @unique
+  creci        String
+  phone        String
+  email        String     @unique
+  password     String
+  isActive     Boolean    @default(true)
+  
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
