@@ -162,4 +162,37 @@ export class PropertyController {
       return res.status(500).json({ error: 'Erro ao carregar detalhes do imóvel.' });
     }
   }
+
+  // Adicione dentro da classe PropertyController
+ async updateRentalInfo(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      const { rentStatus, inspectionUrl, contractUrl, tenantId } = req.body;
+
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+
+      const property = await prisma.property.findFirst({
+        where: { id, realEstateId }
+      });
+
+      if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
+
+      const updatedProperty = await prisma.property.update({
+        where: { id },
+        data: {
+          rentStatus,
+          inspectionUrl,
+          contractUrl,
+          tenantId: tenantId || null
+        } as any
+      });
+
+      return res.json(updatedProperty);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar dados de aluguel do imóvel.' });
+    }
+  }
 }

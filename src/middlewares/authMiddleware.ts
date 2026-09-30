@@ -8,6 +8,7 @@ interface TokenPayload {
   role: string;
   iat: number;
   exp: number;
+  realEstateId?: string;
 }
 
 // Estendemos a tipagem do Express para que o 'req' passe a enxergar o 'user' logado

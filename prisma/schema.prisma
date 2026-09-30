@@ -104,6 +104,7 @@ model RealEstate {
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
+  tenants Tenant[]
 }
 
 // ==========================================
@@ -174,6 +175,12 @@ model Property {
   brokerId      String?
   broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
 
+  rentStatus      String?   @default("Vago") // "Vago" ou "Alugado"
+  inspectionUrl   String?   // Upload do Documento de Vistoria
+  contractUrl     String?   // Upload do Contrato de Aluguel
+
+  tenantId        String?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
   leads         Lead[]
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
@@ -203,4 +210,40 @@ model Lead {
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+}
+
+model Tenant {
+  id              String      @id @default(uuid())
+  
+  // Dados do Inquilino
+  name            String
+  cpf             String      @unique
+  currentAddress  String
+  phone           String
+  email           String
+  documentUrl     String?     // Upload do documento do inquilino
+  maritalStatus   String      // "Solteiro", "Casado", "Divorciado", etc.
+  
+  // Dados do Cônjuge (Se casado)
+  spouseName      String?
+  spouseCpf       String?
+  spouseDocUrl    String?     // Upload do documento do cônjuge
+  
+  // Dados do Fiador
+  guarantorName   String?
+  guarantorCpf    String?
+  guarantorDocUrl String?     // Upload do documento do fiador
+  
+  // Controle do sistema
+  isActive        Boolean     @default(true)
+  
+  // Relações
+  realEstateId    String
+  realEstate      RealEstate  @relation(fields: [realEstateId], references: [id])
+  properties      Property[]  // Imóveis que este inquilino alugou
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("tenants")
 }
