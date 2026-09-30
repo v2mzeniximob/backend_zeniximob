@@ -11,13 +11,12 @@ app.use(cors());
 app.use(express.json());
 
 // ==========================================
-// ROTA PÚBLICA DA VITRINE (Direta no Server)
+// 1. ROTA PÚBLICA DA VITRINE DA LOJA
 // ==========================================
 app.get('/public/stores/:slug', async (req, res) => {
   try {
     const { slug } = req.params;
 
-    // 1. Buscar a imobiliária pelo slug
     const realEstate = await prisma.realEstate.findFirst({
       where: { 
         slug: slug.trim(), 
@@ -29,7 +28,6 @@ app.get('/public/stores/:slug', async (req, res) => {
       return res.status(404).json({ error: 'Imobiliária não encontrada ou inativa.' });
     }
 
-    // 2. Buscar os imóveis associados a esta imobiliária
     const properties = await prisma.property.findMany({
       where: { 
         realEstateId: realEstate.id 
@@ -39,13 +37,47 @@ app.get('/public/stores/:slug', async (req, res) => {
       }
     });
 
-    return res.json({ 
-      realEstate, 
-      properties 
-    });
+    return res.json({ realEstate, properties });
   } catch (error: any) {
     console.error('Erro ao buscar vitrine pública:', error);
     return res.status(500).json({ error: 'Erro interno ao carregar a vitrine da imobiliária.' });
+  }
+});
+
+// ==========================================
+// 2. ROTA PÚBLICA DE DETALHES DO IMÓVEL
+// ==========================================
+app.get('/public/stores/:slug/properties/:propertyId', async (req, res) => {
+  try {
+    const { slug, propertyId } = req.params;
+
+    const realEstate = await prisma.realEstate.findFirst({
+      where: { slug: slug.trim(), isActive: true }
+    });
+
+    if (!realEstate) {
+      return res.status(404).json({ error: 'Imobiliária não encontrada.' });
+    }
+
+    const property = await prisma.property.findFirst({
+      where: { 
+        id: propertyId,
+        realEstateId: realEstate.id,
+        isActive: true 
+      },
+      include: {
+        broker: true // Traz os dados do corretor responsável
+      }
+    });
+
+    if (!property) {
+      return res.status(404).json({ error: 'Imóvel não encontrado.' });
+    }
+
+    return res.json({ realEstate, property });
+  } catch (error) {
+    console.error('Erro ao buscar detalhes do imóvel:', error);
+    return res.status(500).json({ error: 'Erro interno ao carregar imóvel.' });
   }
 });
 
