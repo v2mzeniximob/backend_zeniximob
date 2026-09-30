@@ -47,17 +47,22 @@ export class PropertyController {
     }
   }
 
+
   async list(req: Request, res: Response) {
     try {
-      const realEstateId = await getRealEstateId(req);
-      if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
 
-      const properties = await prisma.property.findMany({
-        where: { realEstateId }, orderBy: { createdAt: 'desc' },
-        include: { broker: { select: { id: true, name: true, phone: true } } }
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+
+      const properties = await (prisma as any).property.findMany({
+        where: { realEstateId },
+        orderBy: { createdAt: 'desc' }
       });
+
       return res.json(properties);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao listar imóveis.' });
     }
   }
@@ -195,4 +200,5 @@ export class PropertyController {
       return res.status(500).json({ error: 'Erro ao atualizar dados de aluguel do imóvel.' });
     }
   }
+
 }
