@@ -8,6 +8,7 @@ import { DashboardController } from '../controllers/DashboardController';
 import { PropertyController } from '../controllers/PropertyController';
 import { LeadController } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
+import { TenantController } from '../controllers/TenantController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 
 const routes = Router();
@@ -20,6 +21,7 @@ const dashboardController = new DashboardController();
 const propertyController = new PropertyController();
 const leadController = new LeadController();
 const brokerController = new BrokerController();
+const tenantController = new TenantController(); 
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -63,11 +65,21 @@ routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.get
 // ==========================================
 // ROTAS DA IMOBILIÁRIA (Protegidas)
 // ==========================================
+
+// --- Gestão de Inquilinos --- (ROTAS ADICIONADAS)
+routes.get('/tenants', authMiddleware, tenantController.list);
+routes.post('/tenants', authMiddleware, tenantController.create);
+routes.put('/tenants/:id', authMiddleware, tenantController.update);
+routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
+
 // Imóveis
 routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
 routes.put('/properties/:id', authMiddleware, propertyController.update);
 routes.patch('/properties/:id/status', authMiddleware, propertyController.toggleStatus);
+
+// Rota Específica para Alugar/Vincular Imóvel (ROTA ADICIONADA)
+routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
 
 // Leads
 routes.get('/leads', authMiddleware, leadController.list);
