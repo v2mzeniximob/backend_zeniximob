@@ -1,14 +1,23 @@
 import express from 'express';
 import cors from 'cors';
 import process from 'process';
-import routes from './routes'; // Importamos nossas rotas
+import routes from './routes';
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// Plugar as rotas no app
+// --- ROTA DE TESTE DIRETA NO SERVER.TS ---
+app.get('/public/stores/:slug', (req, res) => {
+  return res.json({ 
+    success: true, 
+    message: 'Rota direta a funcionar no servidor!', 
+    slugRecebido: req.params.slug 
+  });
+});
+// ----------------------------------------
+
 app.use(routes);
 
 app.get('/', (req, res) => {
