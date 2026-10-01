@@ -12,7 +12,7 @@ export class BrokerController {
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { name, email, cpf, creci, phone, password, profileImageUrl } = req.body;
+      const { name, email, cpf, creci, phone, password, profileImageUrl, creciDocumentUrl } = req.body;
 
       const brokerExists = await (prisma as any).broker.findFirst({
         where: { OR: [{ email }, { cpf }, { creci }] }
@@ -26,18 +26,14 @@ export class BrokerController {
 
       const broker = await (prisma as any).broker.create({
         data: {
-          name,
-          email,
-          cpf,
-          creci,
-          phone,
+          name, email, cpf, creci, phone, 
           password: hashedPassword,
-          profileImageUrl, // Nova foto do corretor
+          profileImageUrl,
+          creciDocumentUrl, // Novo campo gravado
           realEstateId
         }
       });
 
-      // Remove a password do retorno por segurança
       broker.password = undefined;
       return res.status(201).json(broker);
     } catch (error) {
@@ -57,7 +53,8 @@ export class BrokerController {
         orderBy: { name: 'asc' },
         select: {
           id: true, name: true, email: true, cpf: true, creci: true, 
-          phone: true, profileImageUrl: true, isActive: true, createdAt: true
+          phone: true, profileImageUrl: true, creciDocumentUrl: true, // Adicionado aqui para o Frontend receber
+          isActive: true, createdAt: true
         }
       });
 
@@ -75,16 +72,22 @@ export class BrokerController {
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { name, email, cpf, creci, phone, password, profileImageUrl } = req.body;
+      // CORREÇÃO DO ERRO 500: Verifica a propriedade primeiro de forma segura
+      const existingBroker = await (prisma as any).broker.findUnique({ where: { id } });
+      if (!existingBroker || existingBroker.realEstateId !== realEstateId) {
+        return res.status(403).json({ error: 'Acesso negado ou corretor não encontrado.' });
+      }
 
-      const dataToUpdate: any = { name, email, cpf, creci, phone, profileImageUrl };
+      const { name, email, cpf, creci, phone, password, profileImageUrl, creciDocumentUrl } = req.body;
+
+      const dataToUpdate: any = { name, email, cpf, creci, phone, profileImageUrl, creciDocumentUrl };
 
       if (password) {
         dataToUpdate.password = await bcrypt.hash(password, 10);
       }
 
       const broker = await (prisma as any).broker.update({
-        where: { id_realEstateId: { id, realEstateId } }, // Garante que atualiza apenas corretores da própria loja
+        where: { id }, // Atualização segura sem causar crash no Prisma
         data: dataToUpdate
       });
 
@@ -103,11 +106,10 @@ export class BrokerController {
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const broker = await (prisma as any).broker.findUnique({
-        where: { id_realEstateId: { id, realEstateId } }
-      });
-      
-      if (!broker) return res.status(404).json({ error: 'Corretor não encontrado.' });
+      const broker = await (prisma as any).broker.findUnique({ where: { id } });
+      if (!broker || broker.realEstateId !== realEstateId) {
+        return res.status(404).json({ error: 'Corretor não encontrado.' });
+      }
 
       const updated = await (prisma as any).broker.update({
         where: { id },

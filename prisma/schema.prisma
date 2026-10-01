@@ -128,6 +128,7 @@ model Broker {
   password     String
   isActive     Boolean    @default(true)
   profileImageUrl String? @db.Text
+  creciDocumentUrl String? @db.Text
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
