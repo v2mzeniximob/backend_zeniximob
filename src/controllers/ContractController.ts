@@ -61,22 +61,60 @@ export class ContractController {
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { status, documentUrl } = req.body;
+      
+      // Recebemos todos os campos do Frontend
+      const { 
+        status, 
+        documentUrl,
+        propertyId,
+        tenantId,
+        startDate,
+        rentValue,
+        adminFeePercent,
+        readjustmentIndex
+      } = req.body;
+      
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      const contract = await prisma.contract.findUnique({ where: { id }, include: { property: true } });
-      if (!contract || contract.property.realEstateId !== realEstateId) return res.status(404).json({ error: 'Contrato não encontrado.' });
+      const contract = await prisma.contract.findUnique({ 
+        where: { id }, 
+        include: { property: true } 
+      });
+      
+      if (!contract || contract.property.realEstateId !== realEstateId) {
+        return res.status(404).json({ error: 'Contrato não encontrado.' });
+      }
 
-      const updated = await prisma.contract.update({ where: { id }, data: { status, documentUrl } });
+      // Atualiza todos os dados que vierem no formulário
+      const updated = await prisma.contract.update({ 
+        where: { id }, 
+        data: { 
+          status, 
+          documentUrl,
+          propertyId: propertyId || undefined,
+          tenantId: tenantId || undefined,
+          startDate: startDate ? new Date(startDate) : undefined,
+          rentValue: rentValue ? Number(rentValue) : undefined,
+          adminFeePercent: adminFeePercent ? Number(adminFeePercent) : undefined,
+          readjustmentIndex: readjustmentIndex || undefined
+        } 
+      });
+
+      // Se o status foi alterado para Encerrado, liberta o imóvel
       if (status === 'Encerrado' && contract.type === 'Locação') {
-        await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
+        await prisma.property.update({ 
+          where: { id: contract.propertyId }, 
+          data: { rentStatus: 'Vago', tenantId: null } 
+        });
       }
 
       return res.json(updated);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); }
+    } catch (error) { 
+      console.error('Erro ao atualizar contrato:', error);
+      return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); 
+    }
   }
-
   async addInspection(req: Request, res: Response) {
     try {
       const { id } = req.params;

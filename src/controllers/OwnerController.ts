@@ -29,18 +29,40 @@ export class OwnerController {
     } catch (error) { return res.status(500).json({ error: 'Erro ao listar proprietários.' }); }
   }
 
-  async update(req: Request, res: Response) {
+async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { name, cpfOrCnpj, email, phone, bankData } = req.body;
+      const { name, cpfOrCnpj, email, phone, bankData, managementContractUrl } = req.body;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      const updated = await prisma.owner.update({
-        where: { id, realEstateId }, data: { name, cpfOrCnpj, email, phone, bankData }
+      // 1. Garante que o proprietário existe e pertence à imobiliária logada
+      const owner = await prisma.owner.findFirst({
+        where: { id, realEstateId }
       });
+
+      if (!owner) {
+        return res.status(404).json({ error: 'Proprietário não encontrado ou sem permissão.' });
+      }
+
+      // 2. Atualiza todos os dados, preservando o link do contrato assinado
+      const updated = await prisma.owner.update({
+        where: { id },
+        data: {
+          name,
+          cpfOrCnpj,
+          email,
+          phone,
+          bankData,
+          managementContractUrl: managementContractUrl !== undefined ? managementContractUrl : undefined
+        }
+      });
+
       return res.json(updated);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar proprietário.' }); }
+    } catch (error) {
+      console.error('Erro ao atualizar proprietário:', error);
+      return res.status(500).json({ error: 'Erro ao atualizar proprietário.' });
+    }
   }
 
   async toggleStatus(req: Request, res: Response) {
