@@ -16,8 +16,20 @@ async function getRealEstateId(req: Request): Promise<string | null> {
   return null;
 }
 
+// Campos do imóvel que qualquer visitante da vitrine pode ver.
+// Ficam de fora de propósito: contractUrl, inspectionUrl, tenantId e rentStatus (dados internos do aluguel),
+// e qualquer coluna nova que for criada no futuro, até que alguém a libere aqui.
+const PUBLIC_PROPERTY_FIELDS = {
+  id: true, title: true, type: true, category: true, transaction: true,
+  price: true, condoFee: true, iptu: true,
+  area: true, bedrooms: true, bathrooms: true, garage: true, yearBuilt: true, amenities: true,
+  cep: true, address: true, neighborhood: true, city: true, state: true, latitude: true, longitude: true,
+  description: true, imageUrls: true, isActive: true,
+  realEstateId: true, brokerId: true, createdAt: true, updatedAt: true
+};
+
 export class PropertyController {
-  
+
   async create(req: Request, res: Response) {
     try {
       const realEstateId = await getRealEstateId(req);
@@ -128,9 +140,12 @@ export class PropertyController {
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
       const [properties, brokers] = await Promise.all([
-        prisma.property.findMany({ 
+        prisma.property.findMany({
           where: { realEstateId: realEstate.id, isActive: true }, orderBy: { createdAt: 'desc' },
-          include: { broker: { select: { name: true, creci: true, phone: true } } }
+          select: {
+            ...PUBLIC_PROPERTY_FIELDS,
+            broker: { select: { name: true, creci: true, phone: true } }
+          }
         }),
         prisma.broker.findMany({ 
           where: { realEstateId: realEstate.id, isActive: true }, select: { id: true, name: true, creci: true, phone: true } 
@@ -157,7 +172,11 @@ export class PropertyController {
 
       const property = await prisma.property.findFirst({
         where: { id: propertyId, realEstateId: realEstate.id, isActive: true },
-        include: { broker: { select: { name: true, creci: true, phone: true, email: true } } }
+        select: {
+          ...PUBLIC_PROPERTY_FIELDS,
+          // O id do corretor é usado pela vitrine para direcionar o lead ao corretor responsável.
+          broker: { select: { id: true, name: true, creci: true, phone: true, email: true } }
+        }
       });
 
       if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });

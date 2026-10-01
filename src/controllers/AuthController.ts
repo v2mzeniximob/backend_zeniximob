@@ -16,8 +16,8 @@ export class AuthController {
       }
 
       // 1. Verificar se é o utilizador MASTER
-      const masterEmail = process.env.MASTER_EMAIL || 'admin@zeniximob.com';
-      const masterPassword = process.env.MASTER_PASSWORD || '123456';
+      const masterEmail = process.env.MASTER_EMAIL;
+      const masterPassword = process.env.MASTER_PASSWORD;
 
       if (email === masterEmail) {
         if (password === masterPassword) {
