@@ -95,6 +95,14 @@ model RealEstate {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
+  logoUrl         String?   // Logótipo da imobiliária
+  heroImageUrl    String?   // Imagem de fundo gigante para a barra de pesquisa
+  aboutText       String?   // Texto para a página "Sobre nós"
+  footerText      String?   // Texto curto para o rodapé
+  instagramUrl    String?   // Link do Instagram
+  facebookUrl     String?   // Link do Facebook
+  whatsappDisplay String?   // WhatsApp público para o site
+
   planId            String
   plan              Plan         @relation(fields: [planId], references: [id])
   
@@ -119,6 +127,7 @@ model Broker {
   email        String     @unique
   password     String
   isActive     Boolean    @default(true)
+  profileImageUrl String?
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
@@ -178,6 +187,7 @@ model Property {
   rentStatus      String?   @default("Vago") // "Vago" ou "Alugado"
   inspectionUrl   String?   // Upload do Documento de Vistoria
   contractUrl     String?   // Upload do Contrato de Aluguel
+  isHighlighted   Boolean   @default(false)
 
   tenantId        String?
   tenant          Tenant?   @relation(fields: [tenantId], references: [id])

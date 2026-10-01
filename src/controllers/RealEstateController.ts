@@ -1,250 +1,142 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 
-
-const prisma = new PrismaClient() as any;
-
-// Função auxiliar para gerar URLs amigáveis (slug)
-function generateSlug(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-');
-}
+const prisma = new PrismaClient();
 
 export class RealEstateController {
-  // Criar Imobiliária
-  async create(req: Request, res: Response) {
+  // ========================================================
+  // ROTAS DA PRÓPRIA IMOBILIÁRIA (O Dono a editar a sua loja)
+  // ========================================================
+  
+  async getMyStore(req: Request, res: Response) {
     try {
-      const {
-        cnpj,
-        corporateName,
-        tradeName,
-        stateRegistration,
-        cityRegistration,
-        cep,
-        address,
-        phone,
-        respName,
-        respCpf,
-        respPhone,
-        respAddress,
-        email,
-        password,
-        contractUrl,
-        planId,
-        franchiseeId
-      } = req.body;
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      if (!cnpj || !corporateName || !tradeName || !email || !password || !planId) {
-        return res.status(400).json({ error: 'Preencha todos os campos obrigatórios, incluindo o plano.' });
-      }
-
-      // Verifica se já existe email ou cnpj cadastrado
-      const existing = await prisma.realEstate.findFirst({
-        where: { OR: [{ email }, { cnpj }] }
+      const store = await (prisma as any).realEstate.findUnique({
+        where: { id: realEstateId }
       });
 
-      if (existing) {
-        return res.status(400).json({ error: 'Já existe uma imobiliária com este E-mail ou CNPJ.' });
-      }
+      if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      const hashedPassword = await bcrypt.hash(password, 8);
-      const baseSlug = generateSlug(tradeName);
-
-      // Garante unicidade do slug se já houver outro idêntico
-      const existingSlug = await prisma.realEstate.findUnique({ where: { slug: baseSlug } });
-      const slug = existingSlug ? `${baseSlug}-${Date.now().toString().slice(-4)}` : baseSlug;
-
-      const realEstate = await prisma.realEstate.create({
-        data: {
-          cnpj,
-          corporateName,
-          tradeName,
-          slug,
-          stateRegistration: stateRegistration || 'ISENTO',
-          cityRegistration: cityRegistration || 'ISENTO',
-          cep,
-          address,
-          phone,
-          respName,
-          respCpf,
-          respPhone,
-          respAddress,
-          email,
-          password: hashedPassword,
-          contractUrl: contractUrl || null,
-          planId,
-          franchiseeId: franchiseeId || null
-        },
-        include: { plan: true, franchisee: true }
-      });
-
-      return res.status(201).json(realEstate);
+      return res.json(store);
     } catch (error) {
       console.error(error);
-      return res.status(500).json({ error: 'Erro interno ao criar imobiliária.' });
+      return res.status(500).json({ error: 'Erro ao buscar dados da imobiliária.' });
     }
   }
 
-  // Listar Imobiliárias
+  async updateMyStore(req: Request, res: Response) {
+    try {
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+
+      const { 
+        tradeName, corporateName, cnpj, cep, address, phone, email,
+        // Novos campos de personalização do site:
+        logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay
+      } = req.body;
+
+      const updatedStore = await (prisma as any).realEstate.update({
+        where: { id: realEstateId },
+        data: {
+          tradeName, 
+          corporateName, 
+          cnpj, 
+          cep, 
+          address, 
+          phone, 
+          email,
+          logoUrl, 
+          heroImageUrl, 
+          aboutText, 
+          footerText, 
+          instagramUrl, 
+          facebookUrl, 
+          whatsappDisplay
+        }
+      });
+
+      return res.json(updatedStore);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar configurações da loja.' });
+    }
+  }
+
+  // ========================================================
+  // ROTAS MASTER (Administrador Master a gerir imobiliárias)
+  // ========================================================
+  
+  async create(req: Request, res: Response) {
+    try {
+      const { corporateName, tradeName, cnpj, slug, email, phone, planId } = req.body;
+
+      const storeExists = await (prisma as any).realEstate.findFirst({
+        where: { OR: [{ cnpj }, { slug }, { email }] }
+      });
+
+      if (storeExists) {
+        return res.status(400).json({ error: 'Imobiliária já existe (CNPJ, Slug ou E-mail duplicado).' });
+      }
+
+      const store = await (prisma as any).realEstate.create({
+        data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
+      });
+
+      return res.status(201).json(store);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao criar imobiliária.' });
+    }
+  }
+
   async list(req: Request, res: Response) {
     try {
-      const realEstates = await prisma.realEstate.findMany({
-        include: { plan: true, franchisee: true },
-        orderBy: { createdAt: 'desc' }
+      const stores = await (prisma as any).realEstate.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { plan: true }
       });
-      return res.json(realEstates);
+      return res.json(stores);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao listar imobiliárias.' });
     }
   }
 
-  // Atualizar Imobiliária
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const {
-        cnpj,
-        corporateName,
-        tradeName,
-        stateRegistration,
-        cityRegistration,
-        cep,
-        address,
-        phone,
-        respName,
-        respCpf,
-        respPhone,
-        respAddress,
-        email,
-        password,
-        contractUrl,
-        planId,
-        franchiseeId
-      } = req.body;
+      const { corporateName, tradeName, cnpj, slug, email, phone, planId } = req.body;
 
-      const dataToUpdate: any = {
-        cnpj,
-        corporateName,
-        tradeName,
-        stateRegistration: stateRegistration || 'ISENTO',
-        cityRegistration: cityRegistration || 'ISENTO',
-        cep,
-        address,
-        phone,
-        respName,
-        respCpf,
-        respPhone,
-        respAddress,
-        email,
-        contractUrl: contractUrl || null,
-        planId,
-        franchiseeId: franchiseeId || null
-      };
-
-      // Se alterou o nome fantasia, atualiza o slug da loja
-      if (tradeName) {
-        const baseSlug = generateSlug(tradeName);
-        const existingSlug = await prisma.realEstate.findFirst({
-          where: { slug: baseSlug, NOT: { id } }
-        });
-        dataToUpdate.slug = existingSlug ? `${baseSlug}-${Date.now().toString().slice(-4)}` : baseSlug;
-      }
-
-      // Se preencheu nova senha, faz o hash
-      if (password && password.trim() !== '') {
-        dataToUpdate.password = await bcrypt.hash(password, 8);
-      }
-
-      const updated = await prisma.realEstate.update({
+      const store = await (prisma as any).realEstate.update({
         where: { id },
-        data: dataToUpdate,
-        include: { plan: true, franchisee: true }
+        data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
       });
 
-      return res.json(updated);
+      return res.json(store);
     } catch (error) {
-      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar imobiliária.' });
     }
   }
 
-  // Alternar Status (Ativo / Inativo)
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const store = await prisma.realEstate.findUnique({ where: { id } });
+      const store = await (prisma as any).realEstate.findUnique({ where: { id } });
+      
       if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      const updated = await prisma.realEstate.update({
+      const updated = await (prisma as any).realEstate.update({
         where: { id },
         data: { isActive: !store.isActive }
       });
 
       return res.json(updated);
     } catch (error) {
-      return res.status(500).json({ error: 'Erro ao alterar status da imobiliária.' });
-    }
-  }
-
-  // --- NOVAS FUNÇÕES PARA O PAINEL DA PRÓPRIA IMOBILIÁRIA ---
-
-  async getMyStore(req: Request, res: Response) {
-    try {
-      const id = (req as any).user?.realEstateId || (req as any).realEstateId;
-      if (!id) return res.status(401).json({ error: 'Não autorizado.' });
-
-      const store = await prisma.realEstate.findUnique({ where: { id } });
-      return res.json(store);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao buscar dados da loja.' });
-    }
-  }
-
-  async updateMyStore(req: Request, res: Response) {
-    try {
-      const id = (req as any).user?.realEstateId || (req as any).realEstateId;
-      if (!id) return res.status(401).json({ error: 'Não autorizado.' });
-
-      const data = req.body;
-      const dataToUpdate: any = {
-        tradeName: data.tradeName,
-        corporateName: data.corporateName,
-        slug: data.slug,
-        phone: data.phone,
-        email: data.email,
-        cep: data.cep,
-        address: data.address,
-      };
-
-      // Se enviou senha nova, atualiza o hash
-      if (data.password && data.password.trim() !== '') {
-        const bcrypt = require('bcryptjs');
-        dataToUpdate.password = await bcrypt.hash(data.password, 8);
-      }
-
-      // Verifica se o slug que a loja quer já está sendo usado por outra loja
-      if (data.slug) {
-        const existingSlug = await prisma.realEstate.findFirst({
-          where: { slug: data.slug, id: { not: id } }
-        });
-        if (existingSlug) {
-          return res.status(400).json({ error: 'Este slug/link já está em uso por outra loja.' });
-        }
-      }
-
-      const updated = await prisma.realEstate.update({
-        where: { id },
-        data: dataToUpdate
-      });
-
-      return res.json(updated);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao atualizar dados da loja.' });
+      return res.status(500).json({ error: 'Erro ao alterar status.' });
     }
   }
 }

@@ -2,67 +2,43 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient() as any;
-
-// Função auxiliar para garantir o isolamento por imobiliária
-async function getRealEstateId(req: Request): Promise<string | null> {
-  const reqAny = req as any;
-  if (reqAny.realEstateId) return reqAny.realEstateId;
-  if (reqAny.user?.realEstateId) return reqAny.user.realEstateId;
-
-  const userId = reqAny.userId || reqAny.user?.id;
-  if (!userId) return null;
-
-  const store = await prisma.realEstate.findUnique({ where: { id: userId } });
-  if (store) return store.id;
-
-  const broker = await prisma.broker.findUnique({ where: { id: userId } });
-  if (broker) return broker.realEstateId;
-
-  return null;
-}
+const prisma = new PrismaClient();
 
 export class BrokerController {
   
-  // Listar todos os corretores da imobiliária logada
-  async list(req: Request, res: Response) {
-    try {
-      const realEstateId = await getRealEstateId(req);
-      if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
-
-      const brokers = await prisma.broker.findMany({
-        where: { realEstateId },
-        orderBy: { createdAt: 'desc' }
-      });
-      return res.json(brokers);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao listar corretores.' });
-    }
-  }
-
-  // Criar novo corretor
   async create(req: Request, res: Response) {
     try {
-      const realEstateId = await getRealEstateId(req);
-      if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { name, cpf, creci, phone, email, password } = req.body;
+      const { name, email, cpf, creci, phone, password, profileImageUrl } = req.body;
 
-      // Verifica se já existe email ou cpf cadastrado
-      const existing = await prisma.broker.findFirst({
-        where: { OR: [{ email }, { cpf }] }
+      const brokerExists = await (prisma as any).broker.findFirst({
+        where: { OR: [{ email }, { cpf }, { creci }] }
       });
 
-      if (existing) {
-        return res.status(400).json({ error: 'Já existe um corretor com este E-mail ou CPF.' });
+      if (brokerExists) {
+        return res.status(400).json({ error: 'Corretor já cadastrado com este E-mail, CPF ou CRECI.' });
       }
 
-      const hashedPassword = await bcrypt.hash(password, 8);
-      
-      const broker = await prisma.broker.create({
-        data: { name, cpf, creci, phone, email, password: hashedPassword, realEstateId }
+      const hashedPassword = await bcrypt.hash(password || '123456', 10);
+
+      const broker = await (prisma as any).broker.create({
+        data: {
+          name,
+          email,
+          cpf,
+          creci,
+          phone,
+          password: hashedPassword,
+          profileImageUrl, // Nova foto do corretor
+          realEstateId
+        }
       });
-      
+
+      // Remove a password do retorno por segurança
+      broker.password = undefined;
       return res.status(201).json(broker);
     } catch (error) {
       console.error(error);
@@ -70,49 +46,77 @@ export class BrokerController {
     }
   }
 
-  // Atualizar dados do corretor
+  async list(req: Request, res: Response) {
+    try {
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+
+      const brokers = await (prisma as any).broker.findMany({
+        where: { realEstateId },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true, name: true, email: true, cpf: true, creci: true, 
+          phone: true, profileImageUrl: true, isActive: true, createdAt: true
+        }
+      });
+
+      return res.json(brokers);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao listar corretores.' });
+    }
+  }
+
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const realEstateId = await getRealEstateId(req);
-      if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { name, cpf, creci, phone, email, password } = req.body;
-      const dataToUpdate: any = { name, cpf, creci, phone, email };
+      const { name, email, cpf, creci, phone, password, profileImageUrl } = req.body;
 
-      // Se a senha foi preenchida, gera o hash
-      if (password && password.trim() !== '') {
-        dataToUpdate.password = await bcrypt.hash(password, 8);
+      const dataToUpdate: any = { name, email, cpf, creci, phone, profileImageUrl };
+
+      if (password) {
+        dataToUpdate.password = await bcrypt.hash(password, 10);
       }
 
-      const updated = await prisma.broker.update({
-        where: { id, realEstateId }, // Garante que a loja só edita os seus próprios corretores
+      const broker = await (prisma as any).broker.update({
+        where: { id_realEstateId: { id, realEstateId } }, // Garante que atualiza apenas corretores da própria loja
         data: dataToUpdate
       });
-      
-      return res.json(updated);
+
+      broker.password = undefined;
+      return res.json(broker);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar corretor.' });
     }
   }
 
-  // Ativar ou desativar corretor
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const realEstateId = await getRealEstateId(req);
-      if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const broker = await prisma.broker.findUnique({ where: { id, realEstateId } });
-      if (!broker) return res.status(404).json({ error: 'Corretor não encontrado.' });
+      const broker = await (prisma as any).broker.findUnique({
+        where: { id_realEstateId: { id, realEstateId } }
+      });
       
-      const updated = await prisma.broker.update({
+      if (!broker) return res.status(404).json({ error: 'Corretor não encontrado.' });
+
+      const updated = await (prisma as any).broker.update({
         where: { id },
         data: { isActive: !broker.isActive }
       });
-      
+
       return res.json(updated);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao alterar status.' });
     }
   }
