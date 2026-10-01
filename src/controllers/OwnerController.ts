@@ -71,7 +71,7 @@ export class OwnerController {
     }
   }
 
-  // Gerar e Disparar Contrato REAL pela ZapSign usando TEMPLATE (Word)
+  // 🚨 CORREÇÃO DEFINITIVA DA ZAPSIGN
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -85,36 +85,27 @@ export class OwnerController {
         return res.status(500).json({ error: 'Token da ZapSign não configurado no servidor (.env).' });
       }
 
-      // ID DO MODELO DO PROPRIETÁRIO (COPIADO DA ZAPSIGN)
       const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
 
-      // 1. Enviar as Variáveis para substituir no Word
+      // O Payload mudou para a estrutura oficial de Modelos
       const zapsignPayload = {
-        name: `Contrato de Gestão - ${owner.name}`,
+        template_id: TEMPLATE_ID,
+        signer_name: owner.name,
+        signer_email: owner.email,
         data: [
           { de: "{{NOME_PROPRIETARIO}}", para: owner.name },
           { de: "{{CPF_CNPJ}}", para: owner.cpfOrCnpj },
           { de: "{{TELEFONE}}", para: owner.phone || 'Não informado' },
           { de: "{{BANCO}}", para: owner.bankData || 'Não informado' }
-        ],
-        signers: [
-          {
-            name: owner.name,
-            email: owner.email,
-            send_via: "email"
-          }
         ]
       };
 
-      // 2. O LINK definitivo e blindado apontando para /models/TEMPLATE_ID/docs/
-      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      // 🚨 O URL OFICIAL PARA CRIAR A PARTIR DE MODELOS (create-doc)
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/create-doc/?api_token=${ZAPSIGN_TOKEN.trim()}`;
       
-      // 3. O Disparo
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(zapsignPayload)
       });
 
@@ -122,19 +113,13 @@ export class OwnerController {
 
       if (!zapResponse.ok) {
         console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        return res.status(400).json({ 
-          error: 'A ZapSign recusou a geração do contrato.', 
-          detalheExato: responseText 
-        });
+        return res.status(400).json({ error: 'A ZapSign recusou a geração do contrato.', detalheExato: responseText });
       }
 
       const zapData = JSON.parse(responseText);
-
-      // 4. Extrair os links verdadeiros que a ZapSign nos devolveu
       const externalDocToken = zapData.token;
       const signUrl = zapData.signers[0].sign_url;
 
-      // 5. Salvar na nossa base de dados
       const updatedOwner = await prisma.owner.update({
         where: { id },
         data: { 
@@ -144,17 +129,14 @@ export class OwnerController {
       });
 
       return res.json({ 
-        message: 'Contrato dinâmico gerado e enviado via ZapSign com sucesso!', 
+        message: 'Contrato dinâmico gerado com sucesso!', 
         signUrl, 
         owner: updatedOwner 
       });
       
     } catch (error: any) {
       console.error("💥 ERRO DETALHADO NO BACKEND:", error);
-      return res.status(500).json({ 
-        error: 'Erro no servidor', 
-        detalheExato: error.message || error.toString() 
-      });
+      return res.status(500).json({ error: 'Erro no servidor' });
     }
   }
 }

@@ -5,7 +5,6 @@ const prisma = new PrismaClient() as any;
 
 export class ContractController {
   
-  // 1. CRIAR CONTRATO
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -53,7 +52,6 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -61,14 +59,9 @@ export class ContractController {
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
       const status = req.query.status as string;
+      const whereClause: any = { property: { realEstateId } };
 
-      const whereClause: any = {
-        property: { realEstateId }
-      };
-
-      if (status) {
-        whereClause.status = status;
-      }
+      if (status) whereClause.status = status;
 
       const contracts = await prisma.contract.findMany({
         where: whereClause,
@@ -89,7 +82,6 @@ export class ContractController {
     }
   }
 
-  // 3. ATUALIZAR CONTRATO
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -125,7 +117,6 @@ export class ContractController {
     }
   }
 
-  // 4. ADICIONAR VISTORIA
   async addInspection(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -158,21 +149,18 @@ export class ContractController {
     }
   }
 
-  // NOVO: Gerar e Disparar Contrato de Locação usando TEMPLATE (Word)
+  // 🚨 CORREÇÃO DEFINITIVA DA ZAPSIGN
   async sendToZapSign(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      // 1. Puxar o contrato, o inquilino, o imóvel E O PROPRIETÁRIO do imóvel
       const contract = await prisma.contract.findUnique({
         where: { id },
         include: { 
           tenant: true,
-          property: {
-            include: { owner: true } // Precisamos disto para preencher o {{NOME_PROPRIETARIO}}
-          } 
+          property: { include: { owner: true } } 
         }
       });
 
@@ -184,16 +172,15 @@ export class ContractController {
       const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN;
       if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
 
-      // ID DO MODELO DA ZAPSIGN
       const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
-
-      // Formatadores de data e moeda
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-      // 2. Preencher as Variáveis do Word (Onde acontece a Magia)
+      // O Payload mudou para a estrutura oficial de Modelos
       const zapsignPayload = {
-        name: `Contrato de Locação - ${contract.property.title} - ${contract.tenant.name}`,
+        template_id: TEMPLATE_ID,
+        signer_name: contract.tenant.name,
+        signer_email: contract.tenant.email,
         data: [
           { de: "{{NOME_PROPRIETARIO}}", para: contract.property.owner?.name || 'Não informado' },
           { de: "{{NOME_INQUILINO}}", para: contract.tenant.name },
@@ -204,18 +191,11 @@ export class ContractController {
           { de: "{{DATA_FIM}}", para: formatDate(contract.endDate) },
           { de: "{{VALOR_ALUGUEL}}", para: formatCurrency(Number(contract.rentValue)) },
           { de: "{{INDICE_REAJUSTE}}", para: contract.readjustmentIndex || 'Não informado' }
-        ],
-        signers: [
-          {
-            name: contract.tenant.name,
-            email: contract.tenant.email,
-            send_via: "email"
-          }
         ]
       };
 
-      // 3. Disparo para a API de Modelos (Templates) da ZapSign
-      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      // 🚨 O URL OFICIAL PARA CRIAR A PARTIR DE MODELOS (create-doc)
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/create-doc/?api_token=${ZAPSIGN_TOKEN.trim()}`;
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
@@ -227,15 +207,11 @@ export class ContractController {
 
       if (!zapResponse.ok) {
         console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        return res.status(400).json({ 
-          error: 'A ZapSign recusou o contrato.', 
-          detalheExato: responseText 
-        });
+        return res.status(400).json({ error: 'A ZapSign recusou o contrato.', detalheExato: responseText });
       }
 
       const zapData = JSON.parse(responseText);
 
-      // 4. Salvar os links na Base de Dados
       const updatedContract = await prisma.contract.update({
         where: { id },
         data: { 
@@ -246,16 +222,13 @@ export class ContractController {
       });
 
       return res.json({ 
-        message: 'Contrato de locação gerado e enviado para o Inquilino com sucesso!', 
+        message: 'Contrato de locação gerado com sucesso!', 
         signUrl: updatedContract.signUrl 
       });
 
     } catch (error: any) {
       console.error("💥 ERRO ZAPSIGN CONTRATO:", error);
-      return res.status(500).json({ 
-        error: 'Erro interno ao disparar assinatura.', 
-        detalheExato: error.message || error.toString() 
-      });
+      return res.status(500).json({ error: 'Erro interno ao disparar assinatura.' });
     }
   }
 }
