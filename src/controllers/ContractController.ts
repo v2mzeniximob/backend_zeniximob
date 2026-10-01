@@ -199,7 +199,10 @@ export class ContractController {
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ZAPSIGN_TOKEN.trim()}`
+         },
         body: JSON.stringify(zapsignPayload)
       });
 
