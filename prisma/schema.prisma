@@ -154,6 +154,7 @@ model Owner {
   bankData     String?    @db.Text // Dados bancários para repasse financeiro
   password     String?    // Acesso ao Portal do Proprietário
   isActive     Boolean    @default(true)
+  managementContractUrl String? @db.Text
 
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
