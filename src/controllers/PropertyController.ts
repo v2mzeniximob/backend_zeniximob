@@ -129,26 +129,28 @@ export class PropertyController {
   }
 
   // Vitrine (Todos os imóveis)
+ // Vitrine (Página principal da loja)
   async listPublicByStore(req: Request, res: Response) {
     try {
       const { slug } = req.params;
+      
+      // Removemos o "select" restrito para que ele traga TUDO (Logo, Banner, Textos, Redes Sociais)
       const realEstate = await prisma.realEstate.findUnique({
-        where: { slug: slug as string, isActive: true },
-        select: { id: true, tradeName: true, corporateName: true, address: true, phone: true, email: true }
+        where: { slug: slug as string, isActive: true }
       });
 
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
       const [properties, brokers] = await Promise.all([
-        prisma.property.findMany({
-          where: { realEstateId: realEstate.id, isActive: true }, orderBy: { createdAt: 'desc' },
-          select: {
-            ...PUBLIC_PROPERTY_FIELDS,
-            broker: { select: { name: true, creci: true, phone: true } }
-          }
+        prisma.property.findMany({ 
+          where: { realEstateId: realEstate.id, isActive: true }, 
+          orderBy: { createdAt: 'desc' },
+          include: { broker: { select: { name: true, creci: true, phone: true } } }
         }),
         prisma.broker.findMany({ 
-          where: { realEstateId: realEstate.id, isActive: true }, select: { id: true, name: true, creci: true, phone: true } 
+          where: { realEstateId: realEstate.id, isActive: true }, 
+          // Adicionámos o profileImageUrl para a foto aparecer na página "Nossos Corretores"
+          select: { id: true, name: true, creci: true, phone: true, profileImageUrl: true } 
         })
       ]);
 
@@ -158,24 +160,25 @@ export class PropertyController {
     }
   }
 
-  // NOVO: Busca apenas UM imóvel para a tela detalhada da loja
+  // Detalhes de UM imóvel na vitrine
   async getPublicProperty(req: Request, res: Response) {
     try {
       const { slug, propertyId } = req.params;
 
+      // Removemos o "select" para o cabeçalho carregar o Logótipo também nesta página
       const realEstate = await prisma.realEstate.findUnique({
-        where: { slug: slug as string, isActive: true },
-        select: { id: true, tradeName: true, phone: true, email: true, slug: true }
+        where: { slug: slug as string, isActive: true }
       });
 
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
       const property = await prisma.property.findFirst({
         where: { id: propertyId, realEstateId: realEstate.id, isActive: true },
-        select: {
-          ...PUBLIC_PROPERTY_FIELDS,
-          // O id do corretor é usado pela vitrine para direcionar o lead ao corretor responsável.
-          broker: { select: { id: true, name: true, creci: true, phone: true, email: true } }
+        include: { 
+          broker: { 
+            // Adicionámos o profileImageUrl para aparecer a foto do corretor no detalhe do imóvel
+            select: { name: true, creci: true, phone: true, email: true, profileImageUrl: true } 
+          } 
         }
       });
 
