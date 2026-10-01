@@ -87,7 +87,7 @@ export class VisitController {
   }
 
   // 3. ATUALIZAR VISITA (Ex: Marcar como Realizada ou Cancelada)
-  async update(req: Request, res: Response) {
+  async updateStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const { date, status, feedback, brokerId } = req.body;

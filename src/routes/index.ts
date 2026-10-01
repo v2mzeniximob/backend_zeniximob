@@ -140,6 +140,8 @@ routes.put('/my-store', authMiddleware, realEstateController.updateMyStore);
 routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
+routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
+
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
