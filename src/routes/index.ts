@@ -101,10 +101,12 @@ routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRe
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 
 // Proprietários (Owners)
+// Proprietários (Owners)
 routes.get('/owners', authMiddleware, ownerController.list);
 routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
 routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
+routes.post('/owners/:id/send-contract', authMiddleware, ownerController.generateAndSendContract);
 
 // Contratos e Vistorias
 routes.get('/contracts', authMiddleware, contractController.list);
