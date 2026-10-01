@@ -199,7 +199,8 @@ export class ContractController {
       };
 
       // 3. Disparo para a API da ZapSign
-      const zapResponse = await fetch(`https://api.zapsign.com.br/api/v1/docs/?api_token=${ZAPSIGN_TOKEN}`, {
+      // (Testes / Gratuito SandBox):
+      const zapResponse = await fetch(`https://sandbox.api.zapsign.com.br/api/v1/docs/?api_token=${ZAPSIGN_TOKEN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(zapsignPayload)
