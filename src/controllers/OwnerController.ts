@@ -87,7 +87,7 @@ export class OwnerController {
       }
 
       //ID DO MODELO QUE COPIOU DA URL DA ZAPSIGN
-      const TEMPLATE_ID = "https://sandbox.app.zapsign.com.br/verificar/doc/79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
+      const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
 
       // 1. Enviar as Variáveis para substituir no Word
       const zapsignPayload = {
@@ -108,7 +108,9 @@ export class OwnerController {
       };
 
       // 2. Repare que o LINK mudou! Agora apontamos para /models/TEMPLATE_ID/docs/
-      const zapResponse = await fetch(`https://sandbox.api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN}`, {
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      
+      const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(zapsignPayload)

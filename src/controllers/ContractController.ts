@@ -185,7 +185,7 @@ export class ContractController {
       if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
 
       // ID DO MODELO DA ZAPSIGN
-      const TEMPLATE_ID = "https://sandbox.app.zapsign.com.br/verificar/doc/caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
+      const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
 
       // Formatadores de data e moeda
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
@@ -215,7 +215,9 @@ export class ContractController {
       };
 
       // 3. Disparo para a API de Modelos (Templates) da ZapSign
-      const zapResponse = await fetch(`https://sandbox.api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN}`, {
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      
+      const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(zapsignPayload)
