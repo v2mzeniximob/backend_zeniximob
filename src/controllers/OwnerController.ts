@@ -71,7 +71,7 @@ export class OwnerController {
     }
   }
 
-  //ZAPSIGN (Proprietário)
+  // 🚨 Disparo Oficial pela API de Templates ZapSign
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -80,14 +80,12 @@ export class OwnerController {
       if (!owner) return res.status(404).json({ error: 'Proprietário não encontrado.' });
       if (!owner.email) return res.status(400).json({ error: 'Proprietário não possui e-mail cadastrado.' });
 
-      // 🔥 Limpa aspas e espaços acidentais
       const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN?.replace(/['"]/g, '').trim();
       if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token da ZapSign não configurado no servidor (.env).' });
 
-      console.log(`🔑 [PROPRIETÁRIO] Disparando ZapSign. Token inicia com: ${ZAPSIGN_TOKEN.substring(0, 6)}...`);
-
       const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
 
+      // Payload oficial da ZapSign para a rota /create-doc/
       const zapsignPayload = {
         template_id: TEMPLATE_ID,
         signer_name: owner.name,
@@ -100,27 +98,36 @@ export class OwnerController {
         ]
       };
 
-      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/`;
+      const urlZapSign = "https://api.zapsign.com.br/api/v1/models/create-doc/";
       
       const zapResponse = await fetch(urlZapSign, {
-        method: 'POST',
+        method: "POST",
         headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ZAPSIGN_TOKEN.trim()}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${ZAPSIGN_TOKEN}`
         },
         body: JSON.stringify(zapsignPayload)
       });
+
       const responseText = await zapResponse.text();
 
       if (!zapResponse.ok) {
         console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        return res.status(400).json({ error: 'A ZapSign recusou a geração do contrato.', detalheExato: responseText });
+        // Retorna dinamicamente o status de erro exato da ZapSign
+        return res.status(zapResponse.status).json({ 
+          error: "A ZapSign recusou a geração do contrato.", 
+          detalheExato: responseText 
+        });
       }
 
       const zapData = JSON.parse(responseText);
+      
       const updatedOwner = await prisma.owner.update({
         where: { id },
-        data: { managementContractUrl: zapData.signers[0].sign_url, contractToken: zapData.token }
+        data: { 
+          managementContractUrl: zapData.signers[0].sign_url, 
+          contractToken: zapData.token 
+        }
       });
 
       return res.json({ message: 'Contrato dinâmico gerado com sucesso!', signUrl: updatedOwner.managementContractUrl, owner: updatedOwner });
