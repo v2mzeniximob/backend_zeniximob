@@ -64,7 +64,6 @@ export class ContractController {
 
       const status = req.query.status as string;
 
-      // O SEGREDO DO ERRO ESTAVA AQUI: Procurar o realEstateId através da tabela de Imóveis
       const whereClause: any = {
         property: { realEstateId }
       };
@@ -79,8 +78,8 @@ export class ContractController {
           property: {
             select: { title: true, address: true, owner: { select: { name: true } } }
           },
-          tenant: { select: { name: true, cpf: true } },
-          inspections: true // Traz os laudos de vistoria atrelados ao contrato
+          tenant: { select: { name: true, cpf: true, email: true, phone: true } }, // Adicionei email e phone para o FrontEnd usar!
+          inspections: true
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -132,7 +131,7 @@ export class ContractController {
   // 4. ADICIONAR VISTORIA (App do Corretor)
   async addInspection(req: Request, res: Response) {
     try {
-      const { id } = req.params; // ID do contrato
+      const { id } = req.params;
       const { type, date, reportUrl } = req.body;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
@@ -162,14 +161,14 @@ export class ContractController {
     }
   }
 
-  // NOVO: Gerar e Disparar Contrato de Locação pela ZapSign
+  // NOVO: Gerar e Disparar Contrato de Locação REAL pela ZapSign
   async sendToZapSign(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      // 1. Procurar o contrato com os dados do Imóvel e do Inquilino (Tenant)
+      // 1. Procurar o contrato com os dados do Imóvel e do Inquilino
       const contract = await prisma.contract.findUnique({
         where: { id },
         include: { 
@@ -186,15 +185,15 @@ export class ContractController {
       const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN;
       if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
 
-      // 2. Payload da ZapSign (PDF de teste - depois substituiremos pelo PDF dinâmico real)
+      // 2. Payload da ZapSign (PDF válido e público para teste)
       const zapsignPayload = {
         name: `Contrato de Locação - ${contract.property.title} - ${contract.tenant.name}`,
-        url_pdf: "https://zapsign.s3.amazonaws.com/2022/1/pdf/63d19807-cbfa-4b51-8571-2151dd208a5d/ca42d758-5224-4ad4-8f43-1ad95966601b.pdf",
+        url_pdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
         signers: [
           {
             name: contract.tenant.name,
             email: contract.tenant.email,
-            send_via: "email" // A ZapSign manda o e-mail oficial
+            send_via: "email"
           }
         ]
       };
@@ -206,8 +205,19 @@ export class ContractController {
         body: JSON.stringify(zapsignPayload)
       });
 
-      const zapData = await zapResponse.json();
-      if (!zapResponse.ok) return res.status(500).json({ error: 'Erro na ZapSign.', detalhes: zapData });
+      // MAGIA AQUI: Lemos como texto primeiro
+      const responseText = await zapResponse.text();
+
+      if (!zapResponse.ok) {
+        console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
+        return res.status(400).json({ 
+          error: 'A ZapSign recusou o contrato.', 
+          detalheExato: responseText 
+        });
+      }
+
+      // Converte para JSON em segurança
+      const zapData = JSON.parse(responseText);
 
       // 4. Salvar os links na Base de Dados
       const updatedContract = await prisma.contract.update({
@@ -226,7 +236,10 @@ export class ContractController {
 
     } catch (error: any) {
       console.error("💥 ERRO ZAPSIGN CONTRATO:", error);
-      return res.status(500).json({ error: 'Erro interno ao disparar assinatura.', detalhe: error.message });
+      return res.status(500).json({ 
+        error: 'Erro interno ao disparar assinatura.', 
+        detalheExato: error.message || error.toString() 
+      });
     }
   }
 
