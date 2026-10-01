@@ -161,4 +161,73 @@ export class ContractController {
       return res.status(500).json({ error: 'Erro ao registar vistoria.' });
     }
   }
+
+  // NOVO: Gerar e Disparar Contrato de Locação pela ZapSign
+  async sendToZapSign(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+
+      // 1. Procurar o contrato com os dados do Imóvel e do Inquilino (Tenant)
+      const contract = await prisma.contract.findUnique({
+        where: { id },
+        include: { 
+          tenant: true,
+          property: true 
+        }
+      });
+
+      if (!contract) return res.status(404).json({ error: 'Contrato não encontrado.' });
+      if (contract.property.realEstateId !== realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+      if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado a este contrato.' });
+      if (!contract.tenant.email) return res.status(400).json({ error: 'O Inquilino não possui e-mail cadastrado.' });
+
+      const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN;
+      if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
+
+      // 2. Payload da ZapSign (PDF de teste - depois substituiremos pelo PDF dinâmico real)
+      const zapsignPayload = {
+        name: `Contrato de Locação - ${contract.property.title} - ${contract.tenant.name}`,
+        url_pdf: "https://zapsign.s3.amazonaws.com/2022/1/pdf/63d19807-cbfa-4b51-8571-2151dd208a5d/ca42d758-5224-4ad4-8f43-1ad95966601b.pdf",
+        signers: [
+          {
+            name: contract.tenant.name,
+            email: contract.tenant.email,
+            send_via: "email" // A ZapSign manda o e-mail oficial
+          }
+        ]
+      };
+
+      // 3. Disparo para a API da ZapSign
+      const zapResponse = await fetch(`https://api.zapsign.com.br/api/v1/docs/?api_token=${ZAPSIGN_TOKEN}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(zapsignPayload)
+      });
+
+      const zapData = await zapResponse.json();
+      if (!zapResponse.ok) return res.status(500).json({ error: 'Erro na ZapSign.', detalhes: zapData });
+
+      // 4. Salvar os links na Base de Dados
+      const updatedContract = await prisma.contract.update({
+        where: { id },
+        data: { 
+          signUrl: zapData.signers[0].sign_url,
+          externalDocToken: zapData.token,
+          signatureStatus: 'Pendente'
+        }
+      });
+
+      return res.json({ 
+        message: 'Contrato enviado para o Inquilino com sucesso!', 
+        signUrl: updatedContract.signUrl 
+      });
+
+    } catch (error: any) {
+      console.error("💥 ERRO ZAPSIGN CONTRATO:", error);
+      return res.status(500).json({ error: 'Erro interno ao disparar assinatura.', detalhe: error.message });
+    }
+  }
+
 }

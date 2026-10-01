@@ -113,6 +113,7 @@ routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
+routes.post('/contracts/:id/send-signature', authMiddleware, contractController.sendToZapSign);
 
 // Leads
 routes.get('/leads', authMiddleware, leadController.list);
