@@ -198,7 +198,7 @@ export class ContractController {
       };
 
       // URL com o token anexado (padrão infalível ZapSign)
-      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/create-doc/?api_token=${ZAPSIGN_TOKEN}`;
+      const urlZapSign = `https://sandbox.api.zapsign.com.br/api/v1/models/create-doc/`;
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
