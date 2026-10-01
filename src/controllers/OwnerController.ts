@@ -108,7 +108,7 @@ export class OwnerController {
       };
 
       // 2. Repare que o LINK mudou! Agora apontamos para /models/TEMPLATE_ID/docs/
-      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      const urlZapSign = `https://sandbox.api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',

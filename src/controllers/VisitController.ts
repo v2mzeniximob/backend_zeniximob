@@ -1,86 +1,124 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any;
 
 export class VisitController {
   
+  // 1. CRIAR VISITA (Agendamento)
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { leadId, propertyId, brokerId, date, notes } = req.body;
+      const { date, propertyId, brokerId, status, feedback } = req.body;
 
-      const visit = await (prisma as any).visit.create({
+      if (!propertyId || !brokerId || !date) {
+        return res.status(400).json({ error: 'Data, Imóvel e Corretor são obrigatórios.' });
+      }
+
+      // Verifica se o imóvel pertence à imobiliária
+      const property = await prisma.property.findFirst({
+        where: { id: propertyId, realEstateId }
+      });
+
+      if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
+
+      const visit = await prisma.visit.create({
         data: {
-          leadId,
-          propertyId,
-          brokerId: brokerId || null,
           date: new Date(date),
-          notes,
-          status: 'Agendada'
+          propertyId,
+          brokerId,
+          status: status || 'Agendada',
+          feedback
         }
       });
 
       return res.status(201).json(visit);
     } catch (error) {
-      console.error(error);
+      console.error('Erro ao agendar visita:', error);
       return res.status(500).json({ error: 'Erro ao agendar visita.' });
     }
   }
 
+  // 2. LISTAR VISITAS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const visits = await (prisma as any).visit.findMany({
-        where: {
-          property: { realEstateId }
-        },
+      const status = req.query.status as string;
+
+      const whereClause: any = {
+        property: { realEstateId }
+      };
+
+      if (status) {
+        whereClause.status = status;
+      }
+
+      const visits = await prisma.visit.findMany({
+        where: whereClause,
         include: {
-          lead: { select: { name: true, phone: true } },
-          property: { select: { title: true, address: true, rentStatus: true } },
-          broker: { select: { name: true } }
+          // CORREÇÃO: Bloco do "lead" foi removido daqui! 
+          property: {
+            select: {
+              title: true,
+              address: true,
+              rentStatus: true
+            }
+          },
+          broker: {
+            select: {
+              name: true
+            }
+          }
         },
-        orderBy: { date: 'asc' } // Ordena pelas mais próximas
+        orderBy: { date: 'asc' }
       });
 
       return res.json(visits);
     } catch (error) {
-      console.error(error);
+      console.error('Erro ao listar visitas:', error);
       return res.status(500).json({ error: 'Erro ao listar visitas.' });
     }
   }
 
-  async updateStatus(req: Request, res: Response) {
+  // 3. ATUALIZAR VISITA (Ex: Marcar como Realizada ou Cancelada)
+  async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { status, feedback } = req.body;
+      const { date, status, feedback, brokerId } = req.body;
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
 
-      const updatedVisit = await (prisma as any).visit.update({
+      // Verifica se a visita existe e se o imóvel pertence à imobiliária
+      const visit = await prisma.visit.findUnique({
         where: { id },
-        data: { status, feedback }
+        include: { property: true }
       });
 
-      // MAGIA: Se o corretor preencheu um feedback, regista isso no Histórico do Lead no CRM!
-      if (feedback && updatedVisit.leadId) {
-        await (prisma as any).leadHistory.create({
-          data: {
-            leadId: updatedVisit.leadId,
-            actionType: 'Visita',
-            description: `Visita ${status.toUpperCase()}: ${feedback}`,
-            date: new Date()
-          }
-        });
+      if (!visit || visit.property.realEstateId !== realEstateId) {
+         return res.status(404).json({ error: 'Visita não encontrada.' });
       }
+
+      // Prepara os dados para atualizar apenas o que foi enviado
+      const updatedData: any = {};
+      if (date) updatedData.date = new Date(date);
+      if (status) updatedData.status = status;
+      if (feedback !== undefined) updatedData.feedback = feedback;
+      if (brokerId) updatedData.brokerId = brokerId;
+
+      const updatedVisit = await prisma.visit.update({
+        where: { id },
+        data: updatedData
+      });
 
       return res.json(updatedVisit);
     } catch (error) {
-      console.error(error);
+      console.error('Erro ao atualizar visita:', error);
       return res.status(500).json({ error: 'Erro ao atualizar visita.' });
     }
   }
