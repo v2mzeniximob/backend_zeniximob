@@ -15,6 +15,7 @@ import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
 import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
+import { WebhookController } from '../controllers/WebhookController';
 
 const routes = Router();
 const authController = new AuthController();
@@ -32,6 +33,7 @@ const contractController = new ContractController();
 const invoiceController = new InvoiceController();
 const signatureController = new SignatureController();
 const visitController = new VisitController();
+const webhookController = new WebhookController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -141,6 +143,7 @@ routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
+routes.post('/webhooks/clicksign', webhookController.clicksign);
 
 
 // ==========================================
