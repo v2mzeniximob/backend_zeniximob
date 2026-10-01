@@ -71,8 +71,7 @@ export class OwnerController {
     }
   }
 
-  
- // Gerar e Disparar Contrato REAL pela ZapSign usando TEMPLATE (Word)
+  // Gerar e Disparar Contrato REAL pela ZapSign usando TEMPLATE (Word)
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -86,7 +85,7 @@ export class OwnerController {
         return res.status(500).json({ error: 'Token da ZapSign não configurado no servidor (.env).' });
       }
 
-      //ID DO MODELO QUE COPIOU DA URL DA ZAPSIGN
+      // ID DO MODELO DO PROPRIETÁRIO (COPIADO DA ZAPSIGN)
       const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
 
       // 1. Enviar as Variáveis para substituir no Word
@@ -107,12 +106,15 @@ export class OwnerController {
         ]
       };
 
-      // 2. Repare que o LINK mudou! Agora apontamos para /models/TEMPLATE_ID/docs/
-      const urlZapSign = `https://sandbox.api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      // 2. O LINK definitivo e blindado apontando para /models/TEMPLATE_ID/docs/
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN.trim()}`;
       
+      // 3. O Disparo
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(zapsignPayload)
       });
 
@@ -128,11 +130,11 @@ export class OwnerController {
 
       const zapData = JSON.parse(responseText);
 
-      // 3. Extrair os links verdadeiros que a ZapSign nos devolveu
+      // 4. Extrair os links verdadeiros que a ZapSign nos devolveu
       const externalDocToken = zapData.token;
       const signUrl = zapData.signers[0].sign_url;
 
-      // 4. Salvar na nossa base de dados
+      // 5. Salvar na nossa base de dados
       const updatedOwner = await prisma.owner.update({
         where: { id },
         data: { 
