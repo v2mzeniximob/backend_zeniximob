@@ -106,14 +106,14 @@ routes.get('/owners', authMiddleware, ownerController.list);
 routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
 routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
-routes.post('/owners/:id/send-contract', authMiddleware, ownerController.generateAndSendContract);
+routes.post('/owners/:id/send-contract', authMiddleware, ownerController.sendToClicksign);
 
 // Contratos e Vistorias
 routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
-routes.post('/contracts/:id/send-signature', authMiddleware, contractController.sendToZapSign);
+routes.post('/contracts/:id/send-signature', authMiddleware, contractController.sendToClicksign);
 
 // Leads
 routes.get('/leads', authMiddleware, leadController.list);
