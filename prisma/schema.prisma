@@ -330,33 +330,36 @@ model Visit {
 // CONTRATOS (NOVO)
 // ==========================================
 model Contract {
-  id               String       @id @default(uuid())
-  type             String       // "Locação", "Venda"
-  status           String       @default("Ativo") // Minuta, Assinatura, Ativo, Encerrado
+  id                String       @id @default(uuid())
+  type              String       // "Locação", "Administração"
+  status            String       @default("Minuta") // Minuta, Aguardando Assinatura, Ativo, Encerrado
   
-  startDate        DateTime
-  endDate          DateTime?
+  startDate         DateTime
+  endDate           DateTime?
   
-  // Financeiro do Contrato
-  rentValue        Float        // Valor do aluguel ou venda
-  adminFeePercent  Float        // Ex: 10% de taxa da imobiliária
-  readjustmentIndex String?     // Ex: "IGPM", "IPCA"
+  rentValue         Float        
+  adminFeePercent   Float        
+  readjustmentIndex String?     
   
-  // Assinatura Eletrônica
-  documentUrl      String?      @db.Text
-  signatureStatus  String?      // Aguardando, Assinado
-  
-  // Relacionamentos
-  propertyId       String
-  property         Property     @relation(fields: [propertyId], references: [id])
-  tenantId         String?      // Apenas para locação
-  tenant           Tenant?      @relation(fields: [tenantId], references: [id])
-  
-  invoices         Invoice[]
-  inspections      Inspection[]
+  // Controle de Assinatura Eletrônica
+  documentUrl       String?      @db.Text // PDF original ou gerado
+  signedDocumentUrl String?      @db.Text // PDF final com as assinaturas e carimbo jurídico
+  signatureProvider String?      @default("ZapSign") // ZapSign, Clicksign, Autentique
+  externalDocToken  String?      // Token/ID do documento retornado pela API
+  signUrl           String?      @db.Text // Link direto caso queira copiar e mandar no WhatsApp
+  signerEmail       String?      // E-mail para onde foi disparada a assinatura
+  signatureStatus   String?      @default("Pendente") // Pendente, Assinado, Recusado
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  propertyId        String
+  property          Property     @relation(fields: [propertyId], references: [id])
+  tenantId          String?      
+  tenant            Tenant?      @relation(fields: [tenantId], references: [id])
+  
+  invoices          Invoice[]
+  inspections       Inspection[]
+
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 // ==========================================

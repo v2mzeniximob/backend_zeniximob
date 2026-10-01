@@ -38,7 +38,9 @@ export class PropertyController {
       const { 
         title, type, category, transaction, price, condoFee, iptu, area, 
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
-        neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId 
+        neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
+        ownerId,       // Vínculo com o Proprietário
+        inspectionUrl  // Vistoria Inicial de Captação
       } = req.body;
 
       const property = await prisma.property.create({
@@ -49,26 +51,40 @@ export class PropertyController {
           garage: Number(garage || 0), yearBuilt: yearBuilt ? Number(yearBuilt) : null,
           amenities: amenities || [], cep, address, neighborhood, city, state,
           latitude: latitude ? Number(latitude) : null, longitude: longitude ? Number(longitude) : null,
-          description, imageUrls: imageUrls || [], brokerId: brokerId || null, realEstateId
+          description, imageUrls: imageUrls || [], 
+          brokerId: brokerId || null,
+          ownerId: ownerId || null,
+          inspectionUrl: inspectionUrl || null,
+          rentStatus: 'Vago',
+          realEstateId
         },
-        include: { broker: { select: { id: true, name: true, phone: true } } }
+        include: { 
+          broker: { select: { id: true, name: true, phone: true } },
+          owner: { select: { id: true, name: true, phone: true } }
+        }
       });
       return res.status(201).json(property);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao criar imóvel.' });
     }
   }
 
-
   async list(req: Request, res: Response) {
     try {
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-
+      const realEstateId = await getRealEstateId(req);
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const properties = await (prisma as any).property.findMany({
+      const properties = await prisma.property.findMany({
         where: { realEstateId },
+        include: {
+          broker: { select: { id: true, name: true, phone: true } },
+          owner: { select: { id: true, name: true, phone: true, bankData: true } },
+          contracts: {
+            where: { status: 'Ativo' },
+            select: { id: true, rentValue: true, status: true, tenant: { select: { name: true } } }
+          }
+        },
         orderBy: { createdAt: 'desc' }
       });
 
@@ -88,24 +104,38 @@ export class PropertyController {
       const { 
         title, type, category, transaction, price, condoFee, iptu, area, 
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
-        neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId 
+        neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
+        ownerId, inspectionUrl, rentStatus
       } = req.body;
 
       const property = await prisma.property.update({
         where: { id, realEstateId },
         data: {
-          title, type, category, transaction, price: Number(price), 
-          condoFee: Number(condoFee || 0), iptu: Number(iptu || 0),
-          area: Number(area), bedrooms: Number(bedrooms || 0), bathrooms: Number(bathrooms || 0), 
-          garage: Number(garage || 0), yearBuilt: yearBuilt ? Number(yearBuilt) : null,
+          title, type, category, transaction, 
+          price: price !== undefined ? Number(price) : undefined, 
+          condoFee: condoFee !== undefined ? Number(condoFee || 0) : undefined, 
+          iptu: iptu !== undefined ? Number(iptu || 0) : undefined,
+          area: area !== undefined ? Number(area) : undefined, 
+          bedrooms: bedrooms !== undefined ? Number(bedrooms || 0) : undefined, 
+          bathrooms: bathrooms !== undefined ? Number(bathrooms || 0) : undefined, 
+          garage: garage !== undefined ? Number(garage || 0) : undefined, 
+          yearBuilt: yearBuilt ? Number(yearBuilt) : null,
           amenities: amenities || [], cep, address, neighborhood, city, state,
           latitude: latitude ? Number(latitude) : null, longitude: longitude ? Number(longitude) : null,
-          description, imageUrls: imageUrls || [], brokerId: brokerId === "" ? null : brokerId,
+          description, imageUrls: imageUrls || [], 
+          brokerId: brokerId === "" ? null : brokerId,
+          ownerId: ownerId === "" ? null : ownerId,
+          inspectionUrl: inspectionUrl === "" ? null : inspectionUrl,
+          rentStatus: rentStatus || undefined
         },
-        include: { broker: { select: { id: true, name: true, phone: true } } }
+        include: { 
+          broker: { select: { id: true, name: true, phone: true } },
+          owner: { select: { id: true, name: true, phone: true } }
+        }
       });
       return res.json(property);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar imóvel.' });
     }
   }
@@ -133,27 +163,24 @@ export class PropertyController {
     try {
       const { slug } = req.params;
       
-      const realEstate = await (prisma as any).realEstate.findUnique({
+      const realEstate = await prisma.realEstate.findUnique({
         where: { slug: slug as string, isActive: true }
       });
 
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      // AGORA PROCURAMOS IMÓVEIS E CORRETORES AO MESMO TEMPO
       const [properties, brokers] = await Promise.all([
-        (prisma as any).property.findMany({ 
+        prisma.property.findMany({ 
           where: { realEstateId: realEstate.id, isActive: true }, 
-          orderBy: { createdAt: 'desc' },
-          include: { broker: { select: { name: true, creci: true, phone: true } } }
+          select: PUBLIC_PROPERTY_FIELDS,
+          orderBy: { createdAt: 'desc' }
         }),
-        (prisma as any).broker.findMany({ 
+        prisma.broker.findMany({ 
           where: { realEstateId: realEstate.id, isActive: true }, 
-          // Estes são os dados que vão para a tela pública
           select: { id: true, name: true, creci: true, phone: true, profileImageUrl: true } 
         })
       ]);
 
-      // AQUI ESTAVA O PROBLEMA: Faltava enviar o "brokers" na resposta!
       return res.json({ realEstate, properties, brokers });
     } catch (error) {
       console.error(error);
@@ -166,7 +193,6 @@ export class PropertyController {
     try {
       const { slug, propertyId } = req.params;
 
-      // Removemos o "select" para o cabeçalho carregar o Logótipo também nesta página
       const realEstate = await prisma.realEstate.findUnique({
         where: { slug: slug as string, isActive: true }
       });
@@ -177,7 +203,6 @@ export class PropertyController {
         where: { id: propertyId, realEstateId: realEstate.id, isActive: true },
         include: { 
           broker: { 
-            // Adicionámos o profileImageUrl para aparecer a foto do corretor no detalhe do imóvel
             select: { name: true, creci: true, phone: true, email: true, profileImageUrl: true } 
           } 
         }
@@ -191,12 +216,10 @@ export class PropertyController {
     }
   }
 
-  // Adicione dentro da classe PropertyController
- async updateRentalInfo(req: Request, res: Response) {
+  async updateRentalInfo(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
+      const realEstateId = await getRealEstateId(req);
       const { rentStatus, inspectionUrl, contractUrl, tenantId } = req.body;
 
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
@@ -223,5 +246,4 @@ export class PropertyController {
       return res.status(500).json({ error: 'Erro ao atualizar dados de aluguel do imóvel.' });
     }
   }
-
 }

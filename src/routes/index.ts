@@ -13,6 +13,8 @@ import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 import { OwnerController } from '../controllers/OwnerController';
 import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
+import { SignatureController } from '../controllers/SignatureController';
+import { VisitController } from '../controllers/VisitController';
 
 const routes = Router();
 const authController = new AuthController();
@@ -28,6 +30,8 @@ const tenantController = new TenantController();
 const ownerController = new OwnerController();
 const contractController = new ContractController();
 const invoiceController = new InvoiceController();
+const signatureController = new SignatureController();
+const visitController = new VisitController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -62,6 +66,13 @@ routes.post('/public/leads', async (req, res) => {
   }
 });
 
+
+// Rota para enviar contrato para assinatura digital
+routes.post('/contracts/send-signature', authMiddleware, signatureController.sendForSignature);
+
+// Webhook público para receber o evento de documento assinado
+routes.post('/webhooks/signatures', signatureController.handleWebhook);
+
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
 // ==========================================
@@ -72,7 +83,10 @@ routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.get
 // ROTAS DA IMOBILIÁRIA (Protegidas)
 // ==========================================
 
-// --- Gestão de Inquilinos --- (ROTAS ADICIONADAS)
+// Dashboard da Imobiliária (NOVO)
+routes.get('/dashboard/metrics', authMiddleware, dashboardController.getRealEstateMetrics);
+
+// --- Gestão de Inquilinos ---
 routes.get('/tenants', authMiddleware, tenantController.list);
 routes.post('/tenants', authMiddleware, tenantController.create);
 routes.put('/tenants/:id', authMiddleware, tenantController.update);
@@ -98,9 +112,6 @@ routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 
-// Rota Específica para Alugar/Vincular Imóvel (ROTA ADICIONADA)
-routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
-
 // Leads
 routes.get('/leads', authMiddleware, leadController.list);
 routes.post('/leads', authMiddleware, leadController.create);
@@ -113,7 +124,7 @@ routes.post('/brokers', authMiddleware, brokerController.create);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
 
-// Financeiro (Faturas e Repasses)   <--- PODE COLAR AQUI
+// Financeiro (Faturas e Repasses)   
 routes.get('/invoices', authMiddleware, invoiceController.list);
 routes.post('/invoices', authMiddleware, invoiceController.create);
 routes.patch('/invoices/:id/pay', authMiddleware, invoiceController.markAsPaid);
@@ -122,9 +133,18 @@ routes.patch('/invoices/:id/pay', authMiddleware, invoiceController.markAsPaid);
 routes.get('/my-store', authMiddleware, realEstateController.getMyStore);
 routes.put('/my-store', authMiddleware, realEstateController.updateMyStore);
 
+// Gestão de Visitas
+routes.get('/visits', authMiddleware, visitController.list);
+routes.post('/visits', authMiddleware, visitController.create);
+routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
+
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
+
+// Dashboard do Master SaaS (ATUALIZADO)
+routes.get('/master/dashboard/metrics', authMiddleware, masterOnly, dashboardController.getMasterStats);
+
 routes.use('/plans', authMiddleware, masterOnly); 
 routes.post('/plans', planController.create);
 routes.get('/plans', planController.list);
@@ -142,7 +162,5 @@ routes.post('/real-estates', realEstateController.create);
 routes.get('/real-estates', realEstateController.list);
 routes.put('/real-estates/:id', realEstateController.update);
 routes.patch('/real-estates/:id/status', realEstateController.toggleStatus);
-
-routes.get('/dashboard/master', authMiddleware, masterOnly, dashboardController.getMasterStats);
 
 export default routes;

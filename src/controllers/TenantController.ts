@@ -45,11 +45,22 @@ export class TenantController {
 
       const tenants = await (prisma as any).tenant.findMany({
         where: { realEstateId },
+        // ==========================================================
+        // A MAGIA ADICIONADA: Puxa os contratos e imóveis do cliente
+        // ==========================================================
+        include: {
+          contracts: {
+            include: {
+              property: { select: { title: true, address: true, rentStatus: true } }
+            }
+          }
+        },
         orderBy: { name: 'asc' }
       });
 
       return res.json(tenants);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao listar inquilinos.' });
     }
   }
@@ -77,6 +88,7 @@ export class TenantController {
 
       return res.json({ success: true, message: 'Inquilino atualizado com sucesso.' });
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar inquilino.' });
     }
   }
@@ -97,6 +109,7 @@ export class TenantController {
 
       return res.json({ success: true, isActive: !tenant.isActive });
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao alterar status do inquilino.' });
     }
   }
