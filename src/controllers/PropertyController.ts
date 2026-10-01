@@ -129,33 +129,34 @@ export class PropertyController {
   }
 
   // Vitrine (Todos os imóveis)
- // Vitrine (Página principal da loja)
   async listPublicByStore(req: Request, res: Response) {
     try {
       const { slug } = req.params;
       
-      // Removemos o "select" restrito para que ele traga TUDO (Logo, Banner, Textos, Redes Sociais)
-      const realEstate = await prisma.realEstate.findUnique({
+      const realEstate = await (prisma as any).realEstate.findUnique({
         where: { slug: slug as string, isActive: true }
       });
 
       if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
+      // AGORA PROCURAMOS IMÓVEIS E CORRETORES AO MESMO TEMPO
       const [properties, brokers] = await Promise.all([
-        prisma.property.findMany({ 
+        (prisma as any).property.findMany({ 
           where: { realEstateId: realEstate.id, isActive: true }, 
           orderBy: { createdAt: 'desc' },
           include: { broker: { select: { name: true, creci: true, phone: true } } }
         }),
-        prisma.broker.findMany({ 
+        (prisma as any).broker.findMany({ 
           where: { realEstateId: realEstate.id, isActive: true }, 
-          // Adicionámos o profileImageUrl para a foto aparecer na página "Nossos Corretores"
+          // Estes são os dados que vão para a tela pública
           select: { id: true, name: true, creci: true, phone: true, profileImageUrl: true } 
         })
       ]);
 
+      // AQUI ESTAVA O PROBLEMA: Faltava enviar o "brokers" na resposta!
       return res.json({ realEstate, properties, brokers });
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao carregar vitrine.' });
     }
   }
