@@ -68,7 +68,7 @@ export class OwnerController {
       // Substitua pelo seu Key real da Clicksign!
       const TEMPLATE_KEY = "78a657ab-4481-4f4a-ac44-5fa0031fba75";
 
-      const baseUrl = "https://app.clicksign.com/api/v1"; // Use sandbox.clicksign.com para testes
+      const baseUrl = "https://sandbox.clicksign.com/api/v1";
 
       // 1. CRIAR O DOCUMENTO A PARTIR DO MODELO
       const docResponse = await fetch(`${baseUrl}/templates/${TEMPLATE_KEY}/documents?access_token=${CLICKSIGN_TOKEN}`, {

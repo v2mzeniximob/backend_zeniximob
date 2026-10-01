@@ -115,7 +115,7 @@ export class ContractController {
       // Substitua pelo seu Key real da Clicksign!
       const TEMPLATE_KEY = "2c67cffd-5066-46cb-9a64-3e1881a1b1a0"; 
       
-      const baseUrl = "https://app.clicksign.com/api/v1"; // Use sandbox.clicksign.com se for ambiente de testes
+      const baseUrl = "https://sandbox.clicksign.com/api/v1";
 
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
