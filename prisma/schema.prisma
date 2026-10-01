@@ -127,7 +127,7 @@ model Broker {
   email        String     @unique
   password     String
   isActive     Boolean    @default(true)
-  profileImageUrl String?
+  profileImageUrl String? @db.Text
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
