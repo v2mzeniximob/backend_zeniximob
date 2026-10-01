@@ -146,22 +146,23 @@ model Broker {
 // PROPRIETÁRIOS (NOVO)
 // ==========================================
 model Owner {
-  id           String     @id @default(uuid())
-  name         String
-  cpfOrCnpj    String
-  email        String?
-  phone        String?
-  bankData     String?    @db.Text // Dados bancários para repasse financeiro
-  password     String?    // Acesso ao Portal do Proprietário
-  isActive     Boolean    @default(true)
-  managementContractUrl String? @db.Text
+  id                    String     @id @default(uuid())
+  name                  String
+  cpfOrCnpj             String
+  email                 String?
+  phone                 String?
+  bankData              String?    @db.Text // Dados bancários para repasse financeiro
+  password              String?    // Acesso ao Portal do Proprietário
+  isActive              Boolean    @default(true)
+  managementContractUrl String?    @db.Text
+  contractToken         String?    // <-- ESTA É A LINHA MÁGICA QUE FALTAVA!
 
-  realEstateId String
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
-  properties   Property[]
+  realEstateId          String
+  realEstate            RealEstate @relation(fields: [realEstateId], references: [id])
+  properties            Property[]
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
 
   @@map("owners")
 }
