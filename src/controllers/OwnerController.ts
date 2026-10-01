@@ -100,7 +100,7 @@ export class OwnerController {
         ]
       };
 
-      const urlZapSign = 'https://api.zapsign.com.br/api/v1/models/create-doc/';
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/`;
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
