@@ -71,11 +71,11 @@ export class OwnerController {
     }
   }
 
-  // NOVO: Gerar e Disparar Contrato diretamente para o Proprietário
+ // Gerar e Disparar Contrato diretamente para o Proprietário
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { pdfBase64, documentText } = req.body; // Recebe o texto ou PDF gerado no Front
+      const { pdfBase64, documentText } = req.body; 
 
       const owner = await prisma.owner.findUnique({ where: { id } });
       if (!owner) return res.status(404).json({ error: 'Proprietário não encontrado.' });
@@ -99,9 +99,13 @@ export class OwnerController {
         signUrl, 
         owner: updatedOwner 
       });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao gerar e enviar contrato.' });
+    } catch (error: any) {
+      console.error("💥 ERRO DETALHADO NO BACKEND:", error);
+      //Devolver o erro exato para o navegador
+      return res.status(500).json({ 
+        error: 'Erro no servidor', 
+        detalheExato: error.message || error.toString() 
+      });
     }
   }
 }
