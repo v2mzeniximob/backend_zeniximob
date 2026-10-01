@@ -173,7 +173,10 @@ export class ContractController {
 
       console.log(`🔑 [INQUILINO] Disparando ZapSign. Token inicia com: ${ZAPSIGN_TOKEN.substring(0, 6)}...`);
 
-      const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
+      
+
+     const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
+
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
