@@ -77,6 +77,8 @@ routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
 routes.put('/properties/:id', authMiddleware, propertyController.update);
 routes.patch('/properties/:id/status', authMiddleware, propertyController.toggleStatus);
+routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo); // Rota Específica para Alugar/Vincular Imóvel (ROTA ADICIONADA)
+routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 
 // Rota Específica para Alugar/Vincular Imóvel (ROTA ADICIONADA)
 routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
