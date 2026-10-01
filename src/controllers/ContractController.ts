@@ -5,7 +5,6 @@ const prisma = new PrismaClient() as any;
 
 export class ContractController {
   
-  // 1. CRIAR CONTRATO
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -53,7 +52,6 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -84,7 +82,6 @@ export class ContractController {
     }
   }
 
-  // 3. ATUALIZAR CONTRATO
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -120,7 +117,6 @@ export class ContractController {
     }
   }
 
-  // 4. ADICIONAR VISTORIA
   async addInspection(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -153,7 +149,7 @@ export class ContractController {
     }
   }
 
-  // 🚨 Disparo Oficial pela API de Templates ZapSign
+  // 🚨 Disparo Oficial com BLOCO DE DEPURAÇÃO DO TOKEN
   async sendToZapSign(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -170,14 +166,34 @@ export class ContractController {
       if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado a este contrato.' });
       if (!contract.tenant.email) return res.status(400).json({ error: 'O Inquilino não possui e-mail cadastrado.' });
 
-      const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN?.replace(/['"]/g, '').trim();
-      if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
+      // -----------------------------------------------------
+      // 🕵️ BLOCO DE DEPURAÇÃO (DEBUG) DO TOKEN ZAPSIGN
+      // -----------------------------------------------------
+      const rawToken = process.env.ZAPSIGN_API_TOKEN;
+      console.log("---- DEBUG ZAPSIGN (INQUILINO) ----");
+      console.log("RAW TOKEN:", rawToken);
+      console.log("TYPE:", typeof rawToken);
+      
+      const ZAPSIGN_TOKEN = rawToken?.replace(/['"]/g, "").trim();
+      
+      console.log("CLEAN TOKEN:", ZAPSIGN_TOKEN);
+      console.log("TOKEN LENGTH:", ZAPSIGN_TOKEN?.length);
+      
+      if (!ZAPSIGN_TOKEN) {
+        return res.status(500).json({
+          error: "Token ZapSign não configurado no servidor.",
+        });
+      }
+      
+      const authHeader = `Bearer ${ZAPSIGN_TOKEN}`;
+      console.log("AUTH HEADER:", authHeader.substring(0, 20) + "...");
+      console.log("-----------------------------------");
+      // -----------------------------------------------------
 
       const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-      // Payload oficial da ZapSign para a rota /create-doc/
       const zapsignPayload = {
         template_id: TEMPLATE_ID,
         signer_name: contract.tenant.name,
@@ -201,7 +217,7 @@ export class ContractController {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ZAPSIGN_TOKEN}`
+          Authorization: authHeader // <- Usa a variável validada no Debug
         },
         body: JSON.stringify(zapsignPayload)
       });
@@ -210,7 +226,6 @@ export class ContractController {
 
       if (!zapResponse.ok) {
         console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        // Retorna dinamicamente o status de erro exato da ZapSign
         return res.status(zapResponse.status).json({ 
           error: "A ZapSign recusou o contrato.", 
           detalheExato: responseText 

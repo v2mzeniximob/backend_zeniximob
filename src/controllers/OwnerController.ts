@@ -71,7 +71,7 @@ export class OwnerController {
     }
   }
 
-  // 🚨 Disparo Oficial pela API de Templates ZapSign
+  // 🚨 Disparo Oficial com BLOCO DE DEPURAÇÃO DO TOKEN
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -80,12 +80,32 @@ export class OwnerController {
       if (!owner) return res.status(404).json({ error: 'Proprietário não encontrado.' });
       if (!owner.email) return res.status(400).json({ error: 'Proprietário não possui e-mail cadastrado.' });
 
-      const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN?.replace(/['"]/g, '').trim();
-      if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token da ZapSign não configurado no servidor (.env).' });
+      // -----------------------------------------------------
+      // 🕵️ BLOCO DE DEPURAÇÃO (DEBUG) DO TOKEN ZAPSIGN
+      // -----------------------------------------------------
+      const rawToken = process.env.ZAPSIGN_API_TOKEN;
+      console.log("---- DEBUG ZAPSIGN (PROPRIETÁRIO) ----");
+      console.log("RAW TOKEN:", rawToken);
+      console.log("TYPE:", typeof rawToken);
+      
+      const ZAPSIGN_TOKEN = rawToken?.replace(/['"]/g, "").trim();
+      
+      console.log("CLEAN TOKEN:", ZAPSIGN_TOKEN);
+      console.log("TOKEN LENGTH:", ZAPSIGN_TOKEN?.length);
+      
+      if (!ZAPSIGN_TOKEN) {
+        return res.status(500).json({
+          error: "Token ZapSign não configurado no servidor.",
+        });
+      }
+      
+      const authHeader = `Bearer ${ZAPSIGN_TOKEN}`;
+      console.log("AUTH HEADER:", authHeader.substring(0, 20) + "...");
+      console.log("--------------------------------------");
+      // -----------------------------------------------------
 
       const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
 
-      // Payload oficial da ZapSign para a rota /create-doc/
       const zapsignPayload = {
         template_id: TEMPLATE_ID,
         signer_name: owner.name,
@@ -104,7 +124,7 @@ export class OwnerController {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
-          Authorization: `Bearer ${ZAPSIGN_TOKEN}`
+          Authorization: authHeader // <- Usa a variável validada no Debug
         },
         body: JSON.stringify(zapsignPayload)
       });
@@ -113,7 +133,6 @@ export class OwnerController {
 
       if (!zapResponse.ok) {
         console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        // Retorna dinamicamente o status de erro exato da ZapSign
         return res.status(zapResponse.status).json({ 
           error: "A ZapSign recusou a geração do contrato.", 
           detalheExato: responseText 
