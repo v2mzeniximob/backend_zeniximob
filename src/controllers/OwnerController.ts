@@ -87,7 +87,7 @@ export class OwnerController {
       }
 
       //ID DO MODELO QUE COPIOU DA URL DA ZAPSIGN
-      const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19";
+      const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
 
       // 1. Enviar as Variáveis para substituir no Word
       const zapsignPayload = {
