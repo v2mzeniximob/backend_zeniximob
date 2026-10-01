@@ -12,16 +12,9 @@ export class OwnerController {
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
       const { name, cpfOrCnpj, email, phone, bankData } = req.body;
-
-      const owner = await prisma.owner.create({
-        data: { name, cpfOrCnpj, email, phone, bankData, realEstateId }
-      });
-
+      const owner = await prisma.owner.create({ data: { name, cpfOrCnpj, email, phone, bankData, realEstateId } });
       return res.status(201).json(owner);
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao cadastrar proprietário.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao cadastrar proprietário.' }); }
   }
 
   async list(req: Request, res: Response) {
@@ -30,14 +23,10 @@ export class OwnerController {
       const realEstateId = user?.realEstateId || user?.id;
       
       const owners = await prisma.owner.findMany({
-        where: { realEstateId },
-        include: { properties: { select: { id: true, title: true } } },
-        orderBy: { name: 'asc' }
+        where: { realEstateId }, include: { properties: { select: { id: true, title: true } } }, orderBy: { name: 'asc' }
       });
       return res.json(owners);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao listar proprietários.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao listar proprietários.' }); }
   }
 
   async update(req: Request, res: Response) {
@@ -48,111 +37,101 @@ export class OwnerController {
       const realEstateId = user?.realEstateId || user?.id;
 
       const updated = await prisma.owner.update({
-        where: { id, realEstateId },
-        data: { name, cpfOrCnpj, email, phone, bankData }
+        where: { id, realEstateId }, data: { name, cpfOrCnpj, email, phone, bankData }
       });
       return res.json(updated);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao atualizar proprietário.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar proprietário.' }); }
   }
 
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const owner = await prisma.owner.findUnique({ where: { id } });
-      const updated = await prisma.owner.update({
-        where: { id },
-        data: { isActive: !owner.isActive }
-      });
+      const updated = await prisma.owner.update({ where: { id }, data: { isActive: !owner.isActive } });
       return res.json(updated);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao alterar status.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao alterar status.' }); }
   }
 
-  // 🚨 Disparo Oficial com BLOCO DE DEPURAÇÃO DO TOKEN
-  async generateAndSendContract(req: Request, res: Response) {
+  // 🚀 INTEGRAÇÃO CLICKSIGN (Gestão do Proprietário)
+  async sendToClicksign(req: Request, res: Response) {
     try {
       const { id } = req.params;
       
       const owner = await prisma.owner.findUnique({ where: { id } });
       if (!owner) return res.status(404).json({ error: 'Proprietário não encontrado.' });
-      if (!owner.email) return res.status(400).json({ error: 'Proprietário não possui e-mail cadastrado.' });
+      if (!owner.email) return res.status(400).json({ error: 'Proprietário não possui e-mail.' });
 
-      // -----------------------------------------------------
-      // 🕵️ BLOCO DE DEPURAÇÃO (DEBUG) DO TOKEN ZAPSIGN
-      // -----------------------------------------------------
-      const rawToken = process.env.ZAPSIGN_API_TOKEN;
-      console.log("---- DEBUG ZAPSIGN (PROPRIETÁRIO) ----");
-      console.log("RAW TOKEN:", rawToken);
-      console.log("TYPE:", typeof rawToken);
-      
-      const ZAPSIGN_TOKEN = rawToken?.replace(/['"]/g, "").trim();
-      
-      console.log("CLEAN TOKEN:", ZAPSIGN_TOKEN);
-      console.log("TOKEN LENGTH:", ZAPSIGN_TOKEN?.length);
-      
-      if (!ZAPSIGN_TOKEN) {
-        return res.status(500).json({
-          error: "Token ZapSign não configurado no servidor.",
-        });
-      }
-      
-      const authHeader = `Bearer ${ZAPSIGN_TOKEN}`;
-      console.log("AUTH HEADER:", authHeader.substring(0, 20) + "...");
-      console.log("--------------------------------------");
-      // -----------------------------------------------------
+      const CLICKSIGN_TOKEN = process.env.CLICKSIGN_ACCESS_TOKEN?.trim();
+      if (!CLICKSIGN_TOKEN) return res.status(500).json({ error: 'Token Clicksign não configurado (.env).' });
 
-      const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
+      // ID do Modelo (Template) da Clicksign (Pegue no painel deles)
+      // Substitua pelo seu Key real da Clicksign!
+      const TEMPLATE_KEY = "78a657ab-4481-4f4a-ac44-5fa0031fba75";
 
-      const zapsignPayload = {
-        template_id: TEMPLATE_ID,
-        signer_name: owner.name,
-        signer_email: owner.email,
-        data: [
-          { de: "{{NOME_PROPRIETARIO}}", para: owner.name },
-          { de: "{{CPF_CNPJ}}", para: owner.cpfOrCnpj },
-          { de: "{{TELEFONE}}", para: owner.phone || 'Não informado' },
-          { de: "{{BANCO}}", para: owner.bankData || 'Não informado' }
-        ]
-      };
+      const baseUrl = "https://app.clicksign.com/api/v1"; // Use sandbox.clicksign.com para testes
 
-      const urlZapSign = "https://api.zapsign.com.br/api/v1/models/create-doc/";
-      
-      const zapResponse = await fetch(urlZapSign, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: authHeader // <- Usa a variável validada no Debug
-        },
-        body: JSON.stringify(zapsignPayload)
+      // 1. CRIAR O DOCUMENTO A PARTIR DO MODELO
+      const docResponse = await fetch(`${baseUrl}/templates/${TEMPLATE_KEY}/documents?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document: {
+            path: `/Contratos/Gestao_${owner.id}.docx`,
+            template: {
+              data: {
+                "NOME_PROPRIETARIO": owner.name,
+                "CPF_CNPJ": owner.cpfOrCnpj,
+                "TELEFONE": owner.phone || 'Não informado',
+                "BANCO": owner.bankData || 'Não informado'
+              }
+            }
+          }
+        })
       });
 
-      const responseText = await zapResponse.text();
-
-      if (!zapResponse.ok) {
-        console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        return res.status(zapResponse.status).json({ 
-          error: "A ZapSign recusou a geração do contrato.", 
-          detalheExato: responseText 
-        });
+      if (!docResponse.ok) {
+        const err = await docResponse.text();
+        return res.status(400).json({ error: 'Erro ao criar documento na Clicksign.', detail: err });
       }
+      const docData = await docResponse.json();
+      const documentKey = docData.document.key;
 
-      const zapData = JSON.parse(responseText);
-      
+      // 2. CRIAR O SIGNATÁRIO (PROPRIETÁRIO)
+      const signerResponse = await fetch(`${baseUrl}/signers?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signer: { email: owner.email, auths: ["email"], name: owner.name, has_documentation: false }
+        })
+      });
+      const signerData = await signerResponse.json();
+      const signerKey = signerData.signer.key;
+
+      // 3. VINCULAR SIGNATÁRIO AO DOCUMENTO
+      const listResponse = await fetch(`${baseUrl}/lists?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          list: { document_key: documentKey, signer_key: signerKey, sign_as: "sign" }
+        })
+      });
+      const listData = await listResponse.json();
+      const signatureKey = listData.list.request_signature_key;
+      const signUrl = listData.list.url;
+
+      // 4. DISPARAR O E-MAIL DE ASSINATURA
+      await fetch(`${baseUrl}/notifications?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_signature_key: signatureKey, message: "Olá! Segue o seu contrato de gestão imobiliária para assinatura." })
+      });
+
+      // 5. SALVAR NO BANCO
       const updatedOwner = await prisma.owner.update({
         where: { id },
-        data: { 
-          managementContractUrl: zapData.signers[0].sign_url, 
-          contractToken: zapData.token 
-        }
+        data: { managementContractUrl: signUrl, contractToken: documentKey }
       });
 
-      return res.json({ message: 'Contrato dinâmico gerado com sucesso!', signUrl: updatedOwner.managementContractUrl, owner: updatedOwner });
+      return res.json({ message: 'Contrato gerado com sucesso na Clicksign!', signUrl: updatedOwner.managementContractUrl, owner: updatedOwner });
       
     } catch (error: any) {
-      console.error("💥 ERRO DETALHADO NO BACKEND:", error);
+      console.error("💥 ERRO BACKEND:", error);
       return res.status(500).json({ error: 'Erro no servidor' });
     }
   }

@@ -5,51 +5,33 @@ const prisma = new PrismaClient() as any;
 
 export class ContractController {
   
+  // 1, 2, 3 e 4 (CRIAR, LISTAR, ATUALIZAR E VISTORIA) mantêm-se iguais
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const {
-        type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl
-      } = req.body;
-
+      const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
 
-      const property = await prisma.property.findFirst({
-        where: { id: propertyId, realEstateId }
-      });
-
+      const property = await prisma.property.findFirst({ where: { id: propertyId, realEstateId } });
       if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
 
       const contract = await prisma.contract.create({
         data: {
-          type: type || 'Locação',
-          status: 'Ativo',
-          propertyId,
-          tenantId: tenantId || null,
-          startDate: new Date(startDate),
-          endDate: endDate ? new Date(endDate) : null,
-          rentValue: Number(rentValue),
-          adminFeePercent: Number(adminFeePercent),
-          readjustmentIndex,
-          documentUrl
+          type: type || 'Locação', status: 'Ativo', propertyId, tenantId: tenantId || null,
+          startDate: new Date(startDate), endDate: endDate ? new Date(endDate) : null,
+          rentValue: Number(rentValue), adminFeePercent: Number(adminFeePercent), readjustmentIndex, documentUrl
         }
       });
 
       if (contract.type === 'Locação') {
-        await prisma.property.update({
-          where: { id: propertyId },
-          data: { rentStatus: 'Alugado', tenantId: tenantId || null }
-        });
+        await prisma.property.update({ where: { id: propertyId }, data: { rentStatus: 'Alugado', tenantId: tenantId || null } });
       }
 
       return res.status(201).json(contract);
-    } catch (error) {
-      console.error('Erro ao gerar contrato:', error);
-      return res.status(500).json({ error: 'Erro ao gerar contrato.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao gerar contrato.' }); }
   }
 
   async list(req: Request, res: Response) {
@@ -60,15 +42,12 @@ export class ContractController {
 
       const status = req.query.status as string;
       const whereClause: any = { property: { realEstateId } };
-
       if (status) whereClause.status = status;
 
       const contracts = await prisma.contract.findMany({
         where: whereClause,
         include: {
-          property: {
-            select: { title: true, address: true, owner: { select: { name: true } } }
-          },
+          property: { select: { title: true, address: true, owner: { select: { name: true } } } },
           tenant: { select: { name: true, cpf: true, email: true, phone: true } },
           inspections: true
         },
@@ -76,10 +55,7 @@ export class ContractController {
       });
 
       return res.json(contracts);
-    } catch (error) {
-      console.error('Erro ao listar contratos:', error);
-      return res.status(500).json({ error: 'Erro ao listar contratos.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao listar contratos.' }); }
   }
 
   async update(req: Request, res: Response) {
@@ -89,32 +65,16 @@ export class ContractController {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      const contract = await prisma.contract.findUnique({
-        where: { id },
-        include: { property: true }
-      });
+      const contract = await prisma.contract.findUnique({ where: { id }, include: { property: true } });
+      if (!contract || contract.property.realEstateId !== realEstateId) return res.status(404).json({ error: 'Contrato não encontrado.' });
 
-      if (!contract || contract.property.realEstateId !== realEstateId) {
-         return res.status(404).json({ error: 'Contrato não encontrado.' });
-      }
-
-      const updated = await prisma.contract.update({
-        where: { id },
-        data: { status, documentUrl }
-      });
-
+      const updated = await prisma.contract.update({ where: { id }, data: { status, documentUrl } });
       if (status === 'Encerrado' && contract.type === 'Locação') {
-        await prisma.property.update({
-          where: { id: contract.propertyId },
-          data: { rentStatus: 'Vago', tenantId: null }
-        });
+        await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
       }
 
       return res.json(updated);
-    } catch (error) {
-      console.error('Erro ao atualizar contrato:', error);
-      return res.status(500).json({ error: 'Erro ao atualizar contrato.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); }
   }
 
   async addInspection(req: Request, res: Response) {
@@ -124,33 +84,16 @@ export class ContractController {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      const contract = await prisma.contract.findUnique({
-        where: { id },
-        include: { property: true }
-      });
+      const contract = await prisma.contract.findUnique({ where: { id }, include: { property: true } });
+      if (!contract || contract.property.realEstateId !== realEstateId) return res.status(404).json({ error: 'Contrato não encontrado.' });
 
-      if (!contract || contract.property.realEstateId !== realEstateId) {
-         return res.status(404).json({ error: 'Contrato não encontrado.' });
-      }
-
-      const inspection = await prisma.inspection.create({
-        data: {
-          contractId: id,
-          type: type || 'Rotina',
-          date: new Date(date),
-          reportUrl
-        }
-      });
-
+      const inspection = await prisma.inspection.create({ data: { contractId: id, type: type || 'Rotina', date: new Date(date), reportUrl } });
       return res.status(201).json(inspection);
-    } catch (error) {
-      console.error('Erro ao registar vistoria:', error);
-      return res.status(500).json({ error: 'Erro ao registar vistoria.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao registar vistoria.' }); }
   }
 
-  // 🚨 Disparo Oficial com BLOCO DE DEPURAÇÃO DO TOKEN
-  async sendToZapSign(req: Request, res: Response) {
+  // 🚀 INTEGRAÇÃO CLICKSIGN (Novo Motor)
+  async sendToClicksign(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const user = req.user as any;
@@ -162,92 +105,89 @@ export class ContractController {
       });
 
       if (!contract) return res.status(404).json({ error: 'Contrato não encontrado.' });
-      if (contract.property.realEstateId !== realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
-      if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado a este contrato.' });
-      if (!contract.tenant.email) return res.status(400).json({ error: 'O Inquilino não possui e-mail cadastrado.' });
+      if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado.' });
+      if (!contract.tenant.email) return res.status(400).json({ error: 'Inquilino sem e-mail.' });
 
-      // -----------------------------------------------------
-      // 🕵️ BLOCO DE DEPURAÇÃO (DEBUG) DO TOKEN ZAPSIGN
-      // -----------------------------------------------------
-      const rawToken = process.env.ZAPSIGN_API_TOKEN;
-      console.log("---- DEBUG ZAPSIGN (INQUILINO) ----");
-      console.log("RAW TOKEN:", rawToken);
-      console.log("TYPE:", typeof rawToken);
-      
-      const ZAPSIGN_TOKEN = rawToken?.replace(/['"]/g, "").trim();
-      
-      console.log("CLEAN TOKEN:", ZAPSIGN_TOKEN);
-      console.log("TOKEN LENGTH:", ZAPSIGN_TOKEN?.length);
-      
-      if (!ZAPSIGN_TOKEN) {
-        return res.status(500).json({
-          error: "Token ZapSign não configurado no servidor.",
-        });
-      }
-      
-      const authHeader = `Bearer ${ZAPSIGN_TOKEN}`;
-      console.log("AUTH HEADER:", authHeader.substring(0, 20) + "...");
-      console.log("-----------------------------------");
-      // -----------------------------------------------------
+      const CLICKSIGN_TOKEN = process.env.CLICKSIGN_ACCESS_TOKEN?.trim();
+      if (!CLICKSIGN_TOKEN) return res.status(500).json({ error: 'Token Clicksign não configurado no servidor.' });
 
-      const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
+      // ID do Modelo (Template) da Clicksign (Pegue no painel deles na aba Modelos)
+      // Substitua pelo seu Key real da Clicksign!
+      const TEMPLATE_KEY = "2c67cffd-5066-46cb-9a64-3e1881a1b1a0"; 
+      
+      const baseUrl = "https://app.clicksign.com/api/v1"; // Use sandbox.clicksign.com se for ambiente de testes
+
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-      const zapsignPayload = {
-        template_id: TEMPLATE_ID,
-        signer_name: contract.tenant.name,
-        signer_email: contract.tenant.email,
-        data: [
-          { de: "{{NOME_PROPRIETARIO}}", para: contract.property.owner?.name || 'Não informado' },
-          { de: "{{NOME_INQUILINO}}", para: contract.tenant.name },
-          { de: "{{CPF_INQUILINO}}", para: contract.tenant.cpf || 'Não informado' },
-          { de: "{{TELEFONE_INQUILINO}}", para: contract.tenant.phone || 'Não informado' },
-          { de: "{{ENDERECO_IMOVEL}}", para: contract.property.address || 'Não informado' },
-          { de: "{{DATA_INICIO}}", para: formatDate(contract.startDate) },
-          { de: "{{DATA_FIM}}", para: formatDate(contract.endDate) },
-          { de: "{{VALOR_ALUGUEL}}", para: formatCurrency(Number(contract.rentValue)) },
-          { de: "{{INDICE_REAJUSTE}}", para: contract.readjustmentIndex || 'Não informado' }
-        ]
-      };
-
-      const urlZapSign = "https://api.zapsign.com.br/api/v1/models/create-doc/";
-      
-      const zapResponse = await fetch(urlZapSign, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          Authorization: authHeader // <- Usa a variável validada no Debug
-        },
-        body: JSON.stringify(zapsignPayload)
+      // 1. CRIAR O DOCUMENTO A PARTIR DO MODELO
+      const docResponse = await fetch(`${baseUrl}/templates/${TEMPLATE_KEY}/documents?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          document: {
+            path: `/Contratos/Locacao_${contract.id}.docx`,
+            template: {
+              data: {
+                "NOME_PROPRIETARIO": contract.property.owner?.name || 'Não informado',
+                "NOME_INQUILINO": contract.tenant.name,
+                "CPF_INQUILINO": contract.tenant.cpf || 'Não informado',
+                "TELEFONE_INQUILINO": contract.tenant.phone || 'Não informado',
+                "ENDERECO_IMOVEL": contract.property.address || 'Não informado',
+                "DATA_INICIO": formatDate(contract.startDate),
+                "DATA_FIM": formatDate(contract.endDate),
+                "VALOR_ALUGUEL": formatCurrency(Number(contract.rentValue)),
+                "INDICE_REAJUSTE": contract.readjustmentIndex || 'Não informado'
+              }
+            }
+          }
+        })
       });
 
-      const responseText = await zapResponse.text();
-
-      if (!zapResponse.ok) {
-        console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
-        return res.status(zapResponse.status).json({ 
-          error: "A ZapSign recusou o contrato.", 
-          detalheExato: responseText 
-        });
+      if (!docResponse.ok) {
+        const err = await docResponse.text();
+        return res.status(400).json({ error: 'Erro ao criar documento na Clicksign.', detail: err });
       }
+      const docData = await docResponse.json();
+      const documentKey = docData.document.key;
 
-      const zapData = JSON.parse(responseText);
+      // 2. CRIAR O SIGNATÁRIO (INQUILINO)
+      const signerResponse = await fetch(`${baseUrl}/signers?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signer: { email: contract.tenant.email, auths: ["email"], name: contract.tenant.name, has_documentation: false }
+        })
+      });
+      const signerData = await signerResponse.json();
+      const signerKey = signerData.signer.key;
 
+      // 3. VINCULAR O SIGNATÁRIO AO DOCUMENTO
+      const listResponse = await fetch(`${baseUrl}/lists?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          list: { document_key: documentKey, signer_key: signerKey, sign_as: "sign" }
+        })
+      });
+      const listData = await listResponse.json();
+      const signatureKey = listData.list.request_signature_key;
+      const signUrl = listData.list.url; // Link direto para assinatura
+
+      // 4. DISPARAR O E-MAIL OFICIAL PELA CLICKSIGN
+      await fetch(`${baseUrl}/notifications?access_token=${CLICKSIGN_TOKEN}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_signature_key: signatureKey, message: "Olá! Segue o seu contrato de locação para assinatura." })
+      });
+
+      // 5. SALVAR NO BANCO DE DADOS
       const updatedContract = await prisma.contract.update({
         where: { id },
-        data: { 
-          signUrl: zapData.signers[0].sign_url,
-          externalDocToken: zapData.token,
-          signatureStatus: 'Pendente'
-        }
+        data: { signUrl: signUrl, externalDocToken: documentKey, signatureStatus: 'Pendente' }
       });
 
-      return res.json({ message: 'Contrato gerado com sucesso!', signUrl: updatedContract.signUrl });
+      return res.json({ message: 'Contrato gerado e enviado via Clicksign!', signUrl: updatedContract.signUrl });
 
     } catch (error: any) {
-      console.error("💥 ERRO ZAPSIGN CONTRATO:", error);
-      return res.status(500).json({ error: 'Erro interno ao disparar assinatura.' });
+      console.error("💥 ERRO CLICKSIGN:", error);
+      return res.status(500).json({ error: 'Erro interno na integração Clicksign.' });
     }
   }
 }
