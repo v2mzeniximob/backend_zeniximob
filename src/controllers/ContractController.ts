@@ -149,7 +149,8 @@ export class ContractController {
     }
   }
 
-  // 🚨 CORREÇÃO DEFINITIVA DA ZAPSIGN
+  
+  //ZAPSIGN (Inquilino)
   async sendToZapSign(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -158,10 +159,7 @@ export class ContractController {
 
       const contract = await prisma.contract.findUnique({
         where: { id },
-        include: { 
-          tenant: true,
-          property: { include: { owner: true } } 
-        }
+        include: { tenant: true, property: { include: { owner: true } } }
       });
 
       if (!contract) return res.status(404).json({ error: 'Contrato não encontrado.' });
@@ -169,14 +167,16 @@ export class ContractController {
       if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado a este contrato.' });
       if (!contract.tenant.email) return res.status(400).json({ error: 'O Inquilino não possui e-mail cadastrado.' });
 
-      const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN;
+      // 🔥 Limpa aspas e espaços acidentais que possam estar no Render
+      const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN?.replace(/['"]/g, '').trim();
       if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
+
+      console.log(`🔑 [INQUILINO] Disparando ZapSign. Token inicia com: ${ZAPSIGN_TOKEN.substring(0, 6)}...`);
 
       const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-      // O Payload mudou para a estrutura oficial de Modelos
       const zapsignPayload = {
         template_id: TEMPLATE_ID,
         signer_name: contract.tenant.name,
@@ -194,15 +194,12 @@ export class ContractController {
         ]
       };
 
-      // 🚨 O URL OFICIAL PARA CRIAR A PARTIR DE MODELOS (create-doc)
-      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/create-doc/?api_token=${ZAPSIGN_TOKEN.trim()}`;
+      // URL com o token anexado (padrão infalível ZapSign)
+      const urlZapSign = `https://api.zapsign.com.br/api/v1/models/create-doc/?api_token=${ZAPSIGN_TOKEN}`;
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${ZAPSIGN_TOKEN.trim()}`
-         },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(zapsignPayload)
       });
 
@@ -224,10 +221,7 @@ export class ContractController {
         }
       });
 
-      return res.json({ 
-        message: 'Contrato de locação gerado com sucesso!', 
-        signUrl: updatedContract.signUrl 
-      });
+      return res.json({ message: 'Contrato gerado com sucesso!', signUrl: updatedContract.signUrl });
 
     } catch (error: any) {
       console.error("💥 ERRO ZAPSIGN CONTRATO:", error);
