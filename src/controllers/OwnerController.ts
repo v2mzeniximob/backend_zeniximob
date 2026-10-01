@@ -71,7 +71,8 @@ export class OwnerController {
     }
   }
 
-  // Gerar e Disparar Contrato REAL pela ZapSign
+  
+ // Gerar e Disparar Contrato REAL pela ZapSign usando TEMPLATE (Word)
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -80,16 +81,23 @@ export class OwnerController {
       if (!owner) return res.status(404).json({ error: 'Proprietário não encontrado.' });
       if (!owner.email) return res.status(400).json({ error: 'Proprietário não possui e-mail cadastrado.' });
 
-      // 1. Pegar a chave da ZapSign do arquivo .env
       const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN;
       if (!ZAPSIGN_TOKEN) {
         return res.status(500).json({ error: 'Token da ZapSign não configurado no servidor (.env).' });
       }
 
-      // 2. Montar os dados para a ZapSign (PDF válido e público)
+      //ID DO MODELO QUE COPIOU DA URL DA ZAPSIGN
+      const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19";
+
+      // 1. Enviar as Variáveis para substituir no Word
       const zapsignPayload = {
         name: `Contrato de Gestão - ${owner.name}`,
-        url_pdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+        data: [
+          { de: "{{NOME_PROPRIETARIO}}", para: owner.name },
+          { de: "{{CPF_CNPJ}}", para: owner.cpfOrCnpj },
+          { de: "{{TELEFONE}}", para: owner.phone || 'Não informado' },
+          { de: "{{BANCO}}", para: owner.bankData || 'Não informado' }
+        ],
         signers: [
           {
             name: owner.name,
@@ -99,18 +107,15 @@ export class OwnerController {
         ]
       };
 
-      // 3. Fazer o disparo oficial para a API da ZapSign
-      // (Testes / Gratuito SandBox):
-      const zapResponse = await fetch(`https://sandbox.api.zapsign.com.br/api/v1/docs/?api_token=${ZAPSIGN_TOKEN}`, {
+      // 2. Repare que o LINK mudou! Agora apontamos para /models/TEMPLATE_ID/docs/
+      const zapResponse = await fetch(`https://sandbox.api.zapsign.com.br/api/v1/models/${TEMPLATE_ID}/docs/?api_token=${ZAPSIGN_TOKEN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(zapsignPayload)
       });
 
-      // MAGIA AQUI: Lemos como texto primeiro para não quebrar o servidor!
       const responseText = await zapResponse.text();
 
-      // Se a ZapSign disser que deu erro (Status 400 ou 500)
       if (!zapResponse.ok) {
         console.error("⛔ RECUSA DA ZAPSIGN:", responseText);
         return res.status(400).json({ 
@@ -119,14 +124,13 @@ export class OwnerController {
         });
       }
 
-      // Se passou, aí sim convertemos para JSON com segurança
       const zapData = JSON.parse(responseText);
 
-      // 4. Extrair os links verdadeiros que a ZapSign nos devolveu
+      // 3. Extrair os links verdadeiros que a ZapSign nos devolveu
       const externalDocToken = zapData.token;
       const signUrl = zapData.signers[0].sign_url;
 
-      // 5. Salvar na nossa base de dados
+      // 4. Salvar na nossa base de dados
       const updatedOwner = await prisma.owner.update({
         where: { id },
         data: { 
@@ -136,7 +140,7 @@ export class OwnerController {
       });
 
       return res.json({ 
-        message: 'Contrato gerado e enviado via ZapSign com sucesso!', 
+        message: 'Contrato dinâmico gerado e enviado via ZapSign com sucesso!', 
         signUrl, 
         owner: updatedOwner 
       });
