@@ -198,11 +198,14 @@ export class ContractController {
       };
 
       // URL com o token anexado (padrão infalível ZapSign)
-      const urlZapSign = `https://sandbox.api.zapsign.com.br/api/v1/models/create-doc/`;
+    const urlZapSign = 'https://api.zapsign.com.br/api/v1/models/create-doc/';
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ZAPSIGN_TOKEN.trim()}`
+        },
         body: JSON.stringify(zapsignPayload)
       });
 

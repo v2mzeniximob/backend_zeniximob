@@ -100,14 +100,16 @@ export class OwnerController {
         ]
       };
 
-      const urlZapSign = `https://sandbox.api.zapsign.com.br/api/v1/models/create-doc/`;
+      const urlZapSign = 'https://api.zapsign.com.br/api/v1/models/create-doc/';
       
       const zapResponse = await fetch(urlZapSign, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${ZAPSIGN_TOKEN.trim()}`
+        },
         body: JSON.stringify(zapsignPayload)
       });
-
       const responseText = await zapResponse.text();
 
       if (!zapResponse.ok) {
