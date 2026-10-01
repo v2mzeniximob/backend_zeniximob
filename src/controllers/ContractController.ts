@@ -167,7 +167,7 @@ export class ContractController {
       if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado a este contrato.' });
       if (!contract.tenant.email) return res.status(400).json({ error: 'O Inquilino não possui e-mail cadastrado.' });
 
-      // 🔥 Limpa aspas e espaços acidentais que possam estar no Render
+      // Limpa aspas e espaços acidentais que possam estar no Render
       const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN?.replace(/['"]/g, '').trim();
       if (!ZAPSIGN_TOKEN) return res.status(500).json({ error: 'Token ZapSign não configurado no servidor.' });
 
@@ -175,7 +175,7 @@ export class ContractController {
 
       
 
-     const TEMPLATE_ID = "79d9fa5a-eba4-4de4-8671-19b7b9ffbd19".trim();
+     const TEMPLATE_ID = "caea5a87-9839-44e7-9c12-5788ca6bfbee".trim();
 
       const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
       const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
