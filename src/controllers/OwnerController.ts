@@ -71,21 +71,54 @@ export class OwnerController {
     }
   }
 
- // Gerar e Disparar Contrato diretamente para o Proprietário
+ // Gerar e Disparar Contrato REAL pela ZapSign
   async generateAndSendContract(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { pdfBase64, documentText } = req.body; 
-
+      
       const owner = await prisma.owner.findUnique({ where: { id } });
       if (!owner) return res.status(404).json({ error: 'Proprietário não encontrado.' });
       if (!owner.email) return res.status(400).json({ error: 'Proprietário não possui e-mail cadastrado.' });
 
-      // Simulação da Integração com Clicksign/ZapSign
-      const externalDocToken = `DOC-OWNER-${Date.now()}`;
-      const signUrl = `https://sandbox.assinatura.com/sign/${externalDocToken}`;
+      // 1. Pegar a chave da ZapSign do arquivo .env
+      const ZAPSIGN_TOKEN = process.env.ZAPSIGN_API_TOKEN;
+      if (!ZAPSIGN_TOKEN) {
+        return res.status(500).json({ error: 'Token da ZapSign não configurado no servidor (.env).' });
+      }
 
-      // Salva o link no cadastro do proprietário
+      // 2. Montar os dados para a ZapSign (Usando um PDF de teste da própria ZapSign)
+      // Futuramente podemos trocar esse 'url_pdf' pelo PDF dinâmico gerado pelo seu sistema
+      const zapsignPayload = {
+        name: `Contrato de Gestão - ${owner.name}`,
+        url_pdf: "https://zapsign.s3.amazonaws.com/2022/1/pdf/63d19807-cbfa-4b51-8571-2151dd208a5d/ca42d758-5224-4ad4-8f43-1ad95966601b.pdf",
+        signers: [
+          {
+            name: owner.name,
+            email: owner.email,
+            send_via: "email" // A mágica acontece aqui: A ZapSign manda o e-mail sozinha!
+          }
+        ]
+      };
+
+      // 3. Fazer o disparo oficial para a API da ZapSign
+      const zapResponse = await fetch(`https://api.zapsign.com.br/api/v1/docs/?api_token=${ZAPSIGN_TOKEN}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(zapsignPayload)
+      });
+
+      const zapData = await zapResponse.json();
+
+      if (!zapResponse.ok) {
+        console.error("Erro retornado pela ZapSign:", zapData);
+        return res.status(500).json({ error: 'Erro ao comunicar com a ZapSign.', detalhes: zapData });
+      }
+
+      // 4. Extrair os links verdadeiros que a ZapSign nos devolveu
+      const externalDocToken = zapData.token;
+      const signUrl = zapData.signers[0].sign_url; // O link exato para este proprietário assinar
+
+      // 5. Salvar na nossa base de dados
       const updatedOwner = await prisma.owner.update({
         where: { id },
         data: { 
@@ -95,13 +128,13 @@ export class OwnerController {
       });
 
       return res.json({ 
-        message: 'Contrato enviado com sucesso!', 
+        message: 'Contrato gerado e enviado via ZapSign com sucesso!', 
         signUrl, 
         owner: updatedOwner 
       });
+      
     } catch (error: any) {
       console.error("💥 ERRO DETALHADO NO BACKEND:", error);
-      //Devolver o erro exato para o navegador
       return res.status(500).json({ 
         error: 'Erro no servidor', 
         detalheExato: error.message || error.toString() 
