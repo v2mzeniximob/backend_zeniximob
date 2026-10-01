@@ -10,6 +10,9 @@ import { LeadController } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
 import { TenantController } from '../controllers/TenantController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
+import { OwnerController } from '../controllers/OwnerController';
+import { ContractController } from '../controllers/ContractController';
+import { InvoiceController } from '../controllers/InvoiceController';
 
 const routes = Router();
 const authController = new AuthController();
@@ -22,6 +25,9 @@ const propertyController = new PropertyController();
 const leadController = new LeadController();
 const brokerController = new BrokerController();
 const tenantController = new TenantController(); 
+const ownerController = new OwnerController();
+const contractController = new ContractController();
+const invoiceController = new InvoiceController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -31,7 +37,7 @@ routes.post('/login', authController.login);
 // Vitrine da Loja (Lista todos os imóveis ativos)
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 
-// NOVO: Detalhes de um único imóvel na vitrine (Página detalhada)
+// Detalhes de um único imóvel na vitrine (Página detalhada)
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 
 // Rota pública para leads (quando o cliente envia mensagem na vitrine)
@@ -77,8 +83,20 @@ routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
 routes.put('/properties/:id', authMiddleware, propertyController.update);
 routes.patch('/properties/:id/status', authMiddleware, propertyController.toggleStatus);
-routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo); // Rota Específica para Alugar/Vincular Imóvel (ROTA ADICIONADA)
+routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
+
+// Proprietários (Owners)
+routes.get('/owners', authMiddleware, ownerController.list);
+routes.post('/owners', authMiddleware, ownerController.create);
+routes.put('/owners/:id', authMiddleware, ownerController.update);
+routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
+
+// Contratos e Vistorias
+routes.get('/contracts', authMiddleware, contractController.list);
+routes.post('/contracts', authMiddleware, contractController.create);
+routes.put('/contracts/:id', authMiddleware, contractController.update);
+routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 
 // Rota Específica para Alugar/Vincular Imóvel (ROTA ADICIONADA)
 routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
@@ -87,12 +105,18 @@ routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRe
 routes.get('/leads', authMiddleware, leadController.list);
 routes.post('/leads', authMiddleware, leadController.create);
 routes.put('/leads/:id', authMiddleware, leadController.update);
+routes.post('/leads/:id/history', authMiddleware, leadController.addHistoryEvent);
 
 // Corretores
 routes.get('/brokers', authMiddleware, brokerController.list);
 routes.post('/brokers', authMiddleware, brokerController.create);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
+
+// Financeiro (Faturas e Repasses)   <--- PODE COLAR AQUI
+routes.get('/invoices', authMiddleware, invoiceController.list);
+routes.post('/invoices', authMiddleware, invoiceController.create);
+routes.patch('/invoices/:id/pay', authMiddleware, invoiceController.markAsPaid);
 
 // Configurações da Própria Loja
 routes.get('/my-store', authMiddleware, realEstateController.getMyStore);

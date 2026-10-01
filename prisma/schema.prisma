@@ -112,37 +112,61 @@ model RealEstate {
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
-  tenants Tenant[]
+  tenants           Tenant[]
+  owners            Owner[]      // NOVO: Relacionamento com Proprietários
 }
 
 // ==========================================
 // CORRETORES (Equipa da Loja)
 // ==========================================
 model Broker {
-  id           String     @id @default(uuid())
-  name         String
-  cpf          String     @unique
-  creci        String
-  phone        String
-  email        String     @unique
-  password     String
-  isActive     Boolean    @default(true)
-  profileImageUrl String? @db.Text
-  creciDocumentUrl String? @db.Text
+  id               String     @id @default(uuid())
+  name             String
+  cpf              String     @unique
+  creci            String
+  phone            String
+  email            String     @unique
+  password         String
+  isActive         Boolean    @default(true)
+  profileImageUrl  String?    @db.Text
+  creciDocumentUrl String?    @db.Text
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  // ATUALIZAÇÃO: Relações com Imóveis e Leads
   properties   Property[]
   leads        Lead[]
+  visits       Visit[]    // NOVO: Relacionamento com as visitas agendadas
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
 
 // ==========================================
-// IMÓVEIS (ATUALIZADO PARA PÁGINA DETALHADA)
+// PROPRIETÁRIOS (NOVO)
+// ==========================================
+model Owner {
+  id           String     @id @default(uuid())
+  name         String
+  cpfOrCnpj    String
+  email        String?
+  phone        String?
+  bankData     String?    @db.Text // Dados bancários para repasse financeiro
+  password     String?    // Acesso ao Portal do Proprietário
+  isActive     Boolean    @default(true)
+
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+  properties   Property[]
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("owners")
+}
+
+// ==========================================
+// IMÓVEIS
 // ==========================================
 model Property {
   id            String      @id @default(uuid())
@@ -162,20 +186,20 @@ model Property {
   bathrooms     Int         @default(0)
   garage        Int         @default(0)
   yearBuilt     Int?        // Ano de construção
-  amenities     String[]    // Array com as características (ex: ["Piscina", "Academia", "Churrasqueira"])
+  amenities     String[]    // Array com as características
   
   // Localização Detalhada
   cep           String
   address       String
-  neighborhood  String?     // Bairro (Usado para o mapa focar apenas na região)
-  city          String?     // Cidade
-  state         String?     // Estado (UF)
-  latitude      Float?      // Coordenada Y (Opcional, preenchido via API de CEP no front)
-  longitude     Float?      // Coordenada X (Opcional)
+  neighborhood  String?     
+  city          String?     
+  state         String?     
+  latitude      Float?      
+  longitude     Float?      
   
   // Mídia e Status
   description   String?
-  imageUrls     String[]    // Array com as URLs das fotos
+  imageUrls     String[]    
   isActive      Boolean     @default(true)
   
   // Relacionamentos
@@ -185,6 +209,9 @@ model Property {
   brokerId      String?
   broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
 
+  ownerId       String?     // NOVO: Relacionamento com Proprietário
+  owner         Owner?      @relation(fields: [ownerId], references: [id])
+
   rentStatus      String?   @default("Vago") // "Vago" ou "Alugado"
   inspectionUrl   String?   // Upload do Documento de Vistoria
   contractUrl     String?   // Upload do Contrato de Aluguel
@@ -192,9 +219,53 @@ model Property {
 
   tenantId        String?
   tenant          Tenant?   @relation(fields: [tenantId], references: [id])
-  leads         Lead[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  
+  leads           Lead[]
+  visits          Visit[]     // NOVO: Controle de visitas
+  contracts       Contract[]  // NOVO: Contratos associados ao imóvel
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ==========================================
+// INQUILINOS
+// ==========================================
+model Tenant {
+  id              String      @id @default(uuid())
+  
+  // Dados do Inquilino
+  name            String
+  cpf             String      @unique
+  currentAddress  String
+  phone           String
+  email           String
+  documentUrl     String?     
+  maritalStatus   String      
+  
+  // Dados do Cônjuge
+  spouseName      String?
+  spouseCpf       String?
+  spouseDocUrl    String?     
+  
+  // Dados do Fiador
+  guarantorName   String?
+  guarantorCpf    String?
+  guarantorDocUrl String?     
+  
+  // Controle do sistema
+  isActive        Boolean     @default(true)
+  
+  // Relações
+  realEstateId    String
+  realEstate      RealEstate  @relation(fields: [realEstateId], references: [id])
+  properties      Property[]  
+  contracts       Contract[]  // NOVO: Contratos do inquilino
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("tenants")
 }
 
 // ==========================================
@@ -209,52 +280,120 @@ model Lead {
   status        String      @default("Novo") // Novo, Em Atendimento, Em Proposta, Fechado, Perdido
   notes         String?
   
+  // NOVO: Estágio do Funil (Pipeline)
+  stage         String      @default("Novo") 
+  
   propertyId    String?
   property      Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   
   realEstateId  String
   realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  // ATUALIZAÇÃO: Vinculação ao Corretor que está atendendo
   brokerId      String?
   broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+
+  history       LeadHistory[] // NOVO: Histórico de atendimento
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 }
 
-model Tenant {
-  id              String      @id @default(uuid())
-  
-  // Dados do Inquilino
-  name            String
-  cpf             String      @unique
-  currentAddress  String
-  phone           String
-  email           String
-  documentUrl     String?     // Upload do documento do inquilino
-  maritalStatus   String      // "Solteiro", "Casado", "Divorciado", etc.
-  
-  // Dados do Cônjuge (Se casado)
-  spouseName      String?
-  spouseCpf       String?
-  spouseDocUrl    String?     // Upload do documento do cônjuge
-  
-  // Dados do Fiador
-  guarantorName   String?
-  guarantorCpf    String?
-  guarantorDocUrl String?     // Upload do documento do fiador
-  
-  // Controle do sistema
-  isActive        Boolean     @default(true)
-  
-  // Relações
-  realEstateId    String
-  realEstate      RealEstate  @relation(fields: [realEstateId], references: [id])
-  properties      Property[]  // Imóveis que este inquilino alugou
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+// NOVO: HISTÓRICO DE ATENDIMENTO DO LEAD
+model LeadHistory {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actionType  String   // "WhatsApp", "Ligação", "E-mail", "Visita", "Anotação"
+  description String   @db.Text
+  date        DateTime @default(now())
+}
 
-  @@map("tenants")
+// ==========================================
+// CONTROLE DE VISITAS (NOVO)
+// ==========================================
+model Visit {
+  id           String   @id @default(uuid())
+  date         DateTime
+  status       String   @default("Agendada") // Agendada, Realizada, Cancelada
+  feedback     String?  @db.Text
+  
+  propertyId   String
+  property     Property @relation(fields: [propertyId], references: [id])
+  brokerId     String
+  broker       Broker   @relation(fields: [brokerId], references: [id])
+  
+  createdAt    DateTime @default(now())
+}
+
+// ==========================================
+// CONTRATOS (NOVO)
+// ==========================================
+model Contract {
+  id               String       @id @default(uuid())
+  type             String       // "Locação", "Venda"
+  status           String       @default("Ativo") // Minuta, Assinatura, Ativo, Encerrado
+  
+  startDate        DateTime
+  endDate          DateTime?
+  
+  // Financeiro do Contrato
+  rentValue        Float        // Valor do aluguel ou venda
+  adminFeePercent  Float        // Ex: 10% de taxa da imobiliária
+  readjustmentIndex String?     // Ex: "IGPM", "IPCA"
+  
+  // Assinatura Eletrônica
+  documentUrl      String?      @db.Text
+  signatureStatus  String?      // Aguardando, Assinado
+  
+  // Relacionamentos
+  propertyId       String
+  property         Property     @relation(fields: [propertyId], references: [id])
+  tenantId         String?      // Apenas para locação
+  tenant           Tenant?      @relation(fields: [tenantId], references: [id])
+  
+  invoices         Invoice[]
+  inspections      Inspection[]
+
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+// ==========================================
+// VISTORIAS DIGITAIS (NOVO)
+// ==========================================
+model Inspection {
+  id           String   @id @default(uuid())
+  type         String   // "Entrada", "Saída", "Rotina"
+  date         DateTime
+  reportUrl    String?  @db.Text // Link do PDF do Laudo com fotos
+  
+  contractId   String
+  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime @default(now())
+}
+
+// ==========================================
+// FINANCEIRO / FATURAS (NOVO)
+// ==========================================
+model Invoice {
+  id             String   @id @default(uuid())
+  dueDate        DateTime
+  paidDate       DateTime?
+  status         String   @default("Pendente") // Pendente, Pago, Vencido
+  
+  // Valores
+  totalAmount    Float
+  realEstateFee  Float    // Parte da Imobiliária (Comissão/Taxa Admin)
+  ownerAmount    Float    // Repasse ao Proprietário
+  
+  // Gateway de Pagamento
+  barcode        String?
+  pixQrCodeUrl   String?  @db.Text
+  
+  contractId     String
+  contract       Contract @relation(fields: [contractId], references: [id])
+  
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
