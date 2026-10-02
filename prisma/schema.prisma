@@ -336,26 +336,22 @@ model Visit {
 // ==========================================
 // CONTRATOS (NOVO)
 // ==========================================
+// ==========================================
+// CONTRATOS
+// ==========================================
 model Contract {
   id                String       @id @default(uuid())
   type              String       // "Locação", "Administração"
-  status            String       @default("Minuta") // Minuta, Aguardando Assinatura, Ativo, Encerrado
+  status            String       @default("Ativo")
   
   startDate         DateTime
   endDate           DateTime?
   
-  rentValue         Float        
-  adminFeePercent   Float        
+  rentValue         Float      
+  adminFeePercent   Float      
   readjustmentIndex String?     
   
-  // Controle de Assinatura Eletrônica
-  documentUrl       String?      @db.Text // PDF original ou gerado
-  signedDocumentUrl String?      @db.Text // PDF final com as assinaturas e carimbo jurídico
-  signatureProvider String?      @default("ZapSign") // ZapSign, Clicksign, Autentique
-  externalDocToken  String?      // Token/ID do documento retornado pela API
-  signUrl           String?      @db.Text // Link direto caso queira copiar e mandar no WhatsApp
-  signerEmail       String?      // E-mail para onde foi disparada a assinatura
-  signatureStatus   String?      @default("Pendente") // Pendente, Assinado, Recusado
+  documentUrl       String?      @db.Text // PDF anexado após assinatura no gov.br
 
   propertyId        String
   property          Property     @relation(fields: [propertyId], references: [id])

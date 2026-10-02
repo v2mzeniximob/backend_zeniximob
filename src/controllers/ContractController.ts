@@ -21,7 +21,7 @@ export class ContractController {
       });
 
       if (activeContract) {
-        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o contrato atual antes de criar um novo.' });
+        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o contrato atual.' });
       }
 
       // Cria o Contrato
@@ -48,27 +48,36 @@ export class ContractController {
         });
       }
 
-      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES) - AGORA CORRIGIDO COM REALESTATEID
+      // GERAÇÃO AUTOMÁTICA DE FATURAS ALINHADA COM O SEU SCHEMA
       if (startDate && endDate && rentValue) {
         const start = new Date(startDate);
         const end = new Date(endDate);
         const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
+        
+        // Cálculos Financeiros Base
+        const adminFee = adminFeePercent ? (rentNumber * (Number(adminFeePercent) / 100)) : 0;
+        const repasse = rentNumber - adminFee;
 
         if (start <= end && !isNaN(rentNumber)) {
           let currentMonth = new Date(start);
           let installment = 1;
 
           while (currentMonth <= end) {
-            await prisma.invoice.create({
-              data: {
-                realEstateId: realEstateId, // <--- A PEÇA QUE FALTAVA!
-                contractId: contract.id,
-                description: `Aluguel - Parcela ${installment}`,
-                amount: rentNumber,
-                dueDate: new Date(currentMonth),
-                status: 'Pendente'
-              }
-            });
+            try {
+              await prisma.invoice.create({
+                data: {
+                  contractId: contract.id,
+                  totalAmount: rentNumber, // NOVO (De acordo com o seu schema)
+                  realEstateFee: adminFee, // NOVO
+                  ownerAmount: repasse, // NOVO
+                  dueDate: new Date(currentMonth),
+                  status: 'Pendente'
+                }
+              });
+            } catch (invoiceError) {
+              console.error('Falha ao gerar parcela', installment, invoiceError);
+            }
+            
             currentMonth.setMonth(currentMonth.getMonth() + 1);
             installment++;
           }
@@ -82,7 +91,7 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS
+  // 2. LISTAR CONTRATOS (SEM SOBRAS DA ZAPSIGN)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -115,41 +124,23 @@ export class ContractController {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      const contract = await prisma.contract.findUnique({ 
-        where: { id }, 
-        include: { property: true } 
-      });
-      
-      if (!contract || contract.property.realEstateId !== realEstateId) {
-        return res.status(404).json({ error: 'Contrato não encontrado.' });
-      }
+      const contract = await prisma.contract.findUnique({ where: { id }, include: { property: true } });
+      if (!contract || contract.property.realEstateId !== realEstateId) return res.status(404).json({ error: 'Contrato não encontrado.' });
 
       const updated = await prisma.contract.update({ 
         where: { id }, 
         data: { 
-          status, 
-          documentUrl,
-          propertyId: propertyId || undefined,
-          tenantId: tenantId || undefined,
-          startDate: startDate ? new Date(startDate) : undefined,
-          rentValue: rentValue ? Number(rentValue) : undefined,
-          adminFeePercent: adminFeePercent ? Number(adminFeePercent) : undefined,
-          readjustmentIndex: readjustmentIndex || undefined
+          status, documentUrl, propertyId: propertyId || undefined, tenantId: tenantId || undefined,
+          startDate: startDate ? new Date(startDate) : undefined, rentValue: rentValue ? Number(rentValue) : undefined,
+          adminFeePercent: adminFeePercent ? Number(adminFeePercent) : undefined, readjustmentIndex: readjustmentIndex || undefined
         } 
       });
 
       if (status === 'Encerrado' && contract.type === 'Locação') {
-        await prisma.property.update({ 
-          where: { id: contract.propertyId }, 
-          data: { rentStatus: 'Vago', tenantId: null } 
-        });
+        await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
       }
-
       return res.json(updated);
-    } catch (error) { 
-      console.error('Erro ao atualizar contrato:', error);
-      return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); 
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); }
   }
   
   // 4. ADICIONAR VISTORIA
@@ -157,13 +148,12 @@ export class ContractController {
     try {
       const { id } = req.params;
       const { type, date, reportUrl } = req.body;
-      
       const inspection = await prisma.inspection.create({ data: { contractId: id, type: type || 'Rotina', date: new Date(date), reportUrl } });
       return res.status(201).json(inspection);
     } catch (error) { return res.status(500).json({ error: 'Erro ao registar vistoria.' }); }
   }
 
-  // 5. APAGAR CONTRATO
+  // 5. APAGAR CONTRATO E FATURAS
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -173,17 +163,10 @@ export class ContractController {
       await prisma.invoice.deleteMany({ where: { contractId: id } });
 
       if (contract.propertyId) {
-        await prisma.property.update({
-          where: { id: contract.propertyId },
-          data: { rentStatus: 'Vago', tenantId: null }
-        });
+        await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
       }
       await prisma.contract.delete({ where: { id } });
-
       return res.json({ message: 'Contrato cancelado com sucesso.' });
-    } catch (error) {
-      console.error('Erro ao cancelar contrato:', error);
-      return res.status(500).json({ error: 'Erro ao cancelar o contrato.' });
-    }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao cancelar o contrato.' }); }
   }
 }
