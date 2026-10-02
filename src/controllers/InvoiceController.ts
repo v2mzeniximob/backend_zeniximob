@@ -96,7 +96,9 @@ export class InvoiceController {
       if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações da loja.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
-      // TRATAMENTO DO INQUILINO (Nome e Sobrenome obrigatórios para Boleto)
+      // ==========================================
+      // TRATAMENTO DO INQUILINO (Nome, Sobrenome, CPF)
+      // ==========================================
       const tenant = invoice.contract.tenant;
       const email = tenant?.email || 'email_padrao@suaimobiliaria.com';
       const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
@@ -104,9 +106,38 @@ export class InvoiceController {
       const fullName = tenant?.name?.trim() || 'Inquilino Sobrenome';
       const nameParts = fullName.split(' ');
       const firstName = nameParts[0];
-      // Se a pessoa tiver apenas um nome cadastrado, usamos "Sobrenome" como fallback para o banco não recusar
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
+      // ==========================================
+      // TRATAMENTO DO ENDEREÇO MÁGICO (Regra da Febraban para Boleto)
+      // ==========================================
+      const property = invoice.contract.property;
+      const cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
+      
+      let rawAddress = property?.address || 'Rua Principal, 100';
+      let streetName = rawAddress;
+      let streetNumber = 'S/N';
+      
+      // Separador inteligente: tenta dividir pela vírgula (Rua X, 123) ou procura o primeiro número
+      if (rawAddress.includes(',')) {
+        const parts = rawAddress.split(',');
+        streetName = parts[0].trim();
+        streetNumber = parts[1].trim().split(' ')[0] || 'S/N';
+      } else {
+        const numMatch = rawAddress.match(/\d+/);
+        if (numMatch) {
+          streetNumber = numMatch[0];
+          streetName = rawAddress.replace(numMatch[0], '').trim();
+        }
+      }
+
+      const neighborhood = property?.neighborhood || 'Centro';
+      const city = property?.city || 'São Paulo';
+      const federalUnit = property?.state || 'SP';
+
+      // ==========================================
+      // CONSTRUÇÃO DO PAYLOAD MERCADO PAGO
+      // ==========================================
       const paymentData = {
         transaction_amount: Number(invoice.totalAmount),
         description: `Pagamento de Aluguel`,
@@ -114,8 +145,16 @@ export class InvoiceController {
         payer: {
           email: email,
           first_name: firstName,
-          last_name: lastName, // <-- A PEÇA QUE FALTAVA PARA O BOLETO!
-          identification: { type: 'CPF', number: cpf }
+          last_name: lastName,
+          identification: { type: 'CPF', number: cpf },
+          address: {
+             zip_code: cep,
+             street_name: streetName,
+             street_number: streetNumber,
+             neighborhood: neighborhood,
+             city: city,
+             federal_unit: federalUnit
+          }
         }
       };
 
