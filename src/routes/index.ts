@@ -69,10 +69,10 @@ routes.post('/public/leads', async (req, res) => {
 });
 
 
-// Rota para enviar contrato para assinatura digital
+// Rota antiga para enviar contrato para assinatura digital (mantida por retrocompatibilidade se necessário)
 routes.post('/contracts/send-signature', authMiddleware, signatureController.sendForSignature);
 
-// Webhook público para receber o evento de documento assinado
+// Webhook público antigo (mantido por retrocompatibilidade)
 routes.post('/webhooks/signatures', signatureController.handleWebhook);
 
 // ==========================================
@@ -85,7 +85,7 @@ routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.get
 // ROTAS DA IMOBILIÁRIA (Protegidas)
 // ==========================================
 
-// Dashboard da Imobiliária (NOVO)
+// Dashboard da Imobiliária
 routes.get('/dashboard/metrics', authMiddleware, dashboardController.getRealEstateMetrics);
 
 // --- Gestão de Inquilinos ---
@@ -103,7 +103,6 @@ routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRe
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 
 // Proprietários (Owners)
-// Proprietários (Owners)
 routes.get('/owners', authMiddleware, ownerController.list);
 routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
@@ -115,7 +114,7 @@ routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
-routes.post('/contracts/:id/send-signature', authMiddleware, contractController.sendToClicksign);
+routes.post('/contracts/:id/send-contract', authMiddleware, contractController.sendToClicksign);
 routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 
 // Webhook para receber eventos do Clicksign (quando o contrato é assinado)
