@@ -6,13 +6,21 @@ const prisma = new PrismaClient() as any;
 
 export class InvoiceController {
   
+  // 1. LISTAR FATURAS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
+      // Busca as faturas navegando pela relação (Fatura -> Contrato -> Imóvel -> Imobiliária)
       const invoices = await prisma.invoice.findMany({
-        where: { realEstateId },
+        where: {
+          contract: {
+            property: {
+              realEstateId: realEstateId
+            }
+          }
+        },
         include: {
           contract: {
             include: {
@@ -25,29 +33,68 @@ export class InvoiceController {
       });
       return res.json(invoices);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao listar faturas.' });
     }
   }
 
-  async create(req: Request, res: Response) { /* igual */ }
-  async markAsPaid(req: Request, res: Response) { /* igual */ }
+  // 2. CRIAR FATURA MANUAL
+  async create(req: Request, res: Response) {
+    try {
+      const { contractId, description, amount, dueDate } = req.body;
+      const invoice = await prisma.invoice.create({
+        data: {
+          contractId, description,
+          amount: Number(amount),
+          dueDate: new Date(dueDate),
+          status: 'Pendente'
+        }
+      });
+      return res.status(201).json(invoice);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao criar fatura.' });
+    }
+  }
 
-  // 🚀 GERAR COBRANÇA (PIX OU BOLETO) 🚀
+  // 3. MARCAR COMO PAGA MANUALMENTE
+  async markAsPaid(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const updated = await prisma.invoice.update({
+        where: { id },
+        data: { status: 'Pago' }
+      });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao baixar fatura.' });
+    }
+  }
+
+  // 4. 🚀 GERAR COBRANÇA (PIX OU BOLETO) 🚀
   async generateCharge(req: Request, res: Response) {
     try {
       const { id } = req.params; 
       const { method } = req.body; // 'pix' ou 'boleto'
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
 
-      const invoice = await prisma.invoice.findUnique({
-        where: { id, realEstateId },
-        include: { contract: { include: { tenant: true } }, realEstate: true }
+      // Encontra a fatura e navega até à imobiliária para pegar o Token do Mercado Pago
+      const invoice = await prisma.invoice.findFirst({
+        where: { id: id },
+        include: {
+          contract: {
+            include: {
+              tenant: true,
+              property: {
+                include: { realEstate: true }
+              }
+            }
+          }
+        }
       });
 
       if (!invoice) return res.status(404).json({ error: 'Fatura não encontrada.' });
-      const tokenMP = invoice.realEstate.mpAccessToken;
-      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado.' });
+
+      const tokenMP = invoice.contract?.property?.realEstate?.mpAccessToken;
+      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações da loja.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
       const tenant = invoice.contract.tenant;
@@ -55,7 +102,7 @@ export class InvoiceController {
       const firstName = tenant?.name?.split(' ')[0] || 'Inquilino';
       const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
 
-      // Monta o Payload para a API /v1/payments (Suporta Pix e Boletos Brasileiros)
+      // Monta o Payload para a API do Mercado Pago
       const paymentData = {
         transaction_amount: Number(invoice.amount),
         description: invoice.description || 'Pagamento de Aluguel',

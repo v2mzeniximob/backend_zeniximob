@@ -18,6 +18,22 @@ export class ContractController {
       const property = await prisma.property.findFirst({ where: { id: propertyId, realEstateId } });
       if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
 
+      // 🛑 NOVA TRAVA DE SEGURANÇA (BACKEND LOCK) 🛑
+      // Verifica no banco de dados se já existe algum contrato 'Ativo' para este imóvel
+      const activeContract = await prisma.contract.findFirst({
+        where: {
+          propertyId: propertyId,
+          status: 'Ativo'
+        }
+      });
+
+      if (activeContract) {
+        return res.status(400).json({ 
+          error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o contrato atual antes de criar um novo para o mesmo imóvel.' 
+        });
+      }
+      // ---------------------------------------------------
+
       // Cria o Contrato
       const contract = await prisma.contract.create({
         data: {
@@ -42,23 +58,20 @@ export class ContractController {
         });
       }
 
-      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES) SEGURO
+      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES)
       if (startDate && endDate && rentValue) {
         const start = new Date(startDate);
         const end = new Date(endDate);
-        // Garante que o valor é lido corretamente mesmo que tenha vírgulas
         const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
 
         if (start <= end && !isNaN(rentNumber)) {
           let currentMonth = new Date(start);
           let installment = 1;
 
-          // Cria as faturas UMA a UMA para evitar erros de banco de dados
           while (currentMonth <= end) {
             await prisma.invoice.create({
               data: {
                 contractId: contract.id,
-                realEstateId: realEstateId,
                 description: `Aluguel - Parcela ${installment}`,
                 amount: rentNumber,
                 dueDate: new Date(currentMonth),
@@ -153,12 +166,7 @@ export class ContractController {
     try {
       const { id } = req.params;
       const { type, date, reportUrl } = req.body;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-
-      const contract = await prisma.contract.findUnique({ where: { id }, include: { property: true } });
-      if (!contract || contract.property.realEstateId !== realEstateId) return res.status(404).json({ error: 'Contrato não encontrado.' });
-
+      
       const inspection = await prisma.inspection.create({ data: { contractId: id, type: type || 'Rotina', date: new Date(date), reportUrl } });
       return res.status(201).json(inspection);
     } catch (error) { return res.status(500).json({ error: 'Erro ao registar vistoria.' }); }
@@ -181,7 +189,7 @@ export class ContractController {
       }
       await prisma.contract.delete({ where: { id } });
 
-      return res.json({ message: 'Contrato cancelado, faturas removidas e imóvel libertado com sucesso.' });
+      return res.json({ message: 'Contrato cancelado com sucesso.' });
     } catch (error) {
       console.error('Erro ao cancelar contrato:', error);
       return res.status(500).json({ error: 'Erro ao cancelar o contrato.' });
