@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import process from 'process';
+import path from 'path'; 
 import { PrismaClient } from '@prisma/client';
 import routes from './routes';
 
@@ -11,6 +12,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// ==========================================
+// LIBERTAR ACESSO PÚBLICO À PASTA DE UPLOADS
+// ==========================================
+// Isto diz ao Express para permitir a leitura de ficheiros que estão na pasta "uploads"
+app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads')));
 
 // ==========================================
 // 1. ROTA PÚBLICA DA VITRINE DA LOJA
