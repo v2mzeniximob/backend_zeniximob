@@ -5,7 +5,7 @@ const prisma = new PrismaClient() as any;
 
 export class ContractController {
   
-  // 1, 2, 3 e 4 (CRIAR, LISTAR, ATUALIZAR E VISTORIA) mantêm-se iguais
+  // 1. CRIAR CONTRATO E GERAR FATURAS
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -18,22 +18,68 @@ export class ContractController {
       const property = await prisma.property.findFirst({ where: { id: propertyId, realEstateId } });
       if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
 
+      // Cria o Contrato
       const contract = await prisma.contract.create({
         data: {
-          type: type || 'Locação', status: 'Ativo', propertyId, tenantId: tenantId || null,
-          startDate: new Date(startDate), endDate: endDate ? new Date(endDate) : null,
-          rentValue: Number(rentValue), adminFeePercent: Number(adminFeePercent), readjustmentIndex, documentUrl
+          type: type || 'Locação', 
+          status: 'Ativo', 
+          propertyId, 
+          tenantId: tenantId || null,
+          startDate: new Date(startDate), 
+          endDate: endDate ? new Date(endDate) : null,
+          rentValue: Number(rentValue), 
+          adminFeePercent: Number(adminFeePercent), 
+          readjustmentIndex, 
+          documentUrl
         }
       });
 
+      // Atualiza o imóvel para Alugado
       if (contract.type === 'Locação') {
-        await prisma.property.update({ where: { id: propertyId }, data: { rentStatus: 'Alugado', tenantId: tenantId || null } });
+        await prisma.property.update({ 
+          where: { id: propertyId }, 
+          data: { rentStatus: 'Alugado', tenantId: tenantId || null } 
+        });
+      }
+
+      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES)
+      if (startDate && endDate && rentValue) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const invoicesToCreate = [];
+        let currentMonth = new Date(start);
+        let installment = 1;
+
+        if (start <= end) {
+          while (currentMonth <= end) {
+            invoicesToCreate.push({
+              contractId: contract.id,
+              realEstateId: realEstateId,
+              description: `Aluguel - Parcela ${installment}`,
+              amount: Number(rentValue),
+              dueDate: new Date(currentMonth),
+              status: 'Pendente' 
+            });
+            currentMonth.setMonth(currentMonth.getMonth() + 1);
+            installment++;
+          }
+
+          if (invoicesToCreate.length > 0) {
+            await prisma.invoice.createMany({
+              data: invoicesToCreate
+            });
+          }
+        }
       }
 
       return res.status(201).json(contract);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao gerar contrato.' }); }
+    } catch (error) { 
+      console.error('Erro ao gerar contrato:', error);
+      return res.status(500).json({ error: 'Erro ao gerar contrato e faturas.' }); 
+    }
   }
 
+  // 2. LISTAR CONTRATOS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -58,22 +104,11 @@ export class ContractController {
     } catch (error) { return res.status(500).json({ error: 'Erro ao listar contratos.' }); }
   }
 
+  // 3. ATUALIZAR CONTRATO
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      
-      // Recebemos todos os campos do Frontend
-      const { 
-        status, 
-        documentUrl,
-        propertyId,
-        tenantId,
-        startDate,
-        rentValue,
-        adminFeePercent,
-        readjustmentIndex
-      } = req.body;
-      
+      const { status, documentUrl, propertyId, tenantId, startDate, rentValue, adminFeePercent, readjustmentIndex } = req.body;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
@@ -86,7 +121,6 @@ export class ContractController {
         return res.status(404).json({ error: 'Contrato não encontrado.' });
       }
 
-      // Atualiza todos os dados que vierem no formulário
       const updated = await prisma.contract.update({ 
         where: { id }, 
         data: { 
@@ -115,6 +149,8 @@ export class ContractController {
       return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); 
     }
   }
+  
+  // 4. ADICIONAR VISTORIA
   async addInspection(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -130,110 +166,11 @@ export class ContractController {
     } catch (error) { return res.status(500).json({ error: 'Erro ao registar vistoria.' }); }
   }
 
-  // 🚀 INTEGRAÇÃO CLICKSIGN (Novo Motor)
-  async sendToClicksign(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-
-      const contract = await prisma.contract.findUnique({
-        where: { id },
-        include: { tenant: true, property: { include: { owner: true } } }
-      });
-
-      if (!contract) return res.status(404).json({ error: 'Contrato não encontrado.' });
-      if (!contract.tenant) return res.status(400).json({ error: 'Não há inquilino vinculado.' });
-      if (!contract.tenant.email) return res.status(400).json({ error: 'Inquilino sem e-mail.' });
-
-      const CLICKSIGN_TOKEN = process.env.CLICKSIGN_ACCESS_TOKEN?.trim();
-      if (!CLICKSIGN_TOKEN) return res.status(500).json({ error: 'Token Clicksign não configurado no servidor.' });
-
-      // ID do Modelo (Template) da Clicksign (Pegue no painel deles na aba Modelos)
-      // Substitua pelo seu Key real da Clicksign!
-      const TEMPLATE_KEY = "2c67cffd-5066-46cb-9a64-3e1881a1b1a0"; 
-      
-      const baseUrl = "https://sandbox.clicksign.com/api/v1";
-
-      const formatDate = (date: Date | null) => date ? new Date(date).toLocaleDateString('pt-BR') : 'Prazo indeterminado';
-      const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-      // 1. CRIAR O DOCUMENTO A PARTIR DO MODELO
-      const docResponse = await fetch(`${baseUrl}/templates/${TEMPLATE_KEY}/documents?access_token=${CLICKSIGN_TOKEN}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          document: {
-            path: `/Contratos/Locacao_${contract.id}.docx`,
-            template: {
-              data: {
-                "NOME_PROPRIETARIO": contract.property.owner?.name || 'Não informado',
-                "NOME_INQUILINO": contract.tenant.name,
-                "CPF_INQUILINO": contract.tenant.cpf || 'Não informado',
-                "TELEFONE_INQUILINO": contract.tenant.phone || 'Não informado',
-                "ENDERECO_IMOVEL": contract.property.address || 'Não informado',
-                "DATA_INICIO": formatDate(contract.startDate),
-                "DATA_FIM": formatDate(contract.endDate),
-                "VALOR_ALUGUEL": formatCurrency(Number(contract.rentValue)),
-                "INDICE_REAJUSTE": contract.readjustmentIndex || 'Não informado'
-              }
-            }
-          }
-        })
-      });
-
-      if (!docResponse.ok) {
-        const err = await docResponse.text();
-        return res.status(400).json({ error: 'Erro ao criar documento na Clicksign.', detail: err });
-      }
-      const docData = await docResponse.json();
-      const documentKey = docData.document.key;
-
-      // 2. CRIAR O SIGNATÁRIO (INQUILINO)
-      const signerResponse = await fetch(`${baseUrl}/signers?access_token=${CLICKSIGN_TOKEN}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          signer: { email: contract.tenant.email, auths: ["email"], name: contract.tenant.name, has_documentation: false }
-        })
-      });
-      const signerData = await signerResponse.json();
-      const signerKey = signerData.signer.key;
-
-      // 3. VINCULAR O SIGNATÁRIO AO DOCUMENTO
-      const listResponse = await fetch(`${baseUrl}/lists?access_token=${CLICKSIGN_TOKEN}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          list: { document_key: documentKey, signer_key: signerKey, sign_as: "sign" }
-        })
-      });
-      const listData = await listResponse.json();
-      const signatureKey = listData.list.request_signature_key;
-      const signUrl = listData.list.url; // Link direto para assinatura
-
-      // 4. DISPARAR O E-MAIL OFICIAL PELA CLICKSIGN
-      await fetch(`${baseUrl}/notifications?access_token=${CLICKSIGN_TOKEN}`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_signature_key: signatureKey, message: "Olá! Segue o seu contrato de locação para assinatura." })
-      });
-
-      // 5. SALVAR NO BANCO DE DADOS
-      const updatedContract = await prisma.contract.update({
-        where: { id },
-        data: { signUrl: signUrl, externalDocToken: documentKey, signatureStatus: 'Pendente' }
-      });
-
-      return res.json({ message: 'Contrato gerado e enviado via Clicksign!', signUrl: updatedContract.signUrl });
-
-    } catch (error: any) {
-      console.error("💥 ERRO CLICKSIGN:", error);
-      return res.status(500).json({ error: 'Erro interno na integração Clicksign.' });
-    }
-  }
-
- async delete(req: Request, res: Response) {
+  // 5. APAGAR CONTRATO
+  async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
 
-      // 1. Encontra o contrato para saber a qual imóvel ele pertence
       const contract = await prisma.contract.findUnique({ 
         where: { id } 
       });
@@ -242,12 +179,12 @@ export class ContractController {
         return res.status(404).json({ error: 'Contrato não encontrado.' });
       }
 
-      // 2. SEGURANÇA: Apaga todas as faturas (Invoices) vinculadas a este contrato
+      // SEGURANÇA: Apaga todas as faturas vinculadas
       await prisma.invoice.deleteMany({
         where: { contractId: id }
       });
 
-      // 3. Liberta o imóvel (Muda o status para Vago e tira o inquilino)
+      // Liberta o imóvel
       if (contract.propertyId) {
         await prisma.property.update({
           where: { id: contract.propertyId },
@@ -255,7 +192,7 @@ export class ContractController {
         });
       }
 
-      // 4. Apaga o contrato do banco de dados com segurança
+      // Apaga o contrato
       await prisma.contract.delete({ 
         where: { id } 
       });

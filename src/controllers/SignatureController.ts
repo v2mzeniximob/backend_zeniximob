@@ -1,143 +1,100 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-import axios from 'axios';
 
 const prisma = new PrismaClient();
 
-// Exemplo configurável com API Token (ZapSign, Clicksign ou Autentique via .env)
-const SIGN_API_TOKEN = process.env.SIGN_API_TOKEN || 'demo-token';
-
 export class SignatureController {
   
-  // 1. Enviar minuta para assinatura por e-mail
-  async sendForSignature(req: Request, res: Response) {
+  // 1. Recebe o contrato assinado entre IMOBILIÁRIA x INQUILINO
+  async uploadTenantContract(req: Request, res: Response) {
     try {
-      const { contractId, signerName, signerEmail, signerPhone, pdfBase64, documentName } = req.body;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
+      const id = req.params.id as string; //Garante ao Prisma que é uma string
+      const file = (req as any).file;     //Garante ao TS que o Multer injetou o 'file'
 
-      const contract = await (prisma as any).contract.findUnique({
-        where: { id: contractId },
-        include: { property: true, tenant: true }
-      });
-
-      if (!contract || contract.property.realEstateId !== realEstateId) {
-        return res.status(404).json({ error: 'Contrato não encontrado.' });
+      if (!file) {
+        return res.status(400).json({ error: 'Nenhum ficheiro PDF enviado.' });
       }
 
-      /* 
-        Integração com API de Assinatura (Exemplo com padrão REST / ZapSign / Autentique):
-        Se não houver token em desenvolvimento, geramos um mock funcional.
-      */
-      let externalDocToken = `DOC-${Date.now()}`;
-      let signUrl = `https://sandbox.assinatura.com/sign/${externalDocToken}`;
+      // Constrói a URL pública do ficheiro
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
 
-      if (process.env.SIGN_API_TOKEN) {
-        // Chamada real para a API do Gateway
-        const response = await axios.post(
-          'https://api.zapsign.com.br/api/v1/docs/',
-          {
-            name: documentName || `Contrato - ${contract.property.title}`,
-            base64_pdf: pdfBase64,
-            signers: [
-              {
-                name: signerName,
-                email: signerEmail,
-                phone_country: '55',
-                phone_number: signerPhone?.replace(/\D/g, '') || '',
-                send_automatic_email: true,
-                send_automatic_whatsapp: Boolean(signerPhone)
-              }
-            ]
-          },
-          { headers: { Authorization: `Bearer ${SIGN_API_TOKEN}` } }
-        );
-
-        externalDocToken = response.data.token;
-        signUrl = response.data.signers?.[0]?.sign_url || signUrl;
-      }
-
-      // Atualiza o contrato no banco
-      const updatedContract = await (prisma as any).contract.update({
-        where: { id: contractId },
+      // Atualiza o contrato para "Ativo" e guarda o link do PDF
+      const updatedContract = await prisma.contract.update({
+        where: { id },
         data: {
-          status: 'Aguardando Assinatura',
-          externalDocToken,
-          signUrl,
-          signerEmail,
-          signatureStatus: 'Pendente'
+          status: 'Ativo',
+          documentUrl: fileUrl,
+          signatureStatus: 'Assinado via Gov.br'
         }
       });
 
-      return res.json({
-        message: 'Contrato enviado para assinatura com sucesso!',
-        signUrl,
-        contract: updatedContract
+      return res.json({ 
+        message: 'Contrato do inquilino anexado com sucesso!', 
+        contract: updatedContract 
       });
-    } catch (error: any) {
-      console.error('Erro na integração de assinatura:', error?.response?.data || error);
-      return res.status(500).json({ error: 'Falha ao despachar contrato para assinatura digital.' });
+    } catch (error) {
+      console.error('Erro ao anexar contrato do inquilino:', error);
+      return res.status(500).json({ error: 'Falha ao processar o ficheiro.' });
     }
   }
 
-  // 2. Webhook: Chamado automaticamente pela plataforma externa após a assinatura
-  async handleWebhook(req: Request, res: Response) {
+  // 2. Recebe o contrato assinado entre IMOBILIÁRIA x PROPRIETÁRIO
+  async uploadOwnerContract(req: Request, res: Response) {
     try {
-      const payload = req.body;
-      /*
-        A plataforma de assinatura envia o token do documento e o link do PDF carimbado.
-        Exemplo: { token: 'DOC-123', status: 'signed', signed_file: 'https://...' }
-      */
-      const token = payload.token || payload.document_id;
-      const status = payload.status || (payload.event_type === 'doc_signed' ? 'signed' : null);
-      const signedPdfUrl = payload.signed_file || payload.signed_file_url || payload.document_url;
+      const id = req.params.id as string; 
+      const file = (req as any).file;     
 
-      if (!token) {
-        return res.status(400).json({ error: 'Token ausente no webhook.' });
+      if (!file) {
+        return res.status(400).json({ error: 'Nenhum ficheiro PDF enviado.' });
       }
 
-      const contract = await (prisma as any).contract.findFirst({
-        where: { externalDocToken: token },
-        include: { property: true }
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
+
+      // Guarda o link do PDF no cadastro do proprietário
+      const updatedOwner = await prisma.owner.update({
+        where: { id },
+        data: {
+          managementContractUrl: fileUrl
+        }
       });
 
-      if (!contract) {
-        return res.status(404).json({ error: 'Contrato associado ao token não encontrado.' });
-      }
-
-      if (status === 'signed' || status === 'completed') {
-        // 1. Atualiza o contrato para Ativo com o PDF final assinado
-        await (prisma as any).contract.update({
-          where: { id: contract.id },
-          data: {
-            status: 'Ativo',
-            signatureStatus: 'Assinado',
-            signedDocumentUrl: signedPdfUrl || contract.documentUrl,
-            documentUrl: signedPdfUrl || contract.documentUrl
-          }
-        });
-
-        // 2. Se for contrato de Locação, assegura que o imóvel fica Alugado
-        if (contract.type === 'Locação') {
-          await (prisma as any).property.update({
-            where: { id: contract.propertyId },
-            data: { rentStatus: 'Alugado', tenantId: contract.tenantId }
-          });
-        }
-
-        // 3. Se for contrato de Administração (Imobiliária x Proprietário), atualiza o proprietário
-        if (contract.type === 'Administração' && contract.property.ownerId) {
-          await (prisma as any).owner.update({
-            where: { id: contract.property.ownerId },
-            data: { managementContractUrl: signedPdfUrl || contract.documentUrl }
-          });
-        }
-      }
-
-      return res.status(200).json({ received: true });
+      return res.json({ 
+        message: 'Contrato do proprietário anexado com sucesso!', 
+        owner: updatedOwner 
+      });
     } catch (error) {
-      console.error('Erro no webhook de assinatura:', error);
-      return res.status(500).json({ error: 'Erro interno ao processar webhook.' });
+      console.error('Erro ao anexar contrato do proprietário:', error);
+      return res.status(500).json({ error: 'Falha ao processar o ficheiro.' });
+    }
+  }
+
+  // 3. Recebe o contrato assinado entre PLATAFORMA (MASTER) x IMOBILIÁRIA
+  async uploadRealEstateContract(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string; 
+      const file = (req as any).file;     
+
+      if (!file) {
+        return res.status(400).json({ error: 'Nenhum ficheiro PDF enviado.' });
+      }
+
+      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
+
+      // Atualiza a URL do contrato da Imobiliária
+      const updatedRealEstate = await prisma.realEstate.update({
+        where: { id },
+        data: {
+          contractUrl: fileUrl 
+        }
+      });
+
+      return res.json({ 
+        message: 'Contrato da imobiliária anexado com sucesso!', 
+        realEstate: updatedRealEstate 
+      });
+    } catch (error) {
+      console.error('Erro ao anexar contrato da imobiliária:', error);
+      return res.status(500).json({ error: 'Falha ao processar o ficheiro.' });
     }
   }
 }

@@ -15,7 +15,9 @@ import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
 import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
-import { WebhookController } from '../controllers/WebhookController';
+
+// Importa o Middleware de Upload do Multer
+import { upload } from '../middlewares/upload';
 
 const routes = Router();
 const authController = new AuthController();
@@ -33,7 +35,6 @@ const contractController = new ContractController();
 const invoiceController = new InvoiceController();
 const signatureController = new SignatureController();
 const visitController = new VisitController();
-const webhookController = new WebhookController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -68,13 +69,6 @@ routes.post('/public/leads', async (req, res) => {
   }
 });
 
-
-// Rota antiga para enviar contrato para assinatura digital (mantida por retrocompatibilidade se necessário)
-routes.post('/contracts/send-signature', authMiddleware, signatureController.sendForSignature);
-
-// Webhook público antigo (mantido por retrocompatibilidade)
-routes.post('/webhooks/signatures', signatureController.handleWebhook);
-
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
 // ==========================================
@@ -107,18 +101,17 @@ routes.get('/owners', authMiddleware, ownerController.list);
 routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
 routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
-routes.post('/owners/:id/send-contract', authMiddleware, ownerController.sendToClicksign);
 
 // Contratos e Vistorias
 routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
-routes.post('/contracts/:id/send-contract', authMiddleware, contractController.sendToClicksign);
 routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 
-// Webhook para receber eventos do Clicksign (quando o contrato é assinado)
-routes.post('/webhooks/clicksign', webhookController.clicksign);
+// 🚀 ROTAS DE ASSINATURA (UPLOADS DE PDFs GOV.BR)
+routes.post('/contracts/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadTenantContract);
+routes.post('/owners/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadOwnerContract);
 
 // Leads
 routes.get('/leads', authMiddleware, leadController.list);
@@ -147,14 +140,14 @@ routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
 
-
-
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
 
-// Dashboard do Master SaaS (ATUALIZADO)
+// Dashboard do Master SaaS
 routes.get('/master/dashboard/metrics', authMiddleware, masterOnly, dashboardController.getMasterStats);
+// Upload Contrato Plataforma x Imobiliária
+routes.post('/real-estates/:id/upload', authMiddleware, masterOnly, upload.single('file'), signatureController.uploadRealEstateContract);
 
 routes.use('/plans', authMiddleware, masterOnly); 
 routes.post('/plans', planController.create);
