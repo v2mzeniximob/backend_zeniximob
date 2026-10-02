@@ -17,7 +17,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // LIBERTAR ACESSO PÚBLICO À PASTA DE UPLOADS
 // ==========================================
 // Isto diz ao Express para permitir a leitura de ficheiros que estão na pasta "uploads"
-app.use('/uploads', express.static(path.resolve(__dirname, '..', 'uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // ==========================================
 // 1. ROTA PÚBLICA DA VITRINE DA LOJA
