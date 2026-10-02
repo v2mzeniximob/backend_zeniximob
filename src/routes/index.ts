@@ -129,6 +129,7 @@ routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatu
 routes.get('/invoices', authMiddleware, invoiceController.list);
 routes.post('/invoices', authMiddleware, invoiceController.create);
 routes.patch('/invoices/:id/pay', authMiddleware, invoiceController.markAsPaid);
+routes.post('/invoices/:id/pix', authMiddleware, invoiceController.generatePix);
 
 // Configurações da Própria Loja
 routes.get('/my-store', authMiddleware, realEstateController.getMyStore);

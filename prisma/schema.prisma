@@ -404,6 +404,11 @@ model Invoice {
   
   contractId     String
   contract       Contract @relation(fields: [contractId], references: [id])
+
+  mpPaymentId      String?  // ID do pagamento no Mercado Pago
+  pixQrCode        String?  @db.Text // O código Copia e Cola do PIX
+  pixQrCodeBase64  String?  @db.Text // A imagem do QR Code em Base64
+  ticketUrl        String?  @db.Text // Link para o PDF do boleto/comprovante
   
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
