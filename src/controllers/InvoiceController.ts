@@ -6,14 +6,14 @@ const prisma = new PrismaClient() as any;
 
 export class InvoiceController {
   
-  // 1. LISTAR FATURAS
+  // 1. LISTAR FATURAS GERAIS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
       const invoices = await prisma.invoice.findMany({
-        where: { realEstateId }, // <- Voltou a ficar simples e rápido!
+        where: { contract: { property: { realEstateId } } },
         include: {
           contract: {
             include: {
@@ -24,9 +24,15 @@ export class InvoiceController {
         },
         orderBy: { dueDate: 'asc' }
       });
-      return res.json(invoices);
+      
+      const mapped = invoices.map((inv: any, idx: number) => ({
+         ...inv,
+         amount: inv.totalAmount,
+         description: `Aluguel - Parcela ${idx + 1}`
+      }));
+
+      return res.json(mapped);
     } catch (error) {
-      console.error(error);
       return res.status(500).json({ error: 'Erro ao listar faturas.' });
     }
   }
@@ -34,18 +40,19 @@ export class InvoiceController {
   // 2. CRIAR FATURA MANUAL
   async create(req: Request, res: Response) {
     try {
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-      const { contractId, description, amount, dueDate } = req.body;
+      const { contractId, amount, dueDate } = req.body;
+      const amt = Number(amount);
       const invoice = await prisma.invoice.create({
         data: {
-          realEstateId, contractId, description,
-          amount: Number(amount),
+          contractId, 
+          totalAmount: amt,
+          realEstateFee: 0,
+          ownerAmount: amt,
           dueDate: new Date(dueDate),
           status: 'Pendente'
         }
       });
-      return res.status(201).json(invoice);
+      return res.status(201).json({ ...invoice, amount: invoice.totalAmount, description: 'Nova Fatura' });
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao criar fatura.' });
     }
@@ -57,11 +64,11 @@ export class InvoiceController {
       const { id } = req.params;
       const updated = await prisma.invoice.update({
         where: { id },
-        data: { status: 'Pago' }
+        data: { status: 'Pago', paidDate: new Date() }
       });
-      return res.json(updated);
+      return res.json({ ...updated, amount: updated.totalAmount });
     } catch (error) {
-      return res.status(500).json({ error: 'Erro ao baixar fatura.' });
+      return res.status(500).json({ error: 'Erro ao atualizar.' });
     }
   }
 
@@ -70,18 +77,23 @@ export class InvoiceController {
     try {
       const { id } = req.params; 
       const { method } = req.body; 
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
 
       const invoice = await prisma.invoice.findUnique({
-        where: { id, realEstateId },
-        include: { contract: { include: { tenant: true } }, realEstate: true }
+        where: { id },
+        include: {
+          contract: {
+            include: {
+              tenant: true,
+              property: { include: { realEstate: true } }
+            }
+          }
+        }
       });
 
       if (!invoice) return res.status(404).json({ error: 'Fatura não encontrada.' });
       
-      const tokenMP = invoice.realEstate.mpAccessToken;
-      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações.' });
+      const tokenMP = invoice.contract?.property?.realEstate?.mpAccessToken;
+      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações da loja.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
       const tenant = invoice.contract.tenant;
@@ -89,9 +101,10 @@ export class InvoiceController {
       const firstName = tenant?.name?.split(' ')[0] || 'Inquilino';
       const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
 
+      // PEGA O VALOR EXATO QUE ESTÁ NO BANCO DE DADOS
       const paymentData = {
-        transaction_amount: Number(invoice.amount),
-        description: invoice.description || 'Pagamento de Aluguel',
+        transaction_amount: Number(invoice.totalAmount),
+        description: `Pagamento de Aluguel`,
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
         payer: {
           email: email,
@@ -142,7 +155,15 @@ export class InvoiceController {
         }
       });
 
-      return res.json({ message: 'Cobrança gerada com sucesso!', invoice: updatedInvoice });
+      // Retorna para o Frontend o objeto atualizado e mapeado
+      return res.json({ 
+        message: 'Cobrança gerada com sucesso!', 
+        invoice: { 
+          ...updatedInvoice, 
+          amount: updatedInvoice.totalAmount,
+          description: `Pagamento de Aluguel Atualizado`
+        } 
+      });
 
     } catch (error) {
       console.error('Erro ao gerar cobrança:', error);

@@ -15,13 +15,13 @@ export class ContractController {
       const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
 
-      // TRAVA DE SEGURANÇA
+      // Trava de Segurança
       const activeContract = await prisma.contract.findFirst({
         where: { propertyId: propertyId, status: 'Ativo' }
       });
 
       if (activeContract) {
-        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o contrato atual.' });
+        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o atual.' });
       }
 
       // Cria o Contrato
@@ -48,50 +48,46 @@ export class ContractController {
         });
       }
 
-      // GERAÇÃO AUTOMÁTICA DE FATURAS ALINHADA COM O SEU SCHEMA
+      // GERAÇÃO DE FATURAS EXATAMENTE DE ACORDO COM O SCHEMA
       if (startDate && endDate && rentValue) {
         const start = new Date(startDate);
         const end = new Date(endDate);
         const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
         
-        // Cálculos Financeiros Base
+        // Cálculos Financeiros
         const adminFee = adminFeePercent ? (rentNumber * (Number(adminFeePercent) / 100)) : 0;
         const repasse = rentNumber - adminFee;
 
         if (start <= end && !isNaN(rentNumber)) {
           let currentMonth = new Date(start);
-          let installment = 1;
-
+          
           while (currentMonth <= end) {
             try {
               await prisma.invoice.create({
                 data: {
                   contractId: contract.id,
-                  totalAmount: rentNumber, // NOVO (De acordo com o seu schema)
-                  realEstateFee: adminFee, // NOVO
-                  ownerAmount: repasse, // NOVO
+                  totalAmount: rentNumber,    
+                  realEstateFee: adminFee,    
+                  ownerAmount: repasse,      
                   dueDate: new Date(currentMonth),
                   status: 'Pendente'
                 }
               });
             } catch (invoiceError) {
-              console.error('Falha ao gerar parcela', installment, invoiceError);
+              console.error('Falha ao gerar parcela:', invoiceError);
             }
-            
             currentMonth.setMonth(currentMonth.getMonth() + 1);
-            installment++;
           }
         }
       }
 
       return res.status(201).json(contract);
     } catch (error) { 
-      console.error('Erro ao gerar contrato:', error);
       return res.status(500).json({ error: 'Erro ao gerar contrato e faturas.' }); 
     }
   }
 
-  // 2. LISTAR CONTRATOS (SEM SOBRAS DA ZAPSIGN)
+  // 2. LISTAR CONTRATOS (COM AS FATURAS PARA O PAINEL FINANCEIRO)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -107,12 +103,34 @@ export class ContractController {
         include: {
           property: { select: { title: true, address: true, owner: { select: { name: true } } } },
           tenant: { select: { name: true, cpf: true, email: true, phone: true } },
+          invoices: { orderBy: { dueDate: 'asc' } }, // CARREGA AS FATURAS PARA O FINANCEIRO
           inspections: true
         },
         orderBy: { createdAt: 'desc' }
       });
 
-      return res.json(contracts);
+      // MAPEAMENTO MÁGICO: Transforma dados do DB no formato que o Frontend espera
+      const mappedContracts = contracts.map((c: any) => {
+        if (c.invoices) {
+           c.invoices = c.invoices.map((inv: any, index: number) => ({
+              ...inv,
+              amount: inv.totalAmount, // O Frontend precisa da palavra 'amount'
+              description: `Aluguel - Parcela ${index + 1}` // O Frontend precisa da palavra 'description'
+           }));
+        }
+        
+        // Remove os "fantasmas" da ZapSign da resposta da API
+        delete c.signatureProvider;
+        delete c.signedDocumentUrl;
+        delete c.externalDocToken;
+        delete c.signUrl;
+        delete c.signerEmail;
+        delete c.signatureStatus;
+
+        return c;
+      });
+
+      return res.json(mappedContracts);
     } catch (error) { return res.status(500).json({ error: 'Erro ao listar contratos.' }); }
   }
 
@@ -140,7 +158,7 @@ export class ContractController {
         await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
       }
       return res.json(updated);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); }
+    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar.' }); }
   }
   
   // 4. ADICIONAR VISTORIA
