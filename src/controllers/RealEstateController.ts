@@ -37,32 +37,20 @@ export class RealEstateController {
 
       const { 
         tradeName, corporateName, cnpj, cep, address, phone, email,
-        // Campos de personalização do site:
         logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-        // Novos campos: Templates de Contrato Dinâmicos
-        ownerContractTemplate, tenantContractTemplate
+        ownerContractTemplate, tenantContractTemplate,
+        // NOVOS CAMPOS DO MERCADO PAGO:
+        mpAccessToken, mpPublicKey
       } = req.body;
 
       const updatedStore = await (prisma as any).realEstate.update({
         where: { id: realEstateId },
         data: {
-          tradeName, 
-          corporateName, 
-          cnpj, 
-          cep, 
-          address, 
-          phone, 
-          email,
-          logoUrl, 
-          heroImageUrl, 
-          aboutText, 
-          footerText, 
-          instagramUrl, 
-          facebookUrl, 
-          whatsappDisplay,
-          // Atualiza os moldes dos contratos no banco de dados
-          ownerContractTemplate, 
-          tenantContractTemplate
+          tradeName, corporateName, cnpj, cep, address, phone, email,
+          logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
+          ownerContractTemplate, tenantContractTemplate,
+          // Atualiza as credenciais financeiras no banco de dados
+          mpAccessToken, mpPublicKey
         }
       });
 
