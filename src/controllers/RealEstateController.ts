@@ -21,7 +21,10 @@ export class RealEstateController {
 
       if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      return res.json(store);
+      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
+      const { password, mpAccessToken, ...safeStore } = store;
+
+      return res.json(safeStore);
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao buscar dados da imobiliária.' });
@@ -39,7 +42,6 @@ export class RealEstateController {
         tradeName, corporateName, cnpj, cep, address, phone, email,
         logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
         ownerContractTemplate, tenantContractTemplate,
-        // NOVOS CAMPOS DO MERCADO PAGO:
         mpAccessToken, mpPublicKey
       } = req.body;
 
@@ -49,12 +51,16 @@ export class RealEstateController {
           tradeName, corporateName, cnpj, cep, address, phone, email,
           logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
           ownerContractTemplate, tenantContractTemplate,
-          // Atualiza as credenciais financeiras no banco de dados
-          mpAccessToken, mpPublicKey
+          // Se não for enviado na requisição, o Prisma simplesmente ignora (não apaga o que já lá está)
+          mpAccessToken: mpAccessToken || undefined, 
+          mpPublicKey: mpPublicKey || undefined
         }
       });
 
-      return res.json(updatedStore);
+      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
+      const { password, mpAccessToken: hiddenToken, ...safeStore } = updatedStore;
+
+      return res.json(safeStore);
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar configurações da loja.' });
@@ -81,7 +87,10 @@ export class RealEstateController {
         data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
       });
 
-      return res.status(201).json(store);
+      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
+      const { password, mpAccessToken, ...safeStore } = store;
+
+      return res.status(201).json(safeStore);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao criar imobiliária.' });
     }
@@ -93,7 +102,14 @@ export class RealEstateController {
         orderBy: { createdAt: 'desc' },
         include: { plan: true }
       });
-      return res.json(stores);
+
+      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis de TODAS as lojas na listagem
+      const safeStores = stores.map((store: any) => {
+        const { password, mpAccessToken, ...safeStore } = store;
+        return safeStore;
+      });
+
+      return res.json(safeStores);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao listar imobiliárias.' });
     }
@@ -109,7 +125,10 @@ export class RealEstateController {
         data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
       });
 
-      return res.json(store);
+      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
+      const { password, mpAccessToken, ...safeStore } = store;
+
+      return res.json(safeStore);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao atualizar imobiliária.' });
     }
@@ -127,7 +146,10 @@ export class RealEstateController {
         data: { isActive: !store.isActive }
       });
 
-      return res.json(updated);
+      //TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
+      const { password, mpAccessToken, ...safeStore } = updated;
+
+      return res.json(safeStore);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao alterar status.' });
     }

@@ -96,12 +96,17 @@ export class InvoiceController {
       if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações da loja.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
+      // TRATAMENTO DO INQUILINO (Nome e Sobrenome obrigatórios para Boleto)
       const tenant = invoice.contract.tenant;
       const email = tenant?.email || 'email_padrao@suaimobiliaria.com';
-      const firstName = tenant?.name?.split(' ')[0] || 'Inquilino';
       const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
+      
+      const fullName = tenant?.name?.trim() || 'Inquilino Sobrenome';
+      const nameParts = fullName.split(' ');
+      const firstName = nameParts[0];
+      // Se a pessoa tiver apenas um nome cadastrado, usamos "Sobrenome" como fallback para o banco não recusar
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
-      // PEGA O VALOR EXATO QUE ESTÁ NO BANCO DE DADOS
       const paymentData = {
         transaction_amount: Number(invoice.totalAmount),
         description: `Pagamento de Aluguel`,
@@ -109,6 +114,7 @@ export class InvoiceController {
         payer: {
           email: email,
           first_name: firstName,
+          last_name: lastName, // <-- A PEÇA QUE FALTAVA PARA O BOLETO!
           identification: { type: 'CPF', number: cpf }
         }
       };
@@ -155,13 +161,12 @@ export class InvoiceController {
         }
       });
 
-      // Retorna para o Frontend o objeto atualizado e mapeado
       return res.json({ 
         message: 'Cobrança gerada com sucesso!', 
         invoice: { 
           ...updatedInvoice, 
           amount: updatedInvoice.totalAmount,
-          description: `Pagamento de Aluguel Atualizado`
+          description: `Pagamento de Aluguel`
         } 
       });
 
