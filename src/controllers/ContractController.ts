@@ -42,32 +42,31 @@ export class ContractController {
         });
       }
 
-      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES)
+      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES) SEGURO
       if (startDate && endDate && rentValue) {
         const start = new Date(startDate);
         const end = new Date(endDate);
-        const invoicesToCreate = [];
-        let currentMonth = new Date(start);
-        let installment = 1;
+        // Garante que o valor é lido corretamente mesmo que tenha vírgulas
+        const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
 
-        if (start <= end) {
+        if (start <= end && !isNaN(rentNumber)) {
+          let currentMonth = new Date(start);
+          let installment = 1;
+
+          // Cria as faturas UMA a UMA para evitar erros de banco de dados
           while (currentMonth <= end) {
-            invoicesToCreate.push({
-              contractId: contract.id,
-              realEstateId: realEstateId,
-              description: `Aluguel - Parcela ${installment}`,
-              amount: Number(rentValue),
-              dueDate: new Date(currentMonth),
-              status: 'Pendente' 
+            await prisma.invoice.create({
+              data: {
+                contractId: contract.id,
+                realEstateId: realEstateId,
+                description: `Aluguel - Parcela ${installment}`,
+                amount: rentNumber,
+                dueDate: new Date(currentMonth),
+                status: 'Pendente'
+              }
             });
             currentMonth.setMonth(currentMonth.getMonth() + 1);
             installment++;
-          }
-
-          if (invoicesToCreate.length > 0) {
-            await prisma.invoice.createMany({
-              data: invoicesToCreate
-            });
           }
         }
       }
@@ -135,7 +134,6 @@ export class ContractController {
         } 
       });
 
-      // Se o status foi alterado para Encerrado, liberta o imóvel
       if (status === 'Encerrado' && contract.type === 'Locação') {
         await prisma.property.update({ 
           where: { id: contract.propertyId }, 
@@ -170,32 +168,18 @@ export class ContractController {
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const contract = await prisma.contract.findUnique({ where: { id } });
+      if (!contract) return res.status(404).json({ error: 'Contrato não encontrado.' });
 
-      const contract = await prisma.contract.findUnique({ 
-        where: { id } 
-      });
+      await prisma.invoice.deleteMany({ where: { contractId: id } });
 
-      if (!contract) {
-        return res.status(404).json({ error: 'Contrato não encontrado.' });
-      }
-
-      // SEGURANÇA: Apaga todas as faturas vinculadas
-      await prisma.invoice.deleteMany({
-        where: { contractId: id }
-      });
-
-      // Liberta o imóvel
       if (contract.propertyId) {
         await prisma.property.update({
           where: { id: contract.propertyId },
           data: { rentStatus: 'Vago', tenantId: null }
         });
       }
-
-      // Apaga o contrato
-      await prisma.contract.delete({ 
-        where: { id } 
-      });
+      await prisma.contract.delete({ where: { id } });
 
       return res.json({ message: 'Contrato cancelado, faturas removidas e imóvel libertado com sucesso.' });
     } catch (error) {
