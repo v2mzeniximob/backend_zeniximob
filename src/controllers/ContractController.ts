@@ -229,7 +229,7 @@ export class ContractController {
     }
   }
 
-  async delete(req: Request, res: Response) {
+ async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
 
@@ -242,7 +242,12 @@ export class ContractController {
         return res.status(404).json({ error: 'Contrato não encontrado.' });
       }
 
-      // 2. Liberta o imóvel (Muda o status para Vago e tira o inquilino)
+      // 2. SEGURANÇA: Apaga todas as faturas (Invoices) vinculadas a este contrato
+      await prisma.invoice.deleteMany({
+        where: { contractId: id }
+      });
+
+      // 3. Liberta o imóvel (Muda o status para Vago e tira o inquilino)
       if (contract.propertyId) {
         await prisma.property.update({
           where: { id: contract.propertyId },
@@ -250,12 +255,12 @@ export class ContractController {
         });
       }
 
-      // 3. Apaga o contrato do banco de dados
+      // 4. Apaga o contrato do banco de dados com segurança
       await prisma.contract.delete({ 
         where: { id } 
       });
 
-      return res.json({ message: 'Contrato cancelado e imóvel libertado com sucesso.' });
+      return res.json({ message: 'Contrato cancelado, faturas removidas e imóvel libertado com sucesso.' });
     } catch (error) {
       console.error('Erro ao cancelar contrato:', error);
       return res.status(500).json({ error: 'Erro ao cancelar o contrato.' });
