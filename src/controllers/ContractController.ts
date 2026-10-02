@@ -15,24 +15,14 @@ export class ContractController {
       const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
 
-      const property = await prisma.property.findFirst({ where: { id: propertyId, realEstateId } });
-      if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
-
-      // 🛑 NOVA TRAVA DE SEGURANÇA (BACKEND LOCK) 🛑
-      // Verifica no banco de dados se já existe algum contrato 'Ativo' para este imóvel
+      // TRAVA DE SEGURANÇA
       const activeContract = await prisma.contract.findFirst({
-        where: {
-          propertyId: propertyId,
-          status: 'Ativo'
-        }
+        where: { propertyId: propertyId, status: 'Ativo' }
       });
 
       if (activeContract) {
-        return res.status(400).json({ 
-          error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o contrato atual antes de criar um novo para o mesmo imóvel.' 
-        });
+        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o contrato atual antes de criar um novo.' });
       }
-      // ---------------------------------------------------
 
       // Cria o Contrato
       const contract = await prisma.contract.create({
@@ -58,7 +48,7 @@ export class ContractController {
         });
       }
 
-      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES)
+      // GERAÇÃO AUTOMÁTICA DE FATURAS (INVOICES) - AGORA CORRIGIDO COM REALESTATEID
       if (startDate && endDate && rentValue) {
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -71,6 +61,7 @@ export class ContractController {
           while (currentMonth <= end) {
             await prisma.invoice.create({
               data: {
+                realEstateId: realEstateId, // <--- A PEÇA QUE FALTAVA!
                 contractId: contract.id,
                 description: `Aluguel - Parcela ${installment}`,
                 amount: rentNumber,

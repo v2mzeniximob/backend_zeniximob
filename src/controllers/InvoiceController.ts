@@ -12,15 +12,8 @@ export class InvoiceController {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
-      // Busca as faturas navegando pela relação (Fatura -> Contrato -> Imóvel -> Imobiliária)
       const invoices = await prisma.invoice.findMany({
-        where: {
-          contract: {
-            property: {
-              realEstateId: realEstateId
-            }
-          }
-        },
+        where: { realEstateId }, // <- Voltou a ficar simples e rápido!
         include: {
           contract: {
             include: {
@@ -41,10 +34,12 @@ export class InvoiceController {
   // 2. CRIAR FATURA MANUAL
   async create(req: Request, res: Response) {
     try {
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
       const { contractId, description, amount, dueDate } = req.body;
       const invoice = await prisma.invoice.create({
         data: {
-          contractId, description,
+          realEstateId, contractId, description,
           amount: Number(amount),
           dueDate: new Date(dueDate),
           status: 'Pendente'
@@ -74,27 +69,19 @@ export class InvoiceController {
   async generateCharge(req: Request, res: Response) {
     try {
       const { id } = req.params; 
-      const { method } = req.body; // 'pix' ou 'boleto'
+      const { method } = req.body; 
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
 
-      // Encontra a fatura e navega até à imobiliária para pegar o Token do Mercado Pago
-      const invoice = await prisma.invoice.findFirst({
-        where: { id: id },
-        include: {
-          contract: {
-            include: {
-              tenant: true,
-              property: {
-                include: { realEstate: true }
-              }
-            }
-          }
-        }
+      const invoice = await prisma.invoice.findUnique({
+        where: { id, realEstateId },
+        include: { contract: { include: { tenant: true } }, realEstate: true }
       });
 
       if (!invoice) return res.status(404).json({ error: 'Fatura não encontrada.' });
-
-      const tokenMP = invoice.contract?.property?.realEstate?.mpAccessToken;
-      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações da loja.' });
+      
+      const tokenMP = invoice.realEstate.mpAccessToken;
+      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
       const tenant = invoice.contract.tenant;
@@ -102,7 +89,6 @@ export class InvoiceController {
       const firstName = tenant?.name?.split(' ')[0] || 'Inquilino';
       const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
 
-      // Monta o Payload para a API do Mercado Pago
       const paymentData = {
         transaction_amount: Number(invoice.amount),
         description: invoice.description || 'Pagamento de Aluguel',
@@ -136,13 +122,11 @@ export class InvoiceController {
       let pixQrCodeBase64 = null;
       let ticketUrl = null;
 
-      // Se for PIX
       if (method === 'pix') {
         pixQrCode = mpResult.point_of_interaction?.transaction_data?.qr_code;
         pixQrCodeBase64 = mpResult.point_of_interaction?.transaction_data?.qr_code_base64;
         ticketUrl = mpResult.point_of_interaction?.transaction_data?.ticket_url;
       } 
-      // Se for BOLETO
       else if (method === 'boleto') {
         ticketUrl = mpResult.transaction_details?.external_resource_url || mpResult.point_of_interaction?.transaction_data?.ticket_url;
       }
