@@ -109,6 +109,9 @@ model RealEstate {
   franchiseeId      String?
   franchisee        Franchisee?  @relation(fields: [franchiseeId], references: [id])
 
+  ownerContractTemplate   String? @db.Text // Molde do contrato de Gestão (Proprietário)
+  tenantContractTemplate  String? @db.Text // Molde do contrato de Locação (Inquilino)
+
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
