@@ -116,6 +116,10 @@ routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 routes.post('/contracts/:id/send-signature', authMiddleware, contractController.sendToClicksign);
+routes.delete('/contracts/:id', authMiddleware, contractController.delete);
+
+// Webhook para receber eventos do Clicksign (quando o contrato é assinado)
+routes.post('/webhooks/clicksign', webhookController.clicksign);
 
 // Leads
 routes.get('/leads', authMiddleware, leadController.list);
@@ -143,7 +147,7 @@ routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
-routes.post('/webhooks/clicksign', webhookController.clicksign);
+
 
 
 // ==========================================

@@ -228,4 +228,37 @@ export class ContractController {
       return res.status(500).json({ error: 'Erro interno na integração Clicksign.' });
     }
   }
+
+  async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // 1. Encontra o contrato para saber a qual imóvel ele pertence
+      const contract = await prisma.contract.findUnique({ 
+        where: { id } 
+      });
+
+      if (!contract) {
+        return res.status(404).json({ error: 'Contrato não encontrado.' });
+      }
+
+      // 2. Liberta o imóvel (Muda o status para Vago e tira o inquilino)
+      if (contract.propertyId) {
+        await prisma.property.update({
+          where: { id: contract.propertyId },
+          data: { rentStatus: 'Vago', tenantId: null }
+        });
+      }
+
+      // 3. Apaga o contrato do banco de dados
+      await prisma.contract.delete({ 
+        where: { id } 
+      });
+
+      return res.json({ message: 'Contrato cancelado e imóvel libertado com sucesso.' });
+    } catch (error) {
+      console.error('Erro ao cancelar contrato:', error);
+      return res.status(500).json({ error: 'Erro ao cancelar o contrato.' });
+    }
+  }
 }
