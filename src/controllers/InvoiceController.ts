@@ -65,10 +65,10 @@ export class InvoiceController {
     }
   }
 
-  // 4. GERAR PIX VIA MERCADO PAGO
+  // 4. 🚀 GERAR PIX VIA MERCADO PAGO (Nova API de Orders /v1/orders) 🚀
   async generatePix(req: Request, res: Response) {
     try {
-      const { id } = req.params; // ID da Fatura (Invoice)
+      const { id } = req.params; 
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
@@ -97,12 +97,16 @@ export class InvoiceController {
       const email = tenant?.email || 'email_padrao@suaimobiliaria.com';
       const firstName = tenant?.name?.split(' ')[0] || 'Inquilino';
       const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
+      
+      // O valor deve ser uma String com duas casas decimais no Mercado Pago
+      const amountStr = Number(invoice.amount).toFixed(2);
 
-      // 3. Monta o Payload (Carga) para enviar ao Mercado Pago
+      // 3. Monta o NOVO Payload para a API de Orders
       const paymentData = {
-        transaction_amount: Number(invoice.amount),
+        total_amount: amountStr,
+        external_reference: invoice.id,
         description: invoice.description || 'Pagamento de Aluguel',
-        payment_method_id: 'pix',
+        processing_mode: 'automatic', // O MP vai processar a transação na hora
         payer: {
           email: email,
           first_name: firstName,
@@ -110,16 +114,28 @@ export class InvoiceController {
             type: 'CPF',
             number: cpf
           }
-        }
+        },
+        transactions: [
+          {
+            payments: [
+              {
+                amount: amountStr,
+                payment_method: {
+                  id: 'pix'
+                }
+              }
+            ]
+          }
+        ]
       };
 
-      // 4. Faz a requisição à API oficial do Mercado Pago
-      const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+      // 4. Faz a requisição à nova API oficial de Orders do Mercado Pago
+      const mpResponse = await fetch('https://api.mercadopago.com/v1/orders', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${tokenMP}`,
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': uuidv4() // Garante que não duplica a cobrança se houver falha de rede
+          'X-Idempotency-Key': uuidv4() // Impede a criação de 2 orders iguais
         },
         body: JSON.stringify(paymentData)
       });
@@ -127,15 +143,23 @@ export class InvoiceController {
       const mpResult = await mpResponse.json();
 
       if (!mpResponse.ok) {
-        console.error('Erro no MP:', mpResult);
-        return res.status(400).json({ error: 'Erro ao gerar PIX no Mercado Pago.', detail: mpResult });
+        console.error('Erro no MP Orders:', mpResult);
+        return res.status(400).json({ error: 'Erro ao gerar PIX na API de Orders do Mercado Pago.', detail: mpResult });
       }
 
-      // 5. Extrai os dados do PIX gerado
-      const paymentId = mpResult.id.toString();
-      const pixQrCode = mpResult.point_of_interaction?.transaction_data?.qr_code;
-      const pixQrCodeBase64 = mpResult.point_of_interaction?.transaction_data?.qr_code_base64;
-      const ticketUrl = mpResult.point_of_interaction?.transaction_data?.ticket_url;
+      // 5. Extrai os dados do PIX gerado (Na nova API, eles vêm dentro da hierarquia transactions -> payments)
+      const firstTransaction = mpResult.transactions?.[0];
+      const firstPayment = firstTransaction?.payments?.[0];
+
+      const paymentId = firstPayment?.id?.toString() || mpResult.id?.toString();
+      const pixQrCode = firstPayment?.payment_method?.qr_code;
+      const pixQrCodeBase64 = firstPayment?.payment_method?.qr_code_base64;
+      const ticketUrl = firstPayment?.ticket_url || null;
+
+      if (!pixQrCode || !pixQrCodeBase64) {
+        console.error("Faltou o QR Code na resposta:", mpResult);
+        return res.status(400).json({ error: 'O Mercado Pago não devolveu o QR Code. Confirme se ativou o PIX na sua conta Mercado Pago.' });
+      }
 
       // 6. Guarda o QR Code na Fatura no seu banco de dados
       const updatedInvoice = await prisma.invoice.update({
