@@ -69,7 +69,12 @@ export class RealEstateController {
   
   async create(req: Request, res: Response) {
     try {
-      const { corporateName, tradeName, cnpj, slug, email, phone, planId } = req.body;
+      // AGORA PUXAMOS TODOS OS CAMPOS DO FRONTEND!
+      const { 
+        corporateName, tradeName, cnpj, slug, email, phone, planId, franchiseeId,
+        stateRegistration, cityRegistration, cep, address, 
+        respName, respCpf, respPhone, respAddress 
+      } = req.body;
 
       // 1. AUTO-GERAÇÃO DE SLUG (Se o Frontend não enviar)
       let finalSlug = slug;
@@ -108,15 +113,17 @@ export class RealEstateController {
           email, 
           phone, 
           planId: finalPlanId,
-          // PREENCHIMENTO AUTOMÁTICO DOS DADOS OBRIGATÓRIOS DO SCHEMA:
-          stateRegistration: 'ISENTO',
-          cityRegistration: 'ISENTO',
-          cep: '00000-000',
-          address: 'Endereço não informado',
-          respName: 'Responsável',
-          respCpf: '000.000.000-00',
-          respPhone: phone || '0000000000',
-          respAddress: 'Endereço não informado',
+          franchiseeId: franchiseeId || null,
+          
+          // PREENCHIMENTO INTELIGENTE: Pega o que vem do form, se vier vazio, usa o fallback
+          stateRegistration: stateRegistration || 'ISENTO',
+          cityRegistration: cityRegistration || 'ISENTO',
+          cep: cep || '00000-000',
+          address: address || 'Endereço não informado',
+          respName: respName || 'Responsável',
+          respCpf: respCpf || '000.000.000-00',
+          respPhone: respPhone || phone || '0000000000',
+          respAddress: respAddress || 'Endereço não informado',
           password: hashedPassword // Senha padrão para o 1º acesso
         }
       });
@@ -126,7 +133,6 @@ export class RealEstateController {
       
     } catch (error: any) {
       console.error('[ERRO MASTER CREATE REALESTATE]', error);
-      // Retorna o erro exato do Prisma para o navegador para sabermos exatamente o que falhou
       return res.status(500).json({ 
         error: 'Erro interno ao criar imobiliária no banco de dados.',
         detail: error.message || String(error) 
@@ -155,11 +161,21 @@ export class RealEstateController {
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { corporateName, tradeName, cnpj, slug, email, phone, planId } = req.body;
+      
+      // AGORA TAMBÉM PUXAMOS TUDO NA HORA DE EDITAR (UPDATE)
+      const { 
+        corporateName, tradeName, cnpj, slug, email, phone, planId, franchiseeId,
+        stateRegistration, cityRegistration, cep, address, 
+        respName, respCpf, respPhone, respAddress 
+      } = req.body;
 
       const store = await prisma.realEstate.update({
         where: { id },
-        data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
+        data: { 
+          corporateName, tradeName, cnpj, slug, email, phone, planId, franchiseeId,
+          stateRegistration, cityRegistration, cep, address, 
+          respName, respCpf, respPhone, respAddress 
+        }
       });
 
       const { password, mpAccessToken, ...safeStore } = store;
