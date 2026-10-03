@@ -150,6 +150,7 @@ routes.post('/leads/:id/history', authMiddleware, leadController.addHistoryEvent
 // Corretores
 routes.get('/brokers', authMiddleware, brokerController.list);
 routes.post('/brokers', authMiddleware, brokerController.create);
+routes.get('/brokers/reports/commissions', authMiddleware, brokerController.getCommissionReport);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
 

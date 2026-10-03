@@ -2,43 +2,34 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any;
 
 export class BrokerController {
-  
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
-      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { name, email, cpf, creci, phone, password, profileImageUrl, creciDocumentUrl } = req.body;
-
-      const brokerExists = await (prisma as any).broker.findFirst({
-        where: { OR: [{ email }, { cpf }, { creci }] }
+      const { name, cpf, creci, phone, email, password, saleCommission, rentCommission } = req.body;
+      
+      const existingBroker = await prisma.broker.findFirst({
+        where: { OR: [{ email }, { cpf }] }
       });
+      if (existingBroker) return res.status(400).json({ error: 'E-mail ou CPF já cadastrado.' });
 
-      if (brokerExists) {
-        return res.status(400).json({ error: 'Corretor já cadastrado com este E-mail, CPF ou CRECI.' });
-      }
-
-      const hashedPassword = await bcrypt.hash(password || '123456', 10);
-
-      const broker = await (prisma as any).broker.create({
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      const broker = await prisma.broker.create({
         data: {
-          name, email, cpf, creci, phone, 
-          password: hashedPassword,
-          profileImageUrl,
-          creciDocumentUrl, // Novo campo gravado
+          name, cpf, creci, phone, email, password: hashedPassword,
+          saleCommission: saleCommission ? Number(saleCommission) : 0,
+          rentCommission: rentCommission ? Number(rentCommission) : 0,
           realEstateId
         }
       });
-
-      broker.password = undefined;
       return res.status(201).json(broker);
     } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao criar corretor.' });
+      return res.status(500).json({ error: 'Erro ao cadastrar corretor.' });
     }
   }
 
@@ -46,21 +37,17 @@ export class BrokerController {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
-      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const brokers = await (prisma as any).broker.findMany({
+      const brokers = await prisma.broker.findMany({
         where: { realEstateId },
-        orderBy: { name: 'asc' },
-        select: {
-          id: true, name: true, email: true, cpf: true, creci: true, 
-          phone: true, profileImageUrl: true, creciDocumentUrl: true, // Adicionado aqui para o Frontend receber
-          isActive: true, createdAt: true
-        }
+        include: {
+          clients: { select: { id: true } },
+          properties: { select: { id: true } }
+        },
+        orderBy: { name: 'asc' }
       });
-
       return res.json(brokers);
     } catch (error) {
-      console.error(error);
       return res.status(500).json({ error: 'Erro ao listar corretores.' });
     }
   }
@@ -68,33 +55,23 @@ export class BrokerController {
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+      const { name, cpf, creci, phone, email, password, saleCommission, rentCommission } = req.body;
 
-      // CORREÇÃO DO ERRO 500: Verifica a propriedade primeiro de forma segura
-      const existingBroker = await (prisma as any).broker.findUnique({ where: { id } });
-      if (!existingBroker || existingBroker.realEstateId !== realEstateId) {
-        return res.status(403).json({ error: 'Acesso negado ou corretor não encontrado.' });
-      }
-
-      const { name, email, cpf, creci, phone, password, profileImageUrl, creciDocumentUrl } = req.body;
-
-      const dataToUpdate: any = { name, email, cpf, creci, phone, profileImageUrl, creciDocumentUrl };
-
+      const dataToUpdate: any = { 
+        name, cpf, creci, phone, email,
+        saleCommission: saleCommission ? Number(saleCommission) : 0,
+        rentCommission: rentCommission ? Number(rentCommission) : 0
+      };
       if (password) {
         dataToUpdate.password = await bcrypt.hash(password, 10);
       }
 
-      const broker = await (prisma as any).broker.update({
-        where: { id }, // Atualização segura sem causar crash no Prisma
+      const broker = await prisma.broker.update({
+        where: { id },
         data: dataToUpdate
       });
-
-      broker.password = undefined;
       return res.json(broker);
     } catch (error) {
-      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar corretor.' });
     }
   }
@@ -102,24 +79,93 @@ export class BrokerController {
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
-
-      const broker = await (prisma as any).broker.findUnique({ where: { id } });
-      if (!broker || broker.realEstateId !== realEstateId) {
-        return res.status(404).json({ error: 'Corretor não encontrado.' });
-      }
-
-      const updated = await (prisma as any).broker.update({
+      const broker = await prisma.broker.findUnique({ where: { id } });
+      const updated = await prisma.broker.update({
         where: { id },
         data: { isActive: !broker.isActive }
       });
-
       return res.json(updated);
     } catch (error) {
-      console.error(error);
       return res.status(500).json({ error: 'Erro ao alterar status.' });
+    }
+  }
+
+  // ==========================================
+  // NOVO: RELATÓRIO DE COMISSÕES
+  // ==========================================
+  async getCommissionReport(req: Request, res: Response) {
+    try {
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+
+      const { brokerId, startDate, endDate, type } = req.query;
+
+      let whereClause: any = {
+        property: { realEstateId: realEstateId } // Garante que o imóvel é desta imobiliária
+      };
+
+      if (type && type !== 'Todos') {
+        whereClause.type = type;
+      }
+
+      if (startDate && endDate) {
+        whereClause.startDate = {
+          gte: new Date(startDate as string),
+          lte: new Date(endDate as string)
+        };
+      }
+
+      // Se filtrou por corretor, busca contratos onde ele captou o imóvel OU trouxe o cliente
+      if (brokerId && brokerId !== 'Todos') {
+        whereClause.OR = [
+          { tenant: { brokerId: brokerId as string } },
+          { property: { brokerId: brokerId as string } }
+        ];
+      }
+
+      const contracts = await prisma.contract.findMany({
+        where: whereClause,
+        include: {
+          property: { include: { broker: true } },
+          tenant: { include: { broker: true } }
+        },
+        orderBy: { startDate: 'desc' }
+      });
+
+      const report = contracts.map((c: any) => {
+        // Prioridade: Se pesquisou por um, usa esse. Senão, assume o Corretor do Cliente (Vendedor), ou o do Imóvel (Captador).
+        let targetBroker = c.tenant?.broker || c.property?.broker;
+        
+        if (brokerId && brokerId !== 'Todos') {
+          if (c.tenant?.brokerId === brokerId) targetBroker = c.tenant.broker;
+          else if (c.property?.brokerId === brokerId) targetBroker = c.property.broker;
+        }
+
+        const brokerName = targetBroker?.name || 'Direto com Imobiliária';
+        const bSaleComm = targetBroker?.saleCommission || 0;
+        const bRentComm = targetBroker?.rentCommission || 0;
+
+        const commissionPercent = c.type === 'Venda' ? bSaleComm : bRentComm;
+        const commissionValue = (c.rentValue * commissionPercent) / 100;
+
+        return {
+          contractId: c.id,
+          date: c.startDate,
+          type: c.type,
+          propertyTitle: c.property?.title || 'Imóvel Excluído',
+          clientName: c.tenant?.name || 'Cliente Excluído',
+          brokerName: brokerName,
+          operationValue: c.rentValue,
+          commissionPercent: commissionPercent,
+          commissionValue: commissionValue,
+          status: c.status
+        };
+      });
+
+      return res.json(report);
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error);
+      return res.status(500).json({ error: 'Erro ao gerar relatório.' });
     }
   }
 }

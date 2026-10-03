@@ -163,6 +163,9 @@ model Broker {
   isActive         Boolean    @default(true)
   profileImageUrl  String?    @db.Text
   creciDocumentUrl String?    @db.Text
+
+  saleCommission   Float?     @default(0) // Porcentagem de comissão em Vendas
+  rentCommission   Float?     @default(0) // Porcentagem de comissão em Locação
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
