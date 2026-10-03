@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -21,7 +22,7 @@ export class RealEstateController {
 
       if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
+      // Remove dados sensíveis da resposta
       const { password, mpAccessToken, ...safeStore } = store;
 
       return res.json(safeStore);
@@ -51,7 +52,6 @@ export class RealEstateController {
           tradeName, corporateName, cnpj, cep, address, phone, email,
           logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
           ownerContractTemplate, tenantContractTemplate,
-          // Se não for enviado na requisição, o Prisma simplesmente ignora (não apaga o que já lá está)
           mpAccessToken: mpAccessToken || undefined, 
           mpPublicKey: mpPublicKey || undefined
         }
@@ -83,8 +83,29 @@ export class RealEstateController {
         return res.status(400).json({ error: 'Imobiliária já existe (CNPJ, Slug ou E-mail duplicado).' });
       }
 
+      // Geração da senha padrão criptografada para o 1º acesso da imobiliária
+      const hashedPassword = await bcrypt.hash('123456', 10);
+
       const store = await (prisma as any).realEstate.create({
-        data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
+        data: { 
+          corporateName, 
+          tradeName, 
+          cnpj, 
+          slug, 
+          email, 
+          phone, 
+          planId,
+          // PREENCHIMENTO AUTOMÁTICO DOS DADOS OBRIGATÓRIOS DO SCHEMA:
+          stateRegistration: 'ISENTO',
+          cityRegistration: 'ISENTO',
+          cep: '00000-000',
+          address: 'Endereço não informado',
+          respName: 'Responsável',
+          respCpf: '000.000.000-00',
+          respPhone: phone || '0000000000',
+          respAddress: 'Endereço não informado',
+          password: hashedPassword // Senha padrão para o 1º acesso
+        }
       });
 
       // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
@@ -92,6 +113,7 @@ export class RealEstateController {
 
       return res.status(201).json(safeStore);
     } catch (error) {
+      console.error('[ERRO MASTER CREATE REALESTATE]', error);
       return res.status(500).json({ error: 'Erro ao criar imobiliária.' });
     }
   }
@@ -103,7 +125,6 @@ export class RealEstateController {
         include: { plan: true }
       });
 
-      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis de TODAS as lojas na listagem
       const safeStores = stores.map((store: any) => {
         const { password, mpAccessToken, ...safeStore } = store;
         return safeStore;
@@ -125,9 +146,7 @@ export class RealEstateController {
         data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
       });
 
-      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
       const { password, mpAccessToken, ...safeStore } = store;
-
       return res.json(safeStore);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao atualizar imobiliária.' });
@@ -146,9 +165,7 @@ export class RealEstateController {
         data: { isActive: !store.isActive }
       });
 
-      //TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
       const { password, mpAccessToken, ...safeStore } = updated;
-
       return res.json(safeStore);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao alterar status.' });
