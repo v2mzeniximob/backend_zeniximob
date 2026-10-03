@@ -15,26 +15,31 @@ export class AuthController {
         return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
       }
 
-      // 1. Verificar se é o utilizador MASTER
-      const masterEmail = process.env.MASTER_EMAIL;
-      const masterPassword = process.env.MASTER_PASSWORD;
+      // 1. Verificar na tabela de MASTER ADMIN (Agora busca na base de dados!)
+      const masterUser = await prisma.masterAdmin.findUnique({ where: { email } });
+      if (masterUser) {
+        console.log('[LOGIN] Utilizador Master encontrado na base de dados.');
+        
+        if (!masterUser.isActive) {
+          return res.status(401).json({ error: 'Este administrador encontra-se inativo.' });
+        }
 
-      if (email === masterEmail) {
-        if (password === masterPassword) {
-          console.log('[LOGIN] Acesso Master autorizado.');
-          const token = jwt.sign(
-            { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true },
-            process.env.JWT_SECRET || 'zeniximob-secret',
-            { expiresIn: '7d' }
-          );
-          return res.json({
-            token,
-            user: { id: 'master-id', email: masterEmail, role: 'MASTER', isMaster: true }
-          });
-        } else {
+        const passwordMatch = await bcrypt.compare(password, masterUser.password);
+        if (!passwordMatch) {
           console.log('[LOGIN] Senha Master incorreta.');
           return res.status(401).json({ error: 'Credenciais inválidas.' });
         }
+
+        const token = jwt.sign(
+          { id: masterUser.id, email: masterUser.email, role: 'MASTER', isMaster: true },
+          process.env.JWT_SECRET || 'zeniximob-secret',
+          { expiresIn: '7d' }
+        );
+        
+        return res.json({
+          token,
+          user: { id: masterUser.id, name: masterUser.name, email: masterUser.email, role: 'MASTER', isMaster: true }
+        });
       }
 
       // 2. Verificar na tabela de Imobiliárias (RealEstate)
