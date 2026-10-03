@@ -8,7 +8,7 @@ import { DashboardController } from '../controllers/DashboardController';
 import { PropertyController } from '../controllers/PropertyController';
 import { LeadController } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
-import { TenantController } from '../controllers/TenantController';
+import { ClientController } from '../controllers/ClientController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 import { OwnerController } from '../controllers/OwnerController';
 import { ContractController } from '../controllers/ContractController';
@@ -29,7 +29,7 @@ const dashboardController = new DashboardController();
 const propertyController = new PropertyController();
 const leadController = new LeadController();
 const brokerController = new BrokerController();
-const tenantController = new TenantController(); 
+const clientController = new ClientController(); 
 const ownerController = new OwnerController();
 const contractController = new ContractController();
 const invoiceController = new InvoiceController();
@@ -82,11 +82,11 @@ routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.get
 // Dashboard da Imobiliária
 routes.get('/dashboard/metrics', authMiddleware, dashboardController.getRealEstateMetrics);
 
-// --- Gestão de Inquilinos ---
-routes.get('/tenants', authMiddleware, tenantController.list);
-routes.post('/tenants', authMiddleware, tenantController.create);
-routes.put('/tenants/:id', authMiddleware, tenantController.update);
-routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
+// --- Gestão de Clientes ---
+routes.get('/clients', authMiddleware, clientController.list);
+routes.post('/clients', authMiddleware, clientController.create);
+routes.put('/clients/:id', authMiddleware, clientController.update);
+routes.patch('/clients/:id/status', authMiddleware, clientController.toggleStatus);
 
 // Imóveis
 routes.get('/properties', authMiddleware, propertyController.list);

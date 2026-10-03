@@ -118,8 +118,8 @@ model RealEstate {
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
-  tenants           Tenant[]
-  owners            Owner[]      // NOVO: Relacionamento com Proprietários
+  clients           Client[]     // NOVO: Relacionamento unificado com Clientes (antigos inquilinos)
+  owners            Owner[]      
 }
 
 // ==========================================
@@ -142,14 +142,15 @@ model Broker {
   
   properties   Property[]
   leads        Lead[]
-  visits       Visit[]    // NOVO: Relacionamento com as visitas agendadas
+  visits       Visit[]    
+  clients      Client[]   // NOVO: Clientes trazidos por este corretor
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
 
 // ==========================================
-// PROPRIETÁRIOS (NOVO)
+// PROPRIETÁRIOS
 // ==========================================
 model Owner {
   id                    String     @id @default(uuid())
@@ -161,7 +162,7 @@ model Owner {
   password              String?    // Acesso ao Portal do Proprietário
   isActive              Boolean    @default(true)
   managementContractUrl String?    @db.Text
-  contractToken         String?    // <-- ESTA É A LINHA MÁGICA QUE FALTAVA!
+  contractToken         String?    
 
   realEstateId          String
   realEstate            RealEstate @relation(fields: [realEstateId], references: [id])
@@ -217,7 +218,7 @@ model Property {
   brokerId      String?
   broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
 
-  ownerId       String?     // NOVO: Relacionamento com Proprietário
+  ownerId       String?     
   owner         Owner?      @relation(fields: [ownerId], references: [id])
 
   rentStatus      String?   @default("Vago") // "Vago" ou "Alugado"
@@ -225,88 +226,124 @@ model Property {
   contractUrl     String?   // Upload do Contrato de Aluguel
   isHighlighted   Boolean   @default(false)
 
+  // O nome mantém-se "tenantId" para não quebrar o sistema, mas agora aponta para a tabela "Client"
   tenantId        String?
-  tenant          Tenant?   @relation(fields: [tenantId], references: [id])
+  tenant          Client?   @relation(fields: [tenantId], references: [id])
   
   leads           Lead[]
-  visits          Visit[]     // NOVO: Controle de visitas
-  contracts       Contract[]  // NOVO: Contratos associados ao imóvel
+  visits          Visit[]     
+  contracts       Contract[]  
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
 
 // ==========================================
-// INQUILINOS
+// CLIENTES (CRM UNIFICADO - Antigo Inquilinos)
 // ==========================================
-model Tenant {
-  id              String      @id @default(uuid())
+model Client {
+  id                String      @id @default(uuid())
   
-  // Dados do Inquilino
-  name            String
-  cpf             String      @unique
-  currentAddress  String
-  phone           String
-  email           String
-  documentUrl     String?     
-  maritalStatus   String      
+  // Controle de Tipo
+  clientType        String      @default("PF") // "PF" ou "PJ"
   
-  // Dados do Cônjuge
-  spouseName      String?
-  spouseCpf       String?
-  spouseDocUrl    String?     
+  // Dados Principais (Comuns)
+  name              String      // Nome (PF) ou Nome Fantasia (PJ)
+  corporateName     String?     // Razão Social (PJ)
+  document          String      @unique // CPF ou CNPJ
+  rg                String?     // RG (PF)
+  stateRegistration String?     // Inscrição Estadual (PJ)
+  cityRegistration  String?     // Inscrição Municipal (PJ)
   
-  // Dados do Fiador
-  guarantorName   String?
-  guarantorCpf    String?
-  guarantorDocUrl String?     
+  // Endereço do Cliente
+  cep               String?
+  street            String?
+  neighborhood      String?
+  city              String?
+  state             String?
   
-  // Controle do sistema
-  isActive        Boolean     @default(true)
+  // Contatos
+  phone             String
+  email             String?
   
-  // Relações
-  realEstateId    String
-  realEstate      RealEstate  @relation(fields: [realEstateId], references: [id])
-  properties      Property[]  
-  contracts       Contract[]  // NOVO: Contratos do inquilino
+  // Dados do Cônjuge (PF)
+  maritalStatus     String?
+  spouseName        String?
+  spouseCpf         String?
+  spouseRg          String?
   
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  // Dados do Responsável (PJ)
+  respName          String?
+  respCpf           String?
+  respRg            String?
+  respCep           String?
+  respStreet        String?
+  respNeighborhood  String?
+  respCity          String?
+  respState         String?
+  respPhone         String?
+  respEmail         String?
 
-  @@map("tenants")
+  // Fiador (Caso o cliente seja/venha a ser um Inquilino)
+  guarantorName     String?
+  guarantorCpf      String?
+  guarantorDocUrl   String?
+  
+  // Tags/Roles na plataforma (Definido no momento do cadastro ou edição)
+  isTenant          Boolean     @default(false)
+  isBuyer           Boolean     @default(false)
+  isActive          Boolean     @default(true)
+
+  // Arquivos
+  documentUrl       String?
+  spouseDocUrl      String?
+
+  // Relações
+  realEstateId      String
+  realEstate        RealEstate  @relation(fields: [realEstateId], references: [id])
+  
+  brokerId          String?     // Corretor que trouxe/atende o cliente
+  broker            Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  
+  properties        Property[]  // Imóveis onde este cliente é inquilino
+  contracts         Contract[]  // Contratos vinculados a este cliente
+  
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@map("clients")
 }
 
 // ==========================================
 // LEADS (CRM)
 // ==========================================
 model Lead {
-  id            String      @id @default(uuid())
-  name          String
-  phone         String
-  email         String?
-  interest      String      // Comprar, Alugar, etc.
-  status        String      @default("Novo") // Novo, Em Atendimento, Em Proposta, Fechado, Perdido
-  notes         String?
+  id          String      @id @default(uuid())
+  name        String
+  phone       String
+  email       String?
+  interest    String      // Ex: "Comprador", "Inquilino", "Venda", etc.
+  status      String      @default("Novo") // Novo, Em Atendimento, Em Proposta, Fechado, Perdido
+  notes       String?
   
-  // NOVO: Estágio do Funil (Pipeline)
-  stage         String      @default("Novo") 
+  stage       String      @default("Novo") 
   
-  propertyId    String?
-  property      Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  propertyId  String?
+  property    Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   
-  realEstateId  String
-  realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  brokerId      String?
-  broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerId    String?
+  broker      Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
 
-  history       LeadHistory[] // NOVO: Histórico de atendimento
+  history     LeadHistory[] 
 
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 }
 
-// NOVO: HISTÓRICO DE ATENDIMENTO DO LEAD
+// HISTÓRICO DE ATENDIMENTO DO LEAD
 model LeadHistory {
   id          String   @id @default(uuid())
   leadId      String
@@ -317,25 +354,22 @@ model LeadHistory {
 }
 
 // ==========================================
-// CONTROLE DE VISITAS (NOVO)
+// CONTROLE DE VISITAS
 // ==========================================
 model Visit {
-  id           String   @id @default(uuid())
-  date         DateTime
-  status       String   @default("Agendada") // Agendada, Realizada, Cancelada
-  feedback     String?  @db.Text
+  id          String   @id @default(uuid())
+  date        DateTime
+  status      String   @default("Agendada") // Agendada, Realizada, Cancelada
+  feedback    String?  @db.Text
   
-  propertyId   String
-  property     Property @relation(fields: [propertyId], references: [id])
-  brokerId     String
-  broker       Broker   @relation(fields: [brokerId], references: [id])
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  brokerId    String
+  broker      Broker   @relation(fields: [brokerId], references: [id])
   
-  createdAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
-// ==========================================
-// CONTRATOS (NOVO)
-// ==========================================
 // ==========================================
 // CONTRATOS
 // ==========================================
@@ -355,8 +389,10 @@ model Contract {
 
   propertyId        String
   property          Property     @relation(fields: [propertyId], references: [id])
+  
+  // Mantém-se o nome "tenantId" para os Contratos, mas aponta para o super Client
   tenantId          String?      
-  tenant            Tenant?      @relation(fields: [tenantId], references: [id])
+  tenant            Client?      @relation(fields: [tenantId], references: [id])
   
   invoices          Invoice[]
   inspections       Inspection[]
@@ -366,22 +402,22 @@ model Contract {
 }
 
 // ==========================================
-// VISTORIAS DIGITAIS (NOVO)
+// VISTORIAS DIGITAIS
 // ==========================================
 model Inspection {
-  id           String   @id @default(uuid())
-  type         String   // "Entrada", "Saída", "Rotina"
-  date         DateTime
-  reportUrl    String?  @db.Text // Link do PDF do Laudo com fotos
+  id         String   @id @default(uuid())
+  type       String   // "Entrada", "Saída", "Rotina"
+  date       DateTime
+  reportUrl  String?  @db.Text // Link do PDF do Laudo com fotos
   
-  contractId   String
-  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime @default(now())
+  createdAt  DateTime @default(now())
 }
 
 // ==========================================
-// FINANCEIRO / FATURAS (NOVO)
+// FINANCEIRO / FATURAS
 // ==========================================
 model Invoice {
   id             String   @id @default(uuid())
