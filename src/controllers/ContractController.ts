@@ -83,16 +83,18 @@ export class ContractController {
       // GERAÇÃO DE FATURAS (Boletos de Aluguel OU Parcelas da Venda)
       if (startDate && rentValue) {
         const start = new Date(startDate);
-        const end = endDate ? new Date(endDate) : new Date(startDate); // Se não tiver data de fim, gera 1 parcela só
+        // Se for Venda e não tiver data de fim, gera 1 parcela só (o Início = Fim)
+        const end = endDate ? new Date(endDate) : new Date(startDate); 
         const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
         
-        // Cálculos Financeiros (Comissão vs Taxa Admin)
+        // Cálculos Financeiros (Comissão da Imobiliária vs Repasse ao Dono)
         const adminFee = adminFeePercent ? (rentNumber * (Number(adminFeePercent) / 100)) : 0;
         const repasse = rentNumber - adminFee;
 
         if (start <= end && !isNaN(rentNumber)) {
           let currentMonth = new Date(start);
           
+          // O Loop roda 1 vez para Vendas, ou "X" vezes para meses de Locação
           while (currentMonth <= end) {
             try {
               await prisma.invoice.create({
@@ -149,7 +151,7 @@ export class ContractController {
            c.invoices = c.invoices.map((inv: any, index: number) => ({
               ...inv,
               amount: inv.totalAmount,
-              description: c.type === 'Venda' ? `Parcela ${index + 1}` : `Aluguel - Parcela ${index + 1}`
+              description: c.type === 'Venda' ? `Parcela Única / Sinal` : `Aluguel - Parcela ${index + 1}`
            }));
         }
         return c;
