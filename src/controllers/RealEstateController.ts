@@ -40,7 +40,7 @@ export class RealEstateController {
       const { 
         tradeName, corporateName, cnpj, cep, address, phone, email,
         logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-        ownerContractTemplate, tenantContractTemplate,
+        ownerContractTemplate, tenantContractTemplate, financingTemplate, // <--- ADICIONADO AQUI
         mpAccessToken, mpPublicKey
       } = req.body;
 
@@ -49,7 +49,7 @@ export class RealEstateController {
         data: {
           tradeName, corporateName, cnpj, cep, address, phone, email,
           logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-          ownerContractTemplate, tenantContractTemplate,
+          ownerContractTemplate, tenantContractTemplate, financingTemplate, // <--- ADICIONADO AQUI
           mpAccessToken: mpAccessToken || undefined, 
           mpPublicKey: mpPublicKey || undefined
         }
@@ -69,20 +69,17 @@ export class RealEstateController {
   
   async create(req: Request, res: Response) {
     try {
-      // AGORA PUXAMOS TODOS OS CAMPOS DO FRONTEND!
       const { 
         corporateName, tradeName, cnpj, slug, email, phone, planId, franchiseeId,
         stateRegistration, cityRegistration, cep, address, 
         respName, respCpf, respPhone, respAddress 
       } = req.body;
 
-      // 1. AUTO-GERAÇÃO DE SLUG (Se o Frontend não enviar)
       let finalSlug = slug;
       if (!finalSlug && tradeName) {
          finalSlug = tradeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
       }
 
-      // 2. AUTO-VÍNCULO DE PLANO (Se o Frontend não enviar)
       let finalPlanId = planId;
       if (!finalPlanId) {
          const defaultPlan = await prisma.plan.findFirst();
@@ -92,7 +89,6 @@ export class RealEstateController {
          finalPlanId = defaultPlan.id;
       }
 
-      // Validação de Duplicidade
       const storeExists = await prisma.realEstate.findFirst({
         where: { OR: [{ cnpj }, { slug: finalSlug }, { email }] }
       });
@@ -101,30 +97,18 @@ export class RealEstateController {
         return res.status(400).json({ error: 'Imobiliária já existe (CNPJ, Slug ou E-mail duplicado).' });
       }
 
-      // Geração da senha padrão criptografada
       const hashedPassword = await bcrypt.hash('123456', 10);
 
       const store = await prisma.realEstate.create({
         data: { 
-          corporateName, 
-          tradeName, 
-          cnpj, 
-          slug: finalSlug, 
-          email, 
-          phone, 
-          planId: finalPlanId,
+          corporateName, tradeName, cnpj, slug: finalSlug, email, phone, planId: finalPlanId,
           franchiseeId: franchiseeId || null,
-          
-          // PREENCHIMENTO INTELIGENTE: Pega o que vem do form, se vier vazio, usa o fallback
           stateRegistration: stateRegistration || 'ISENTO',
           cityRegistration: cityRegistration || 'ISENTO',
-          cep: cep || '00000-000',
-          address: address || 'Endereço não informado',
-          respName: respName || 'Responsável',
-          respCpf: respCpf || '000.000.000-00',
-          respPhone: respPhone || phone || '0000000000',
-          respAddress: respAddress || 'Endereço não informado',
-          password: hashedPassword // Senha padrão para o 1º acesso
+          cep: cep || '00000-000', address: address || 'Endereço não informado',
+          respName: respName || 'Responsável', respCpf: respCpf || '000.000.000-00',
+          respPhone: respPhone || phone || '0000000000', respAddress: respAddress || 'Endereço não informado',
+          password: hashedPassword
         }
       });
 
@@ -162,7 +146,6 @@ export class RealEstateController {
     try {
       const { id } = req.params;
       
-      // AGORA TAMBÉM PUXAMOS TUDO NA HORA DE EDITAR (UPDATE)
       const { 
         corporateName, tradeName, cnpj, slug, email, phone, planId, franchiseeId,
         stateRegistration, cityRegistration, cep, address, 

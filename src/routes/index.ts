@@ -16,8 +16,9 @@ import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
 import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
-import { ProposalController } from '../controllers/ProposalController'; // NOVO
-import { KeyTermController } from '../controllers/KeyTermController';   // NOVO
+import { ProposalController } from '../controllers/ProposalController'; 
+import { KeyTermController } from '../controllers/KeyTermController';   
+import { InsuranceCompanyController } from '../controllers/InsuranceCompanyController'; // NOVO: Seguradoras
 
 // Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
@@ -39,8 +40,9 @@ const contractController = new ContractController();
 const invoiceController = new InvoiceController();
 const signatureController = new SignatureController();
 const visitController = new VisitController();
-const proposalController = new ProposalController(); // NOVO
-const keyTermController = new KeyTermController();   // NOVO
+const proposalController = new ProposalController(); 
+const keyTermController = new KeyTermController();   
+const insuranceCompanyController = new InsuranceCompanyController(); // NOVO: Seguradoras
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -114,7 +116,7 @@ routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
 routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
 
-// Propostas e Termos (NOVAS ROTAS)
+// Propostas e Termos 
 routes.post('/proposals', authMiddleware, proposalController.create);
 routes.get('/proposals', authMiddleware, proposalController.list);
 routes.patch('/proposals/:id/status', authMiddleware, proposalController.updateStatus);
@@ -122,6 +124,11 @@ routes.patch('/proposals/:id/status', authMiddleware, proposalController.updateS
 routes.post('/key-terms', authMiddleware, keyTermController.create);
 routes.get('/key-terms', authMiddleware, keyTermController.list);
 routes.patch('/key-terms/:id/status', authMiddleware, keyTermController.updateStatus);
+
+// Seguradoras (Seguro Fiança) - NOVAS ROTAS
+routes.post('/insurance-companies', authMiddleware, insuranceCompanyController.create);
+routes.get('/insurance-companies', authMiddleware, insuranceCompanyController.list);
+routes.patch('/insurance-companies/:id/status', authMiddleware, insuranceCompanyController.toggleStatus);
 
 // Contratos e Vistorias
 routes.get('/contracts', authMiddleware, contractController.list);

@@ -95,16 +95,17 @@ model RealEstate {
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
-  logoUrl         String?   // Logótipo da imobiliária
-  heroImageUrl    String?   // Imagem de fundo gigante para a barra de pesquisa
-  aboutText       String?   // Texto para a página "Sobre nós"
-  footerText      String?   // Texto curto para o rodapé
-  instagramUrl    String?   // Link do Instagram
-  facebookUrl     String?   // Link do Facebook
-  whatsappDisplay String?   // WhatsApp público para o site
+  logoUrl           String?    // Logótipo da imobiliária
+  heroImageUrl      String?    // Imagem de fundo gigante para a barra de pesquisa
+  aboutText         String?    // Texto para a página "Sobre nós"
+  footerText        String?    // Texto curto para o rodapé
+  instagramUrl      String?    // Link do Instagram
+  facebookUrl       String?    // Link do Facebook
+  whatsappDisplay   String?    // WhatsApp público para o site
   saleProposalTemplate    String?  @db.Text
   rentProposalTemplate    String?  @db.Text
   keyTermTemplate         String?  @db.Text
+  financingTemplate       String?  @db.Text // Molde do Checklist de Financiamento
 
   planId            String
   plan              Plan         @relation(fields: [planId], references: [id])
@@ -123,8 +124,28 @@ model RealEstate {
   brokers           Broker[]
   clients           Client[]     // Relacionamento unificado com Clientes
   owners            Owner[]      
-  proposals         Proposal[]   // Relação adicionada
-  keyTerms          KeyTerm[]    // Relação adicionada
+  proposals         Proposal[]   
+  keyTerms          KeyTerm[]    
+  insuranceCompanies InsuranceCompany[] // Seguradoras cadastradas
+}
+
+// ==========================================
+// SEGURADORAS (Seguro Fiança)
+// ==========================================
+model InsuranceCompany {
+  id           String   @id @default(uuid())
+  name         String
+  cnpj         String?
+  contactInfo  String?
+  isActive     Boolean  @default(true)
+  
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  clients      Client[]
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ==========================================
@@ -297,10 +318,29 @@ model Client {
   respPhone         String?
   respEmail         String?
 
-  // Fiador (Caso o cliente seja/venha a ser um Inquilino)
-  guarantorName     String?
-  guarantorCpf      String?
-  guarantorDocUrl   String?
+  // ==================================================
+  // GARANTIAS LOCATÍCIAS E DADOS ROBUSTOS DO FIADOR
+  // ==================================================
+  guaranteeType                String?     // "Avalista", "Fiador", "Seguro Fiança"
+  insuranceCompanyId           String?
+  insuranceCompany             InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
+  
+  guarantorName                String?
+  guarantorCpf                 String?
+  guarantorRg                  String?
+  guarantorCivilStatus         String?
+  guarantorPhone               String?
+  guarantorEmail               String?
+  guarantorAddress             String?
+  guarantorIncome              Float?
+  guarantorDocUrl              String? // Documentos pessoais do Fiador/Avalista
+  guarantorPropertyRegistryUrl String? // Registro de Imóveis do Fiador/Avalista
+
+  // ==================================================
+  // CHECKLIST DE FINANCIAMENTO
+  // ==================================================
+  educationLevel       String?     // Select: Ensino Médio, Superior, etc.
+  financingDriveLink   String?     @db.Text // Link da pasta do Drive com Holerite, FGTS, IRPF, Residencia, Certidão.
   
   // Tags/Roles na plataforma (Definido no momento do cadastro ou edição)
   isTenant          Boolean     @default(false)
