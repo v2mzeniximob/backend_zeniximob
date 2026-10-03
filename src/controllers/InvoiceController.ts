@@ -18,18 +18,21 @@ export class InvoiceController {
           contract: {
             include: {
               property: { select: { title: true } },
-              tenant: { select: { name: true, cpf: true, email: true } }
+              tenant: { select: { name: true, document: true, email: true } } // Ajustado para ler 'document' do Client
             }
           }
         },
         orderBy: { dueDate: 'asc' }
       });
       
-      const mapped = invoices.map((inv: any, idx: number) => ({
+      const mapped = invoices.map((inv: any, idx: number) => {
+        const isSale = inv.contract?.type === 'Venda';
+        return {
          ...inv,
          amount: inv.totalAmount,
-         description: `Aluguel - Parcela ${idx + 1}`
-      }));
+         description: isSale ? `Venda - Parcela ${idx + 1}` : `Aluguel - Parcela ${idx + 1}`
+        };
+      });
 
       return res.json(mapped);
     } catch (error) {
@@ -96,14 +99,17 @@ export class InvoiceController {
       if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado. Adicione o Token nas configurações da loja.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
+      const isSale = invoice.contract?.type === 'Venda';
+      const chargeDescription = isSale ? 'Pagamento de Parcela de Venda' : 'Pagamento de Aluguel';
+
       // ==========================================
-      // TRATAMENTO DO INQUILINO (Nome, Sobrenome, CPF)
+      // TRATAMENTO DO CLIENTE (Nome, Sobrenome, CPF)
       // ==========================================
       const tenant = invoice.contract.tenant;
       const email = tenant?.email || 'email_padrao@suaimobiliaria.com';
-      const cpf = tenant?.cpf ? tenant.cpf.replace(/\D/g, '') : '11111111111';
+      const cpf = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111'; // Usa o document do Client
       
-      const fullName = tenant?.name?.trim() || 'Inquilino Sobrenome';
+      const fullName = tenant?.name?.trim() || 'Cliente Sobrenome';
       const nameParts = fullName.split(' ');
       const firstName = nameParts[0];
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
@@ -140,7 +146,7 @@ export class InvoiceController {
       // ==========================================
       const paymentData = {
         transaction_amount: Number(invoice.totalAmount),
-        description: `Pagamento de Aluguel`,
+        description: chargeDescription, // Agora é dinâmico (Venda ou Aluguel)
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
         payer: {
           email: email,
@@ -205,7 +211,7 @@ export class InvoiceController {
         invoice: { 
           ...updatedInvoice, 
           amount: updatedInvoice.totalAmount,
-          description: `Pagamento de Aluguel`
+          description: chargeDescription
         } 
       });
 
