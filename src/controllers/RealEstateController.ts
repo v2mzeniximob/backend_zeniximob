@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any;
 
 export class RealEstateController {
   // ========================================================
@@ -16,15 +16,13 @@ export class RealEstateController {
       
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const store = await (prisma as any).realEstate.findUnique({
+      const store = await prisma.realEstate.findUnique({
         where: { id: realEstateId }
       });
 
       if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      // Remove dados sensíveis da resposta
       const { password, mpAccessToken, ...safeStore } = store;
-
       return res.json(safeStore);
     } catch (error) {
       console.error(error);
@@ -46,7 +44,7 @@ export class RealEstateController {
         mpAccessToken, mpPublicKey
       } = req.body;
 
-      const updatedStore = await (prisma as any).realEstate.update({
+      const updatedStore = await prisma.realEstate.update({
         where: { id: realEstateId },
         data: {
           tradeName, corporateName, cnpj, cep, address, phone, email,
@@ -57,9 +55,7 @@ export class RealEstateController {
         }
       });
 
-      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
       const { password, mpAccessToken: hiddenToken, ...safeStore } = updatedStore;
-
       return res.json(safeStore);
     } catch (error) {
       console.error(error);
@@ -75,26 +71,43 @@ export class RealEstateController {
     try {
       const { corporateName, tradeName, cnpj, slug, email, phone, planId } = req.body;
 
-      const storeExists = await (prisma as any).realEstate.findFirst({
-        where: { OR: [{ cnpj }, { slug }, { email }] }
+      // 1. AUTO-GERAÇÃO DE SLUG (Se o Frontend não enviar)
+      let finalSlug = slug;
+      if (!finalSlug && tradeName) {
+         finalSlug = tradeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+      }
+
+      // 2. AUTO-VÍNCULO DE PLANO (Se o Frontend não enviar)
+      let finalPlanId = planId;
+      if (!finalPlanId) {
+         const defaultPlan = await prisma.plan.findFirst();
+         if (!defaultPlan) {
+            return res.status(400).json({ error: 'Nenhum plano encontrado no sistema. Por favor, crie um plano primeiro ou rode o Seed.' });
+         }
+         finalPlanId = defaultPlan.id;
+      }
+
+      // Validação de Duplicidade
+      const storeExists = await prisma.realEstate.findFirst({
+        where: { OR: [{ cnpj }, { slug: finalSlug }, { email }] }
       });
 
       if (storeExists) {
         return res.status(400).json({ error: 'Imobiliária já existe (CNPJ, Slug ou E-mail duplicado).' });
       }
 
-      // Geração da senha padrão criptografada para o 1º acesso da imobiliária
+      // Geração da senha padrão criptografada
       const hashedPassword = await bcrypt.hash('123456', 10);
 
-      const store = await (prisma as any).realEstate.create({
+      const store = await prisma.realEstate.create({
         data: { 
           corporateName, 
           tradeName, 
           cnpj, 
-          slug, 
+          slug: finalSlug, 
           email, 
           phone, 
-          planId,
+          planId: finalPlanId,
           // PREENCHIMENTO AUTOMÁTICO DOS DADOS OBRIGATÓRIOS DO SCHEMA:
           stateRegistration: 'ISENTO',
           cityRegistration: 'ISENTO',
@@ -108,19 +121,22 @@ export class RealEstateController {
         }
       });
 
-      // 🔒 TRAVA DE SEGURANÇA: Remove dados sensíveis da resposta
       const { password, mpAccessToken, ...safeStore } = store;
-
       return res.status(201).json(safeStore);
-    } catch (error) {
+      
+    } catch (error: any) {
       console.error('[ERRO MASTER CREATE REALESTATE]', error);
-      return res.status(500).json({ error: 'Erro ao criar imobiliária.' });
+      // Retorna o erro exato do Prisma para o navegador para sabermos exatamente o que falhou
+      return res.status(500).json({ 
+        error: 'Erro interno ao criar imobiliária no banco de dados.',
+        detail: error.message || String(error) 
+      });
     }
   }
 
   async list(req: Request, res: Response) {
     try {
-      const stores = await (prisma as any).realEstate.findMany({
+      const stores = await prisma.realEstate.findMany({
         orderBy: { createdAt: 'desc' },
         include: { plan: true }
       });
@@ -141,7 +157,7 @@ export class RealEstateController {
       const { id } = req.params;
       const { corporateName, tradeName, cnpj, slug, email, phone, planId } = req.body;
 
-      const store = await (prisma as any).realEstate.update({
+      const store = await prisma.realEstate.update({
         where: { id },
         data: { corporateName, tradeName, cnpj, slug, email, phone, planId }
       });
@@ -156,11 +172,11 @@ export class RealEstateController {
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const store = await (prisma as any).realEstate.findUnique({ where: { id } });
+      const store = await prisma.realEstate.findUnique({ where: { id } });
       
       if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
 
-      const updated = await (prisma as any).realEstate.update({
+      const updated = await prisma.realEstate.update({
         where: { id },
         data: { isActive: !store.isActive }
       });
