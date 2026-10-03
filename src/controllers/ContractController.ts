@@ -5,7 +5,7 @@ const prisma = new PrismaClient() as any;
 
 export class ContractController {
   
-  // 1. CRIAR CONTRATO E GERAR FATURAS
+  // 1. CRIAR CONTRATO (LOCAÇÃO OU VENDA) E GERAR FATURAS/PARCELAS
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -15,13 +15,15 @@ export class ContractController {
       const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
 
-      // Trava de Segurança: Impede dois contratos ativos no mesmo imóvel
+      const isSale = type === 'Venda';
+
+      // Trava de Segurança: Impede dois contratos ativos no mesmo imóvel (a menos que já tenha sido vendido, aí não pode alugar)
       const activeContract = await prisma.contract.findFirst({
         where: { propertyId: propertyId, status: 'Ativo' }
       });
 
       if (activeContract) {
-        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo. Encerre ou cancele o atual.' });
+        return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo ou já foi vendido.' });
       }
 
       // Cria o Contrato
@@ -34,37 +36,38 @@ export class ContractController {
           startDate: new Date(startDate), 
           endDate: endDate ? new Date(endDate) : null,
           rentValue: Number(rentValue), 
-          adminFeePercent: Number(adminFeePercent), 
+          adminFeePercent: Number(adminFeePercent || 0), 
           readjustmentIndex, 
           documentUrl
         }
       });
 
       // ==========================================================
-      // A MAGIA DA AUTOMAÇÃO: Promove o Cliente a Inquilino
+      // A MAGIA DA AUTOMAÇÃO: Diferencia Venda vs Locação
       // ==========================================================
       if (tenantId) {
         await prisma.client.update({
           where: { id: tenantId },
-          data: { isTenant: true }
+          data: isSale ? { isBuyer: true } : { isTenant: true }
         });
       }
 
-      // Atualiza o imóvel para Alugado
-      if (contract.type === 'Locação') {
-        await prisma.property.update({ 
-          where: { id: propertyId }, 
-          data: { rentStatus: 'Alugado', tenantId: tenantId || null } 
-        });
-      }
+      // Atualiza o Status do Imóvel
+      await prisma.property.update({ 
+        where: { id: propertyId }, 
+        data: { 
+          rentStatus: isSale ? 'Vendido' : 'Alugado', 
+          tenantId: tenantId || null 
+        } 
+      });
 
-      // GERAÇÃO DE FATURAS EXATAMENTE DE ACORDO COM O SCHEMA
-      if (startDate && endDate && rentValue) {
+      // GERAÇÃO DE FATURAS (Boletos de Aluguel OU Parcelas da Venda)
+      if (startDate && rentValue) {
         const start = new Date(startDate);
-        const end = new Date(endDate);
+        const end = endDate ? new Date(endDate) : new Date(startDate); // Se não tiver data de fim, gera 1 parcela só
         const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
         
-        // Cálculos Financeiros
+        // Cálculos Financeiros (Comissão vs Taxa Admin)
         const adminFee = adminFeePercent ? (rentNumber * (Number(adminFeePercent) / 100)) : 0;
         const repasse = rentNumber - adminFee;
 
@@ -76,9 +79,9 @@ export class ContractController {
               await prisma.invoice.create({
                 data: {
                   contractId: contract.id,
-                  totalAmount: rentNumber,    // Campo oficial do DB
-                  realEstateFee: adminFee,    // Campo oficial do DB
-                  ownerAmount: repasse,       // Campo oficial do DB
+                  totalAmount: rentNumber,
+                  realEstateFee: adminFee,
+                  ownerAmount: repasse,
                   dueDate: new Date(currentMonth),
                   status: 'Pendente'
                 }
@@ -86,6 +89,7 @@ export class ContractController {
             } catch (invoiceError) {
               console.error('Falha ao gerar parcela:', invoiceError);
             }
+            // Avança 1 mês para a próxima parcela
             currentMonth.setMonth(currentMonth.getMonth() + 1);
           }
         }
@@ -98,7 +102,7 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS (COM AS FATURAS PARA O PAINEL FINANCEIRO)
+  // 2. LISTAR CONTRATOS (COM FATURAS)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -113,31 +117,22 @@ export class ContractController {
         where: whereClause,
         include: {
           property: { select: { title: true, address: true, owner: { select: { name: true } } } },
-          tenant: { select: { name: true, document: true, cpf: true, email: true, phone: true } },
-          invoices: { orderBy: { dueDate: 'asc' } }, // CARREGA AS FATURAS PARA O FINANCEIRO
+          tenant: { select: { name: true, document: true, clientType: true } },
+          invoices: { orderBy: { dueDate: 'asc' } },
           inspections: true
         },
         orderBy: { createdAt: 'desc' }
       });
 
-      // MAPEAMENTO MÁGICO: Transforma dados do DB no formato que o Frontend espera
+      // Formata a resposta para o frontend
       const mappedContracts = contracts.map((c: any) => {
         if (c.invoices) {
            c.invoices = c.invoices.map((inv: any, index: number) => ({
               ...inv,
-              amount: inv.totalAmount, // O Frontend precisa da palavra 'amount'
-              description: `Aluguel - Parcela ${index + 1}` // O Frontend precisa da palavra 'description'
+              amount: inv.totalAmount,
+              description: c.type === 'Venda' ? `Parcela ${index + 1}` : `Aluguel - Parcela ${index + 1}`
            }));
         }
-        
-        // Remove os "fantasmas" da ZapSign da resposta da API
-        delete c.signatureProvider;
-        delete c.signedDocumentUrl;
-        delete c.externalDocToken;
-        delete c.signUrl;
-        delete c.signerEmail;
-        delete c.signatureStatus;
-
         return c;
       });
 
@@ -148,66 +143,29 @@ export class ContractController {
     }
   }
 
-  // 3. ATUALIZAR CONTRATO
+  // 3. ATUALIZAR E ENCERRAR CONTRATO
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { status, documentUrl, propertyId, tenantId, startDate, rentValue, adminFeePercent, readjustmentIndex } = req.body;
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
+      const { status } = req.body;
 
-      const contract = await prisma.contract.findUnique({ where: { id }, include: { property: true } });
-      if (!contract || contract.property.realEstateId !== realEstateId) return res.status(404).json({ error: 'Contrato não encontrado.' });
-
-      const updated = await prisma.contract.update({ 
+      const contract = await prisma.contract.update({ 
         where: { id }, 
-        data: { 
-          status, documentUrl, propertyId: propertyId || undefined, tenantId: tenantId || undefined,
-          startDate: startDate ? new Date(startDate) : undefined, rentValue: rentValue ? Number(rentValue) : undefined,
-          adminFeePercent: adminFeePercent ? Number(adminFeePercent) : undefined, readjustmentIndex: readjustmentIndex || undefined
-        } 
+        data: { status },
+        include: { property: true }
       });
 
-      if (status === 'Encerrado' && contract.type === 'Locação') {
-        await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
+      // Se o contrato for encerrado/rescindido, devolvemos o imóvel para "Vago/Disponível"
+      if (status === 'Encerrado' || status === 'Rescindido') {
+        await prisma.property.update({ 
+          where: { id: contract.propertyId }, 
+          data: { rentStatus: 'Vago', tenantId: null } 
+        });
       }
-      return res.json(updated);
-    } catch (error) { 
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao atualizar.' }); 
-    }
-  }
-  
-  // 4. ADICIONAR VISTORIA
-  async addInspection(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const { type, date, reportUrl } = req.body;
-      const inspection = await prisma.inspection.create({ data: { contractId: id, type: type || 'Rotina', date: new Date(date), reportUrl } });
-      return res.status(201).json(inspection);
-    } catch (error) { 
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao registar vistoria.' }); 
-    }
-  }
 
-  // 5. APAGAR CONTRATO E FATURAS
-  async delete(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const contract = await prisma.contract.findUnique({ where: { id } });
-      if (!contract) return res.status(404).json({ error: 'Contrato não encontrado.' });
-
-      await prisma.invoice.deleteMany({ where: { contractId: id } });
-
-      if (contract.propertyId) {
-        await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
-      }
-      await prisma.contract.delete({ where: { id } });
-      return res.json({ message: 'Contrato cancelado com sucesso.' });
+      return res.json(contract);
     } catch (error) { 
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao cancelar o contrato.' }); 
+      return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); 
     }
   }
 }
