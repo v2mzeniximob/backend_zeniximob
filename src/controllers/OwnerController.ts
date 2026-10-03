@@ -12,10 +12,12 @@ export class OwnerController {
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { name, cpfOrCnpj, email, phone, bankData } = req.body;
+      const { name, cpfOrCnpj, email, phone, bankData, inspectionUrl } = req.body;
+      
       const owner = await prisma.owner.create({ 
-        data: { name, cpfOrCnpj, email, phone, bankData, realEstateId } 
+        data: { name, cpfOrCnpj, email, phone, bankData, inspectionUrl, realEstateId } 
       });
+      
       return res.status(201).json(owner);
     } catch (error) { 
       console.error('Erro ao cadastrar proprietário:', error);
@@ -45,7 +47,7 @@ export class OwnerController {
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { name, cpfOrCnpj, email, phone, bankData, managementContractUrl } = req.body;
+      const { name, cpfOrCnpj, email, phone, bankData, managementContractUrl, inspectionUrl } = req.body;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
 
@@ -58,7 +60,6 @@ export class OwnerController {
         return res.status(404).json({ error: 'Proprietário não encontrado ou sem permissão.' });
       }
 
-      // Atualiza todos os dados, preservando o link do contrato assinado (ou atualizando manualmente se enviado)
       const updated = await prisma.owner.update({
         where: { id },
         data: {
@@ -67,6 +68,7 @@ export class OwnerController {
           email,
           phone,
           bankData,
+          inspectionUrl,
           managementContractUrl: managementContractUrl !== undefined ? managementContractUrl : undefined
         }
       });

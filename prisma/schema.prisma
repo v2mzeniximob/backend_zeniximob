@@ -193,6 +193,7 @@ model Owner {
   isActive              Boolean    @default(true)
   managementContractUrl String?    @db.Text
   contractToken         String?    
+  inspectionUrl         String?    @db.Text 
 
   realEstateId          String
   realEstate            RealEstate @relation(fields: [realEstateId], references: [id])
