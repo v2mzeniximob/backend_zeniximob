@@ -110,7 +110,7 @@ export class ClientController {
     }
   }
 
-  // 3. ATUALIZAR CLIENTE
+  // 3. ATUALIZAR CLIENTE (E SINCRONIZAR CORRETOR COM O LEAD)
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -146,6 +146,24 @@ export class ClientController {
           brokerId: brokerId || null
         }
       });
+
+      // ==========================================================
+      // NOVA MAGIA: SINCRONIZAR O CORRETOR COM O CRM (LEADS)
+      // ==========================================================
+      const leadPhone = phone || respPhone || '';
+      
+      if (leadPhone) {
+        // Encontra o Lead correspondente a este cliente e atualiza o corretor
+        await prisma.lead.updateMany({
+          where: { 
+            realEstateId: realEstateId,
+            phone: leadPhone 
+          },
+          data: {
+            brokerId: brokerId || null
+          }
+        });
+      }
 
       return res.json({ success: true, message: 'Cliente atualizado com sucesso.' });
     } catch (error) {
