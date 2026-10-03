@@ -232,6 +232,9 @@ model Property {
   rentStatus      String?   @default("Vago") // "Vago", "Alugado", "Vendido"
   inspectionUrl   String?   // Upload do Documento de Vistoria
   contractUrl     String?   // Upload do Contrato de Aluguel
+  rentProposalUrl String?   // Link da Proposta de Aluguel anexada no imóvel
+  saleProposalUrl String?   // Link da Proposta de Venda anexada no imóvel
+  keyTermUrl      String?   // Link do Termo de Chaves anexado no imóvel
   isHighlighted   Boolean   @default(false)
 
   tenantId        String?

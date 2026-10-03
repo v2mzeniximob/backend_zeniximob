@@ -17,8 +17,6 @@ async function getRealEstateId(req: Request): Promise<string | null> {
 }
 
 // Campos do imóvel que qualquer visitante da vitrine pode ver.
-// Ficam de fora de propósito: contractUrl, inspectionUrl, tenantId e rentStatus (dados internos do aluguel),
-// e qualquer coluna nova que for criada no futuro, até que alguém a libere aqui.
 const PUBLIC_PROPERTY_FIELDS = {
   id: true, title: true, type: true, category: true, transaction: true,
   price: true, condoFee: true, iptu: true,
@@ -40,7 +38,8 @@ export class PropertyController {
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId,       // Vínculo com o Proprietário
-        inspectionUrl  // Vistoria Inicial de Captação
+        inspectionUrl, // Vistoria Inicial de Captação
+        rentProposalUrl, saleProposalUrl, keyTermUrl // NOVOS CAMPOS
       } = req.body;
 
       const property = await prisma.property.create({
@@ -55,6 +54,9 @@ export class PropertyController {
           brokerId: brokerId || null,
           ownerId: ownerId || null,
           inspectionUrl: inspectionUrl || null,
+          rentProposalUrl: rentProposalUrl || null, // ADICIONADO AQUI
+          saleProposalUrl: saleProposalUrl || null, // ADICIONADO AQUI
+          keyTermUrl: keyTermUrl || null,           // ADICIONADO AQUI
           rentStatus: 'Vago',
           realEstateId
         },
@@ -105,7 +107,8 @@ export class PropertyController {
         title, type, category, transaction, price, condoFee, iptu, area, 
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
-        ownerId, inspectionUrl, rentStatus
+        ownerId, inspectionUrl, rentStatus,
+        rentProposalUrl, saleProposalUrl, keyTermUrl // NOVOS CAMPOS
       } = req.body;
 
       const property = await prisma.property.update({
@@ -126,6 +129,9 @@ export class PropertyController {
           brokerId: brokerId === "" ? null : brokerId,
           ownerId: ownerId === "" ? null : ownerId,
           inspectionUrl: inspectionUrl === "" ? null : inspectionUrl,
+          rentProposalUrl: rentProposalUrl === "" ? null : rentProposalUrl, // ADICIONADO AQUI
+          saleProposalUrl: saleProposalUrl === "" ? null : saleProposalUrl, // ADICIONADO AQUI
+          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                // ADICIONADO AQUI
           rentStatus: rentStatus || undefined
         },
         include: { 
