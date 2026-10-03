@@ -9,6 +9,7 @@ import { PropertyController } from '../controllers/PropertyController';
 import { LeadController } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
 import { ClientController } from '../controllers/ClientController';
+import { TenantController } from '../controllers/TenantController';
 import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
 import { OwnerController } from '../controllers/OwnerController';
 import { ContractController } from '../controllers/ContractController';
@@ -29,7 +30,8 @@ const dashboardController = new DashboardController();
 const propertyController = new PropertyController();
 const leadController = new LeadController();
 const brokerController = new BrokerController();
-const clientController = new ClientController(); 
+const clientController = new ClientController();
+const tenantController = new TenantController(); 
 const ownerController = new OwnerController();
 const contractController = new ContractController();
 const invoiceController = new InvoiceController();
@@ -82,11 +84,17 @@ routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.get
 // Dashboard da Imobiliária
 routes.get('/dashboard/metrics', authMiddleware, dashboardController.getRealEstateMetrics);
 
-// --- Gestão de Clientes ---
-routes.get('/clients', authMiddleware, clientController.list);
+// ROTAS DA TELA DE CLIENTES (CRM Geral)
 routes.post('/clients', authMiddleware, clientController.create);
+routes.get('/clients', authMiddleware, clientController.list);
 routes.put('/clients/:id', authMiddleware, clientController.update);
 routes.patch('/clients/:id/status', authMiddleware, clientController.toggleStatus);
+
+// ROTAS DA TELA DE INQUILINOS (Foco Financeiro/Contratos)
+routes.post('/tenants', authMiddleware, tenantController.create);
+routes.get('/tenants', authMiddleware, tenantController.list);
+routes.put('/tenants/:id', authMiddleware, tenantController.update);
+routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
 
 // Imóveis
 routes.get('/properties', authMiddleware, propertyController.list);

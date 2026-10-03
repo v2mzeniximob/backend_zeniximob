@@ -15,7 +15,7 @@ export class ContractController {
       const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
 
-      // Trava de Segurança
+      // Trava de Segurança: Impede dois contratos ativos no mesmo imóvel
       const activeContract = await prisma.contract.findFirst({
         where: { propertyId: propertyId, status: 'Ativo' }
       });
@@ -39,6 +39,16 @@ export class ContractController {
           documentUrl
         }
       });
+
+      // ==========================================================
+      // A MAGIA DA AUTOMAÇÃO: Promove o Cliente a Inquilino
+      // ==========================================================
+      if (tenantId) {
+        await prisma.client.update({
+          where: { id: tenantId },
+          data: { isTenant: true }
+        });
+      }
 
       // Atualiza o imóvel para Alugado
       if (contract.type === 'Locação') {
@@ -66,9 +76,9 @@ export class ContractController {
               await prisma.invoice.create({
                 data: {
                   contractId: contract.id,
-                  totalAmount: rentNumber,    
-                  realEstateFee: adminFee,    
-                  ownerAmount: repasse,      
+                  totalAmount: rentNumber,    // Campo oficial do DB
+                  realEstateFee: adminFee,    // Campo oficial do DB
+                  ownerAmount: repasse,       // Campo oficial do DB
                   dueDate: new Date(currentMonth),
                   status: 'Pendente'
                 }
@@ -83,6 +93,7 @@ export class ContractController {
 
       return res.status(201).json(contract);
     } catch (error) { 
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao gerar contrato e faturas.' }); 
     }
   }
@@ -102,7 +113,7 @@ export class ContractController {
         where: whereClause,
         include: {
           property: { select: { title: true, address: true, owner: { select: { name: true } } } },
-          tenant: { select: { name: true, cpf: true, email: true, phone: true } },
+          tenant: { select: { name: true, document: true, cpf: true, email: true, phone: true } },
           invoices: { orderBy: { dueDate: 'asc' } }, // CARREGA AS FATURAS PARA O FINANCEIRO
           inspections: true
         },
@@ -131,7 +142,10 @@ export class ContractController {
       });
 
       return res.json(mappedContracts);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao listar contratos.' }); }
+    } catch (error) { 
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao listar contratos.' }); 
+    }
   }
 
   // 3. ATUALIZAR CONTRATO
@@ -158,7 +172,10 @@ export class ContractController {
         await prisma.property.update({ where: { id: contract.propertyId }, data: { rentStatus: 'Vago', tenantId: null } });
       }
       return res.json(updated);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao atualizar.' }); }
+    } catch (error) { 
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar.' }); 
+    }
   }
   
   // 4. ADICIONAR VISTORIA
@@ -168,7 +185,10 @@ export class ContractController {
       const { type, date, reportUrl } = req.body;
       const inspection = await prisma.inspection.create({ data: { contractId: id, type: type || 'Rotina', date: new Date(date), reportUrl } });
       return res.status(201).json(inspection);
-    } catch (error) { return res.status(500).json({ error: 'Erro ao registar vistoria.' }); }
+    } catch (error) { 
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao registar vistoria.' }); 
+    }
   }
 
   // 5. APAGAR CONTRATO E FATURAS
@@ -185,6 +205,9 @@ export class ContractController {
       }
       await prisma.contract.delete({ where: { id } });
       return res.json({ message: 'Contrato cancelado com sucesso.' });
-    } catch (error) { return res.status(500).json({ error: 'Erro ao cancelar o contrato.' }); }
+    } catch (error) { 
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao cancelar o contrato.' }); 
+    }
   }
 }

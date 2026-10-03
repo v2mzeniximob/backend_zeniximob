@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
+// O 'as any' impede o TypeScript de dar falsos erros de tipagem com tabelas recém-criadas
 const prisma = new PrismaClient() as any;
 
 export class ClientController {
@@ -25,11 +26,13 @@ export class ClientController {
         return res.status(400).json({ error: 'O CPF ou CNPJ é obrigatório.' });
       }
 
+      // Validação: Impede documentos duplicados na base de dados
       const clientExists = await prisma.client.findUnique({ where: { document } });
       if (clientExists) {
         return res.status(400).json({ error: 'Já existe um cliente cadastrado com este CPF/CNPJ.' });
       }
 
+      // Criação do Cliente (PF ou PJ)
       const client = await prisma.client.create({
         data: {
           clientType: clientType || 'PF',
@@ -46,7 +49,9 @@ export class ClientController {
         }
       });
 
-      // CRM: GERAÇÃO AUTOMÁTICA DE LEAD
+      // ==========================================================
+      // A MAGIA DO CRM: GERAÇÃO AUTOMÁTICA DE LEAD
+      // ==========================================================
       let interestType = "Novo Cliente Cadastrado";
       if (isBuyer && isTenant) interestType = "Comprador e Inquilino";
       else if (isBuyer) interestType = "Comprador";
@@ -66,7 +71,7 @@ export class ClientController {
             status: "Novo",
             stage: "Novo",
             realEstateId,
-            brokerId: brokerId || null
+            brokerId: brokerId || null // Vincula o card ao corretor selecionado!
           }
         });
       }
@@ -88,7 +93,7 @@ export class ClientController {
       const clients = await prisma.client.findMany({
         where: { realEstateId },
         include: {
-          broker: { select: { name: true } }, 
+          broker: { select: { name: true } }, // Mostra qual corretor atende este cliente
           contracts: {
             include: {
               property: { select: { title: true, address: true, rentStatus: true } }
@@ -121,6 +126,7 @@ export class ClientController {
         isTenant, isBuyer, documentUrl, brokerId
       } = req.body;
 
+      // Se estiver a alterar o documento, verifica se não pertence a outro cliente
       if (document) {
         const existingDoc = await prisma.client.findUnique({ where: { document } });
         if (existingDoc && existingDoc.id !== id) {
