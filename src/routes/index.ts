@@ -16,6 +16,8 @@ import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
 import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
+import { ProposalController } from '../controllers/ProposalController'; // NOVO
+import { KeyTermController } from '../controllers/KeyTermController';   // NOVO
 
 // Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
@@ -37,6 +39,8 @@ const contractController = new ContractController();
 const invoiceController = new InvoiceController();
 const signatureController = new SignatureController();
 const visitController = new VisitController();
+const proposalController = new ProposalController(); // NOVO
+const keyTermController = new KeyTermController();   // NOVO
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -110,6 +114,15 @@ routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
 routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
 
+// Propostas e Termos (NOVAS ROTAS)
+routes.post('/proposals', authMiddleware, proposalController.create);
+routes.get('/proposals', authMiddleware, proposalController.list);
+routes.patch('/proposals/:id/status', authMiddleware, proposalController.updateStatus);
+
+routes.post('/key-terms', authMiddleware, keyTermController.create);
+routes.get('/key-terms', authMiddleware, keyTermController.list);
+routes.patch('/key-terms/:id/status', authMiddleware, keyTermController.updateStatus);
+
 // Contratos e Vistorias
 routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
@@ -117,7 +130,7 @@ routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 
-// 🚀 ROTAS DE ASSINATURA (UPLOADS DE PDFs GOV.BR)
+// ROTAS DE ASSINATURA (UPLOADS DE PDFs GOV.BR)
 routes.post('/contracts/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadTenantContract);
 routes.post('/owners/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadOwnerContract);
 

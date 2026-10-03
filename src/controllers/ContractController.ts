@@ -13,11 +13,32 @@ export class ContractController {
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
       const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
+      
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
+      if (!tenantId) return res.status(400).json({ error: 'Cliente é obrigatório.' });
 
-      const isSale = type === 'Venda';
+      const contractType = type || 'Locação';
+      const isSale = contractType === 'Venda';
 
-      // Trava de Segurança: Impede dois contratos ativos no mesmo imóvel (a menos que já tenha sido vendido, aí não pode alugar)
+      // ==========================================================
+      // NOVA TRAVA: VERIFICAÇÃO DE PROPOSTA ACEITA
+      // ==========================================================
+      const acceptedProposal = await prisma.proposal.findFirst({
+        where: {
+          propertyId: propertyId,
+          clientId: tenantId,
+          type: contractType,
+          status: 'Aceita'
+        }
+      });
+
+      if (!acceptedProposal) {
+        return res.status(400).json({ 
+          error: `Para gerar este contrato, é obrigatório ter uma Proposta de ${contractType} com status "Aceita" vinculada a este imóvel e cliente no sistema.` 
+        });
+      }
+
+      // Trava de Segurança: Impede dois contratos ativos no mesmo imóvel
       const activeContract = await prisma.contract.findFirst({
         where: { propertyId: propertyId, status: 'Ativo' }
       });
@@ -29,10 +50,10 @@ export class ContractController {
       // Cria o Contrato
       const contract = await prisma.contract.create({
         data: {
-          type: type || 'Locação', 
+          type: contractType, 
           status: 'Ativo', 
           propertyId, 
-          tenantId: tenantId || null,
+          tenantId,
           startDate: new Date(startDate), 
           endDate: endDate ? new Date(endDate) : null,
           rentValue: Number(rentValue), 
@@ -45,19 +66,17 @@ export class ContractController {
       // ==========================================================
       // A MAGIA DA AUTOMAÇÃO: Diferencia Venda vs Locação
       // ==========================================================
-      if (tenantId) {
-        await prisma.client.update({
-          where: { id: tenantId },
-          data: isSale ? { isBuyer: true } : { isTenant: true }
-        });
-      }
+      await prisma.client.update({
+        where: { id: tenantId },
+        data: isSale ? { isBuyer: true } : { isTenant: true }
+      });
 
       // Atualiza o Status do Imóvel
       await prisma.property.update({ 
         where: { id: propertyId }, 
         data: { 
           rentStatus: isSale ? 'Vendido' : 'Alugado', 
-          tenantId: tenantId || null 
+          tenantId: tenantId 
         } 
       });
 
@@ -102,7 +121,7 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS (COM FATURAS)
+  // 2. LISTAR CONTRATOS (COM FATURAS E VISTORIAS)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -166,6 +185,57 @@ export class ContractController {
       return res.json(contract);
     } catch (error) { 
       return res.status(500).json({ error: 'Erro ao atualizar contrato.' }); 
+    }
+  }
+
+  // 4. ADICIONAR VISTORIA (INSPECTION)
+  async addInspection(req: Request, res: Response) {
+    try {
+      const { id } = req.params; // contractId
+      const { type, date, reportUrl } = req.body;
+
+      const inspection = await prisma.inspection.create({
+        data: {
+          contractId: id,
+          type: type || 'Rotina',
+          date: date ? new Date(date) : new Date(),
+          reportUrl
+        }
+      });
+
+      return res.status(201).json(inspection);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao adicionar vistoria.' });
+    }
+  }
+
+  // 5. DELETAR CONTRATO (E EXCLUIR FATURAS)
+  async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const contract = await prisma.contract.findUnique({ where: { id } });
+      if (!contract) {
+        return res.status(404).json({ error: 'Contrato não encontrado.' });
+      }
+
+      // Exclui as faturas vinculadas primeiro para evitar erro de restrição de chave estrangeira (Foreign Key Constraint)
+      await prisma.invoice.deleteMany({ where: { contractId: id } });
+      
+      // Exclui o contrato (as vistorias são apagadas automaticamente pelo Cascade)
+      await prisma.contract.delete({ where: { id } });
+
+      // Libera o imóvel
+      await prisma.property.update({
+        where: { id: contract.propertyId },
+        data: { rentStatus: 'Vago', tenantId: null }
+      });
+
+      return res.json({ message: 'Contrato excluído com sucesso.' });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao excluir contrato.' });
     }
   }
 }

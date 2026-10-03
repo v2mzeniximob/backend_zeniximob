@@ -102,6 +102,9 @@ model RealEstate {
   instagramUrl    String?   // Link do Instagram
   facebookUrl     String?   // Link do Facebook
   whatsappDisplay String?   // WhatsApp público para o site
+  saleProposalTemplate    String?  @db.Text
+  rentProposalTemplate    String?  @db.Text
+  keyTermTemplate         String?  @db.Text
 
   planId            String
   plan              Plan         @relation(fields: [planId], references: [id])
@@ -118,8 +121,10 @@ model RealEstate {
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
-  clients           Client[]     // NOVO: Relacionamento unificado com Clientes (antigos inquilinos)
+  clients           Client[]     // Relacionamento unificado com Clientes
   owners            Owner[]      
+  proposals         Proposal[]   // Relação adicionada
+  keyTerms          KeyTerm[]    // Relação adicionada
 }
 
 // ==========================================
@@ -143,7 +148,10 @@ model Broker {
   properties   Property[]
   leads        Lead[]
   visits       Visit[]    
-  clients      Client[]   // NOVO: Clientes trazidos por este corretor
+  clients      Client[]   
+
+  proposals Proposal[]
+  keyTerms  KeyTerm[]
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -221,18 +229,20 @@ model Property {
   ownerId       String?     
   owner         Owner?      @relation(fields: [ownerId], references: [id])
 
-  rentStatus      String?   @default("Vago") // "Vago" ou "Alugado"
+  rentStatus      String?   @default("Vago") // "Vago", "Alugado", "Vendido"
   inspectionUrl   String?   // Upload do Documento de Vistoria
   contractUrl     String?   // Upload do Contrato de Aluguel
   isHighlighted   Boolean   @default(false)
 
-  // O nome mantém-se "tenantId" para não quebrar o sistema, mas agora aponta para a tabela "Client"
   tenantId        String?
   tenant          Client?   @relation(fields: [tenantId], references: [id])
   
   leads           Lead[]
   visits          Visit[]     
   contracts       Contract[]  
+
+  proposals Proposal[]
+  keyTerms  KeyTerm[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -307,6 +317,9 @@ model Client {
   
   properties        Property[]  // Imóveis onde este cliente é inquilino
   contracts         Contract[]  // Contratos vinculados a este cliente
+
+  proposals Proposal[]
+  keyTerms  KeyTerm[]
   
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -375,7 +388,7 @@ model Visit {
 // ==========================================
 model Contract {
   id                String       @id @default(uuid())
-  type              String       // "Locação", "Administração"
+  type              String       // "Locação", "Venda"
   status            String       @default("Ativo")
   
   startDate         DateTime
@@ -385,12 +398,11 @@ model Contract {
   adminFeePercent   Float      
   readjustmentIndex String?     
   
-  documentUrl       String?      @db.Text // PDF anexado após assinatura no gov.br
+  documentUrl       String?      @db.Text // PDF anexado após assinatura
 
   propertyId        String
   property          Property     @relation(fields: [propertyId], references: [id])
   
-  // Mantém-se o nome "tenantId" para os Contratos, mas aponta para o super Client
   tenantId          String?      
   tenant            Client?      @relation(fields: [tenantId], references: [id])
   
@@ -444,4 +456,46 @@ model Invoice {
   
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+// ==========================================
+// PROPOSTAS
+// ==========================================
+model Proposal {
+  id           String   @id @default(uuid())
+  type         String   // "Venda" ou "Locação"
+  status       String   @default("Pendente") // Pendente, Aceita, Recusada
+  documentUrl  String?
+  propertyId   String
+  clientId     String
+  brokerId     String?
+  realEstateId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  property     Property   @relation(fields: [propertyId], references: [id])
+  client       Client     @relation(fields: [clientId], references: [id])
+  broker       Broker?    @relation(fields: [brokerId], references: [id])
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+}
+
+// ==========================================
+// TERMOS DE CHAVES
+// ==========================================
+model KeyTerm {
+  id           String   @id @default(uuid())
+  type         String   // "Venda" ou "Locação"
+  status       String   @default("Pendente") // Pendente, Assinado
+  documentUrl  String?
+  propertyId   String
+  clientId     String
+  brokerId     String?
+  realEstateId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  property     Property   @relation(fields: [propertyId], references: [id])
+  client       Client     @relation(fields: [clientId], references: [id])
+  broker       Broker?    @relation(fields: [brokerId], references: [id])
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
 }
