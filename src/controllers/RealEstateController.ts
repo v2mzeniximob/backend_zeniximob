@@ -37,14 +37,26 @@ export class RealEstateController {
       
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      // CORREÇÃO: Adicionados os 3 campos que faltavam ser puxados do req.body
       const { 
         tradeName, corporateName, cnpj, cep, address, phone, email,
         logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
         ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate, 
-        saleProposalTemplate, rentProposalTemplate, keyTermTemplate, // <-- AQUI!
-        mpAccessToken, mpPublicKey
+        saleProposalTemplate, rentProposalTemplate, keyTermTemplate,
+        mpAccessToken, mpPublicKey, 
+        slug // <--- O SLUG É CAPTURADO AQUI DO FRONTEND
       } = req.body;
+
+      // Tratamento para garantir que o slug fique sempre minúsculo, sem espaços e sem acentos
+      let safeSlug = slug;
+      if (safeSlug) {
+         safeSlug = safeSlug.toLowerCase().replace(/[^a-z0-9-]+/g, '').replace(/(^-|-$)+/g, '');
+         
+         // Verificar se o novo slug já está a ser usado por outra loja (que não seja a nossa)
+         const existingSlug = await prisma.realEstate.findUnique({ where: { slug: safeSlug } });
+         if (existingSlug && existingSlug.id !== realEstateId) {
+            return res.status(400).json({ error: 'Este link (slug) já está em uso por outra imobiliária.' });
+         }
+      }
 
       const updatedStore = await prisma.realEstate.update({
         where: { id: realEstateId },
@@ -52,7 +64,8 @@ export class RealEstateController {
           tradeName, corporateName, cnpj, cep, address, phone, email,
           logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
           ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate, 
-          saleProposalTemplate, rentProposalTemplate, keyTermTemplate, // <-- AQUI!
+          saleProposalTemplate, rentProposalTemplate, keyTermTemplate,
+          slug: safeSlug || undefined, // <--- O SLUG É SALVO AQUI NO BANCO
           mpAccessToken: mpAccessToken || undefined, 
           mpPublicKey: mpPublicKey || undefined
         }
