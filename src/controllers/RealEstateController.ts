@@ -37,19 +37,22 @@ export class RealEstateController {
       
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
+      // CORREÇÃO: Adicionados os 3 campos que faltavam ser puxados do req.body
       const { 
         tradeName, corporateName, cnpj, cep, address, phone, email,
         logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-        ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate,
+        ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate, 
+        saleProposalTemplate, rentProposalTemplate, keyTermTemplate, // <-- AQUI!
         mpAccessToken, mpPublicKey
       } = req.body;
-      
+
       const updatedStore = await prisma.realEstate.update({
         where: { id: realEstateId },
         data: {
           tradeName, corporateName, cnpj, cep, address, phone, email,
           logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-          ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate, // <--- ADICIONADO AQUI
+          ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate, 
+          saleProposalTemplate, rentProposalTemplate, keyTermTemplate, // <-- AQUI!
           mpAccessToken: mpAccessToken || undefined, 
           mpPublicKey: mpPublicKey || undefined
         }
