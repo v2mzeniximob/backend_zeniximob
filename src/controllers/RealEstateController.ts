@@ -40,16 +40,16 @@ export class RealEstateController {
       const { 
         tradeName, corporateName, cnpj, cep, address, phone, email,
         logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-        ownerContractTemplate, tenantContractTemplate, financingTemplate, // <--- ADICIONADO AQUI
+        ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate,
         mpAccessToken, mpPublicKey
       } = req.body;
-
+      
       const updatedStore = await prisma.realEstate.update({
         where: { id: realEstateId },
         data: {
           tradeName, corporateName, cnpj, cep, address, phone, email,
           logoUrl, heroImageUrl, aboutText, footerText, instagramUrl, facebookUrl, whatsappDisplay,
-          ownerContractTemplate, tenantContractTemplate, financingTemplate, // <--- ADICIONADO AQUI
+          ownerContractTemplate, tenantContractTemplate, saleContractTemplate, financingTemplate, // <--- ADICIONADO AQUI
           mpAccessToken: mpAccessToken || undefined, 
           mpPublicKey: mpPublicKey || undefined
         }
