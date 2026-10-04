@@ -107,9 +107,8 @@ export class InvoiceController {
       const property = invoice.contract.property;
 
       // ==========================================
-      // TRATAMENTO DE DADOS
+      // TRATAMENTO DE DADOS DO CLIENTE
       // ==========================================
-      
       const email = tenant?.email?.trim() || 'cliente@mail.com';
       const cleanDoc = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111';
       const docType = cleanDoc.length === 14 ? 'CNPJ' : 'CPF';
@@ -119,17 +118,30 @@ export class InvoiceController {
       const firstName = nameParts[0] || 'Cliente';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
+      // ==========================================
+      // TRATAMENTO INTELIGENTE DE ENDEREÇO
+      // ==========================================
       let cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
       if (cep.length !== 8) cep = '01001000';
       
-      let rawAddress = property?.address || 'Rua Principal, 100';
+      let rawAddress = property?.address?.trim() || 'Rua Principal, 100';
       let streetName = rawAddress;
       let streetNumber = '100'; 
       
       if (rawAddress.includes(',')) {
+        // Caso 1: Tem vírgula (Ex: "Rua Josefina Grassini, 120")
         const parts = rawAddress.split(',');
         streetName = parts[0].trim();
-        streetNumber = parts[1].trim().split(' ')[0] || '100';
+        const numMatch = parts[1].match(/\d+/); // Pega apenas os números após a vírgula
+        streetNumber = numMatch ? numMatch[0] : '100';
+      } else {
+        // Caso 2: Não tem vírgula (Ex: "Rua Josefina Grassini 120")
+        // O Regex pega toda a string antes do último bloco de números
+        const numMatch = rawAddress.match(/(.*\D)\s*(\d+)/);
+        if (numMatch) {
+          streetName = numMatch[1].trim(); // Tudo que não for o número ("Rua Josefina Grassini")
+          streetNumber = numMatch[2];      // O número ("120")
+        }
       }
 
       let federalUnit = property?.state ? property.state.trim().toUpperCase() : 'SP';
@@ -166,12 +178,8 @@ export class InvoiceController {
         payer: payerData
       };
 
-      // ==========================================
-      // LOGS DE DEPURAÇÃO PARA O RENDER
-      // ==========================================
       console.log("==========================================");
       console.log("🚀 INICIANDO GERAÇÃO NO MERCADO PAGO");
-      console.log(`Fatura ID: ${invoice.id} | Método: ${method}`);
       console.log("📦 PAYLOAD ENVIADO PARA O MP:");
       console.log(JSON.stringify(paymentData, null, 2));
       console.log("==========================================");
@@ -194,9 +202,6 @@ export class InvoiceController {
         console.log("==========================================");
         return res.status(400).json({ error: 'Erro ao gerar cobrança no Mercado Pago.', detail: mpResult });
       }
-
-      console.log("✅ SUCESSO! Pagamento criado no MP:", mpResult.id);
-      console.log("==========================================");
 
       const paymentId = mpResult.id.toString();
       let pixQrCode = null;
