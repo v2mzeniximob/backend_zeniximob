@@ -103,67 +103,69 @@ export class InvoiceController {
       const isSale = invoice.contract?.type === 'Venda';
       const chargeDescription = invoice.description || (isSale ? 'Pagamento de Parcela de Venda' : 'Pagamento de Aluguel');
 
-      // ==========================================
-      // TRATAMENTO DO CLIENTE (Nome, Sobrenome, CPF)
-      // ==========================================
       const tenant = invoice.contract.tenant;
-      // Correção: E-mail genérico mais limpo, exigido pelo MP se o cliente não tiver um válido
-      const email = tenant?.email?.trim() || 'cliente@sememail.com';
-      const cpf = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111';
+      const property = invoice.contract.property;
+
+      // ==========================================
+      // TRATAMENTO BLINDADO DE DADOS (ANTI ERRO 500)
+      // ==========================================
       
-      // Correção: Garantir que o nome tenha pelo menos duas partes
+      const email = tenant?.email?.trim() || 'cliente@mail.com';
+      const cleanDoc = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111';
+      const docType = cleanDoc.length === 14 ? 'CNPJ' : 'CPF';
+      
       const rawName = tenant?.name?.trim() || 'Cliente';
       const nameParts = rawName.split(' ');
       const firstName = nameParts[0] || 'Cliente';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
-      // ==========================================
-      // TRATAMENTO DO ENDEREÇO (Boleto)
-      // ==========================================
-      const property = invoice.contract.property;
-      const cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
+      let cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
+      if (cep.length !== 8) cep = '01001000';
       
       let rawAddress = property?.address || 'Rua Principal, 100';
       let streetName = rawAddress;
-      let streetNumber = 'S/N';
+      let streetNumber = '100'; // MP não gosta de S/N
       
       if (rawAddress.includes(',')) {
         const parts = rawAddress.split(',');
         streetName = parts[0].trim();
-        streetNumber = parts[1].trim().split(' ')[0] || 'S/N';
-      } else {
-        const numMatch = rawAddress.match(/\d+/);
-        if (numMatch) {
-          streetNumber = numMatch[0];
-          streetName = rawAddress.replace(numMatch[0], '').trim();
-        }
+        streetNumber = parts[1].trim().split(' ')[0] || '100';
       }
+
+      let federalUnit = property?.state ? property.state.trim().toUpperCase() : 'SP';
+      if (federalUnit.length !== 2) federalUnit = 'SP'; 
 
       const neighborhood = property?.neighborhood || 'Centro';
       const city = property?.city || 'São Paulo';
-      const federalUnit = property?.state || 'SP';
 
       // ==========================================
-      // CONSTRUÇÃO DO PAYLOAD MERCADO PAGO
+      // CONSTRUÇÃO SEPARADA (PIX VS BOLETO)
       // ==========================================
+      const payerData: any = {
+        email: email,
+        first_name: firstName,
+        last_name: lastName,
+        identification: { type: docType, number: cleanDoc }
+      };
+
+      // O Mercado pago pode dar erro 500 se mandarmos endereço no PIX. Portanto, só mandamos no boleto:
+      if (method === 'boleto') {
+        payerData.address = {
+           zip_code: cep,
+           street_name: streetName.substring(0, 200),
+           street_number: streetNumber.substring(0, 200),
+           neighborhood: neighborhood.substring(0, 200),
+           city: city.substring(0, 200),
+           federal_unit: federalUnit
+        };
+      }
+
       const paymentData = {
-        transaction_amount: Number(invoice.totalAmount),
-        description: chargeDescription,
+        // Asseguramos que o valor é um número float com duas casas decimais rigorosamente
+        transaction_amount: Number(Number(invoice.totalAmount).toFixed(2)), 
+        description: chargeDescription.substring(0, 200),
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
-        payer: {
-          email: email,
-          first_name: firstName,
-          last_name: lastName,
-          identification: { type: 'CPF', number: cpf },
-          address: {
-             zip_code: cep,
-             street_name: streetName,
-             street_number: streetNumber,
-             neighborhood: neighborhood,
-             city: city,
-             federal_unit: federalUnit
-          }
-        }
+        payer: payerData
       };
 
       const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
@@ -179,7 +181,8 @@ export class InvoiceController {
       const mpResult = await mpResponse.json();
 
       if (!mpResponse.ok) {
-        console.error('Erro no MP:', mpResult);
+        console.error('Payload rejeitado pelo MP:', JSON.stringify(paymentData, null, 2));
+        console.error('Erro detalhado do MP:', mpResult);
         return res.status(400).json({ error: 'Erro ao gerar cobrança no Mercado Pago.', detail: mpResult });
       }
 
@@ -218,7 +221,7 @@ export class InvoiceController {
       });
 
     } catch (error) {
-      console.error('Erro ao gerar cobrança:', error);
+      console.error('Erro Crítico ao gerar cobrança:', error);
       return res.status(500).json({ error: 'Erro interno ao comunicar com o Gateway.' });
     }
   }
