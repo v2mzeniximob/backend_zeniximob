@@ -10,7 +10,7 @@ const secret = process.env.JWT_SECRET || 'zeniximob_super_secret_key_2024';
 export class ClientPortalController {
 
   // ==========================================
-  // 1. FAZER LOGIN NO PORTAL  LÊ O SLUG
+  // 1. FAZER LOGIN NO PORTAL 
   // ==========================================
   async login(req: Request, res: Response) {
     try {
@@ -61,22 +61,14 @@ export class ClientPortalController {
       }
 
       const token = jwt.sign(
-        { 
-          id: userFound.id, 
-          role: role, 
-          realEstateId: userFound.realEstateId 
-        }, 
+        { id: userFound.id, role: role, realEstateId: userFound.realEstateId }, 
         secret, 
         { expiresIn: '7d' }
       );
 
       return res.json({
         token,
-        user: {
-          id: userFound.id,
-          name: userFound.name || userFound.corporateName,
-          role: role
-        }
+        user: { id: userFound.id, name: userFound.name || userFound.corporateName, role: role }
       });
     } catch (error) {
       console.error('Erro no login do portal:', error);
@@ -84,8 +76,7 @@ export class ClientPortalController {
     }
   }
 
- 
- // ==========================================
+  // ==========================================
   // 2. BUSCAR DADOS DO DASHBOARD 
   // ==========================================
   async getDashboard(req: Request, res: Response) {
@@ -113,11 +104,12 @@ export class ClientPortalController {
           }
         }));
 
+        // AJUSTE 1: Trazendo as mensagens (chat) para o Inquilino ver
         const tickets = await prisma.ticket.findMany({
           where: { clientId: user.id },
           include: { 
             property: { select: { title: true } },
-            messages: { orderBy: { createdAt: 'asc' } }
+            messages: { orderBy: { createdAt: 'asc' } } // <-- ISTO FAZ O CHAT APARECER
           },
           orderBy: { createdAt: 'desc' }
         });
@@ -134,23 +126,22 @@ export class ClientPortalController {
           include: {
             contracts: {
               where: { status: 'Ativo' },
-              include: {
-                invoices: { orderBy: { dueDate: 'desc' } }
-              }
+              include: { invoices: { orderBy: { dueDate: 'desc' } } }
             }
           },
           orderBy: { createdAt: 'desc' }
         });
 
-        // CORREÇÃO: Busca os tickets baseados nos imóveis do proprietário, 
-        // evitando o erro de coluna inexistente no banco.
+        // AJUSTE 2: Isolando os chamados e trazendo as mensagens para o Proprietário
         const tickets = await prisma.ticket.findMany({
           where: { 
-            property: {
-              ownerId: user.id 
-            }
+            property: { ownerId: user.id },
+            clientId: null // <-- ISTO BLOQUEIA OS TICKETS DO INQUILINO! Mostra só os do proprietário.
           },
-          include: { property: { select: { title: true } } },
+          include: { 
+            property: { select: { title: true } },
+            messages: { orderBy: { createdAt: 'asc' } } // <-- ISTO FAZ O CHAT APARECER
+          },
           orderBy: { createdAt: 'desc' }
         });
 
@@ -164,7 +155,6 @@ export class ClientPortalController {
     }
   }
 
-  // Rota antiga mantida
   async createAccess(req: Request, res: Response) {
      return res.json({ message: "Acesso agora é gerido no cadastro do cliente/proprietário." });
   }

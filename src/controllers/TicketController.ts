@@ -75,7 +75,7 @@ export class TicketController {
         include: {
           property: { select: { title: true, address: true } },
           client: { select: { name: true, phone: true } },
-          messages: { orderBy: { createdAt: 'asc' } } // <--- Inclui as mensagens do mais antigo ao mais recente
+          messages: { orderBy: { createdAt: 'asc' } }
         },
         orderBy: { createdAt: 'desc' }
       });
