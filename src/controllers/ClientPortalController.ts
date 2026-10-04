@@ -9,45 +9,62 @@ const secret = process.env.JWT_SECRET || 'zeniximob_super_secret_key_2024';
 
 export class ClientPortalController {
 
-  // ==========================================
-  // 1. FAZER LOGIN NO PORTAL
+ // ==========================================
+  // 1. FAZER LOGIN NO PORTAL  LÊ O SLUG
   // ==========================================
   async login(req: Request, res: Response) {
     try {
       const { document, password, role } = req.body;
+      const slug = req.headers['x-store-slug'] as string; // <--- Lê a imobiliária vinda do Frontend!
 
       if (!document || !password || !role) {
         return res.status(400).json({ error: 'Credenciais incompletas.' });
       }
 
-      // ===== A CORREÇÃO MÁGICA ESTÁ AQUI =====
-      // Remove pontos, traços e barras que vêm do Frontend
+      // Remove os pontos e traços do documento
       const cleanDocument = document.replace(/\D/g, '');
+
+      // 1. Se o slug foi enviado, precisamos descobrir qual é o ID desta imobiliária
+      let realEstateId = null;
+      if (slug) {
+        const store = await prisma.realEstate.findUnique({ where: { slug } });
+        if (store) {
+          realEstateId = store.id;
+        } else {
+          return res.status(404).json({ error: 'Imobiliária não encontrada no sistema.' });
+        }
+      }
 
       let userFound: any = null;
 
-      // Procura na tabela correta usando APENAS os números do CPF/CNPJ
+      // 2. Prepara a busca. Se tivermos o realEstateId, procura SÓ nessa imobiliária.
       if (role === 'CLIENT') {
-        userFound = await prisma.client.findUnique({ where: { document: cleanDocument } });
+        const query: any = { document: cleanDocument };
+        if (realEstateId) query.realEstateId = realEstateId;
+        
+        userFound = await prisma.client.findFirst({ where: query });
       } else if (role === 'OWNER') {
-        userFound = await prisma.owner.findFirst({ where: { cpfOrCnpj: cleanDocument } });
+        const query: any = { cpfOrCnpj: cleanDocument };
+        if (realEstateId) query.realEstateId = realEstateId;
+
+        userFound = await prisma.owner.findFirst({ where: query });
       }
 
       if (!userFound) {
-        return res.status(404).json({ error: 'Usuário não encontrado com este documento.' });
+        return res.status(404).json({ error: 'Usuário não encontrado nesta imobiliária.' });
       }
 
       if (!userFound.password) {
         return res.status(401).json({ error: 'Acesso não liberado. Solicite a sua senha à imobiliária.' });
       }
 
-      // Verifica se a senha bate com a encriptação (Bcrypt)
+      // 3. Verifica a Senha
       const isValidPassword = await bcrypt.compare(password, userFound.password);
       if (!isValidPassword) {
         return res.status(401).json({ error: 'Senha incorreta.' });
       }
 
-      // GERA O TOKEN COM A ROLE EXATA ('CLIENT' ou 'OWNER')
+      // 4. GERA O TOKEN (já com a imobiliária e o papel corretos)
       const token = jwt.sign(
         { 
           id: userFound.id, 
