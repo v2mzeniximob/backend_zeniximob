@@ -20,13 +20,17 @@ export class ClientPortalController {
         return res.status(400).json({ error: 'Credenciais incompletas.' });
       }
 
+      // ===== A CORREÇÃO MÁGICA ESTÁ AQUI =====
+      // Remove pontos, traços e barras que vêm do Frontend
+      const cleanDocument = document.replace(/\D/g, '');
+
       let userFound: any = null;
 
-      // Procura na tabela correta dependendo de quem está tentando logar
+      // Procura na tabela correta usando APENAS os números do CPF/CNPJ
       if (role === 'CLIENT') {
-        userFound = await prisma.client.findUnique({ where: { document } });
+        userFound = await prisma.client.findUnique({ where: { document: cleanDocument } });
       } else if (role === 'OWNER') {
-        userFound = await prisma.owner.findFirst({ where: { cpfOrCnpj: document } });
+        userFound = await prisma.owner.findFirst({ where: { cpfOrCnpj: cleanDocument } });
       }
 
       if (!userFound) {
@@ -43,11 +47,11 @@ export class ClientPortalController {
         return res.status(401).json({ error: 'Senha incorreta.' });
       }
 
-      // GERA O TOKEN COM A ROLE EXATA ('CLIENT' ou 'OWNER') PARA PASSAR NO MIDDLEWARE!
+      // GERA O TOKEN COM A ROLE EXATA ('CLIENT' ou 'OWNER')
       const token = jwt.sign(
         { 
           id: userFound.id, 
-          role: role, // Aqui está o segredo que vai resolver o erro 403!
+          role: role, 
           realEstateId: userFound.realEstateId 
         }, 
         secret, 
@@ -133,7 +137,7 @@ export class ClientPortalController {
     }
   }
 
-  // Rota antiga para evitar erros de rotas que já estavam declaradas
+  // Rota antiga mantida
   async createAccess(req: Request, res: Response) {
      return res.json({ message: "Acesso agora é gerido no cadastro do cliente/proprietário." });
   }
