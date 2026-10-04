@@ -22,7 +22,7 @@ const PUBLIC_PROPERTY_FIELDS = {
   price: true, condoFee: true, iptu: true,
   area: true, bedrooms: true, bathrooms: true, garage: true, yearBuilt: true, amenities: true,
   cep: true, address: true, neighborhood: true, city: true, state: true, latitude: true, longitude: true,
-  description: true, imageUrls: true, isActive: true,
+  description: true, imageUrls: true, isActive: true, exportToPortals: true,
   realEstateId: true, brokerId: true, createdAt: true, updatedAt: true
 };
 
@@ -39,7 +39,8 @@ export class PropertyController {
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId,       // Vínculo com o Proprietário
         inspectionUrl, // Vistoria Inicial de Captação
-        rentProposalUrl, saleProposalUrl, keyTermUrl // NOVOS CAMPOS
+        rentProposalUrl, saleProposalUrl, keyTermUrl,
+        exportToPortals // <--- ADICIONADO AQUI
       } = req.body;
 
       const property = await prisma.property.create({
@@ -54,9 +55,10 @@ export class PropertyController {
           brokerId: brokerId || null,
           ownerId: ownerId || null,
           inspectionUrl: inspectionUrl || null,
-          rentProposalUrl: rentProposalUrl || null, // ADICIONADO AQUI
-          saleProposalUrl: saleProposalUrl || null, // ADICIONADO AQUI
-          keyTermUrl: keyTermUrl || null,           // ADICIONADO AQUI
+          rentProposalUrl: rentProposalUrl || null, 
+          saleProposalUrl: saleProposalUrl || null, 
+          keyTermUrl: keyTermUrl || null,           
+          exportToPortals: exportToPortals ? Boolean(exportToPortals) : false, // <--- ADICIONADO AQUI
           rentStatus: 'Vago',
           realEstateId
         },
@@ -108,7 +110,8 @@ export class PropertyController {
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId, inspectionUrl, rentStatus,
-        rentProposalUrl, saleProposalUrl, keyTermUrl // NOVOS CAMPOS
+        rentProposalUrl, saleProposalUrl, keyTermUrl,
+        exportToPortals // <--- ADICIONADO AQUI
       } = req.body;
 
       const property = await prisma.property.update({
@@ -129,9 +132,10 @@ export class PropertyController {
           brokerId: brokerId === "" ? null : brokerId,
           ownerId: ownerId === "" ? null : ownerId,
           inspectionUrl: inspectionUrl === "" ? null : inspectionUrl,
-          rentProposalUrl: rentProposalUrl === "" ? null : rentProposalUrl, // ADICIONADO AQUI
-          saleProposalUrl: saleProposalUrl === "" ? null : saleProposalUrl, // ADICIONADO AQUI
-          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                // ADICIONADO AQUI
+          rentProposalUrl: rentProposalUrl === "" ? null : rentProposalUrl, 
+          saleProposalUrl: saleProposalUrl === "" ? null : saleProposalUrl, 
+          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                 
+          exportToPortals: exportToPortals !== undefined ? Boolean(exportToPortals) : undefined, // <--- ADICIONADO AQUI
           rentStatus: rentStatus || undefined
         },
         include: { 

@@ -70,4 +70,33 @@ export class ProposalController {
       return res.status(500).json({ error: 'Erro ao atualizar proposta.' });
     }
   }
+
+  // =====================================
+  // NOVOS MÉTODOS ADICIONADOS
+  // =====================================
+  async update(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { type, propertyId, clientId, brokerId, documentUrl } = req.body;
+      const proposal = await prisma.proposal.update({
+        where: { id },
+        data: { type, propertyId, clientId, brokerId: brokerId || null, documentUrl }
+      });
+      return res.json(proposal);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar proposta.' });
+    }
+  }
+
+  async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      await prisma.proposal.delete({ where: { id } });
+      return res.json({ message: 'Proposta excluída com sucesso.' });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao excluir proposta.' });
+    }
+  }
 }

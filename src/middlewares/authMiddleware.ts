@@ -2,10 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import process from 'process';
 
-interface TokenPayload {
+export interface TokenPayload {
   id: string;
-  email: string;
-  role: string;
+  email?: string; // Opcional, pois clientes/donos podem logar apenas com CPF
+  role: string;   // 'MASTER', 'ADMIN', 'BROKER', 'CLIENT', 'OWNER'
   iat: number;
   exp: number;
   realEstateId?: string;
@@ -47,4 +47,12 @@ export function masterOnly(req: Request, res: Response, next: NextFunction): any
     return res.status(403).json({ error: 'Acesso negado. Funcionalidade exclusiva do MASTER.' });
   }
   return next(); // Se for Master, libera!
+}
+
+// Middleware 3: NOVO! Exclusivo para Inquilinos e Proprietários
+export function portalOnly(req: Request, res: Response, next: NextFunction): any {
+  if (req.user?.role !== 'CLIENT' && req.user?.role !== 'OWNER') {
+    return res.status(403).json({ error: 'Acesso negado. Área exclusiva do Portal do Cliente.' });
+  }
+  return next(); // Libera acesso ao Dashboard do Portal!
 }

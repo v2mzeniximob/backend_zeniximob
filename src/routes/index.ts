@@ -10,7 +10,7 @@ import { LeadController } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
 import { ClientController } from '../controllers/ClientController';
 import { TenantController } from '../controllers/TenantController';
-import { authMiddleware, masterOnly } from '../middlewares/authMiddleware';
+import { authMiddleware, masterOnly, portalOnly } from '../middlewares/authMiddleware'; // <--- portalOnly adicionado aqui
 import { OwnerController } from '../controllers/OwnerController';
 import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
@@ -18,10 +18,15 @@ import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
 import { ProposalController } from '../controllers/ProposalController'; 
 import { KeyTermController } from '../controllers/KeyTermController';   
-import { InsuranceCompanyController } from '../controllers/InsuranceCompanyController'; // NOVO: Seguradoras
+import { InsuranceCompanyController } from '../controllers/InsuranceCompanyController';
+import { AiController } from '../controllers/AiController';
+import { XmlController } from '../controllers/XmlController';
+import { TicketController } from '../controllers/TicketController';
+
 
 // Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
+import { ClientPortalController } from '../controllers/ClientPortalController';
 
 const routes = Router();
 const authController = new AuthController();
@@ -42,18 +47,26 @@ const signatureController = new SignatureController();
 const visitController = new VisitController();
 const proposalController = new ProposalController(); 
 const keyTermController = new KeyTermController();   
-const insuranceCompanyController = new InsuranceCompanyController(); // NOVO: Seguradoras
+const insuranceCompanyController = new InsuranceCompanyController();
+const aiController = new AiController();
+const xmlController = new XmlController();
+const ticketController = new TicketController();
+const clientPortalController = new ClientPortalController(); // <--- INSTÂNCIA DO NOVO CONTROLADOR
 
 // ==========================================
 // ROTAS PÚBLICAS
 // ==========================================
 routes.post('/login', authController.login);
+routes.post('/portal/login', clientPortalController.login); // <--- LOGIN PARA O INQUILINO/PROPRIETÁRIO
 
 // Vitrine da Loja (Lista todos os imóveis ativos)
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 
 // Detalhes de um único imóvel na vitrine (Página detalhada)
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
+
+// Feed XML para Portais Imobiliários (Público)
+routes.get('/public/xml/:slug', xmlController.generateFeed);
 
 // Rota pública para leads (quando o cliente envia mensagem na vitrine)
 routes.post('/public/leads', async (req, res) => {
@@ -77,6 +90,15 @@ routes.post('/public/leads', async (req, res) => {
   }
 });
 
+
+// ==========================================
+// ROTAS DO PORTAL DO CLIENTE (Inquilino / Proprietário)
+// ==========================================
+// Aqui usamos o middleware "portalOnly", que só deixa passar quem logou como CLIENT ou OWNER
+routes.get('/portal/dashboard', authMiddleware, portalOnly, clientPortalController.getDashboard);
+// Nota: A criação de tickets pelo Inquilino usará a mesma rota '/tickets' abaixo, protegida apenas pelo authMiddleware
+
+
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
 // ==========================================
@@ -95,6 +117,9 @@ routes.post('/clients', authMiddleware, clientController.create);
 routes.get('/clients', authMiddleware, clientController.list);
 routes.put('/clients/:id', authMiddleware, clientController.update);
 routes.patch('/clients/:id/status', authMiddleware, clientController.toggleStatus);
+
+// Rota para a Imobiliária gerar o acesso (Senha) do Cliente ou Proprietário
+routes.post('/portal/generate-access', authMiddleware, clientPortalController.createAccess);
 
 // ROTAS DA TELA DE INQUILINOS (Foco Financeiro/Contratos)
 routes.post('/tenants', authMiddleware, tenantController.create);
@@ -119,13 +144,17 @@ routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus)
 // Propostas e Termos 
 routes.post('/proposals', authMiddleware, proposalController.create);
 routes.get('/proposals', authMiddleware, proposalController.list);
+routes.put('/proposals/:id', authMiddleware, proposalController.update);
+routes.delete('/proposals/:id', authMiddleware, proposalController.delete);
 routes.patch('/proposals/:id/status', authMiddleware, proposalController.updateStatus);
 
 routes.post('/key-terms', authMiddleware, keyTermController.create);
 routes.get('/key-terms', authMiddleware, keyTermController.list);
+routes.put('/key-terms/:id', authMiddleware, keyTermController.update);
+routes.delete('/key-terms/:id', authMiddleware, keyTermController.delete);
 routes.patch('/key-terms/:id/status', authMiddleware, keyTermController.updateStatus);
 
-// Seguradoras (Seguro Fiança) - NOVAS ROTAS
+// Seguradoras (Seguro Fiança)
 routes.post('/insurance-companies', authMiddleware, insuranceCompanyController.create);
 routes.get('/insurance-companies', authMiddleware, insuranceCompanyController.list);
 routes.patch('/insurance-companies/:id/status', authMiddleware, insuranceCompanyController.toggleStatus);
@@ -169,6 +198,14 @@ routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
+
+// ROTAS DE INTELIGÊNCIA ARTIFICIAL (AI)
+routes.post('/ai/generate-description', authMiddleware, aiController.generateDescription);
+
+// Manutenções (Tickets)
+routes.post('/tickets', authMiddleware, ticketController.create);
+routes.get('/tickets', authMiddleware, ticketController.list);
+routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)

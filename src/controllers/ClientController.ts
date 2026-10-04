@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs'; // <--- ADICIONADO AQUI
 
 const prisma = new PrismaClient() as any;
 
@@ -22,13 +23,17 @@ export class ClientController {
         // Checklist Financiamento
         educationLevel, financingDriveLink,
         
-        isTenant, isBuyer, documentUrl, brokerId
+        isTenant, isBuyer, documentUrl, brokerId,
+        password // <--- ADICIONADO PARA O PORTAL DO CLIENTE
       } = req.body;
 
       if (!document) return res.status(400).json({ error: 'O CPF ou CNPJ é obrigatório.' });
 
       const clientExists = await prisma.client.findUnique({ where: { document } });
       if (clientExists) return res.status(400).json({ error: 'Já existe um cliente cadastrado com este CPF/CNPJ.' });
+
+      // Encripta a senha se ela foi enviada (Acesso ao Portal)
+      const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
       const client = await prisma.client.create({
         data: {
@@ -46,7 +51,8 @@ export class ClientController {
           
           isTenant: isTenant || false, 
           isBuyer: isBuyer || false,
-          documentUrl, realEstateId, brokerId: brokerId || null
+          documentUrl, realEstateId, brokerId: brokerId || null,
+          password: hashedPassword // <--- SALVA A SENHA ENCRIPTADA
         }
       });
 
@@ -109,13 +115,12 @@ export class ClientController {
         maritalStatus, spouseName, spouseCpf, spouseRg, spouseDocUrl,
         respName, respCpf, respRg, respCep, respStreet, respNeighborhood, respCity, respState, respPhone, respEmail,
         
-        // Garantias Locatícias & Fiador
         guaranteeType, insuranceCompanyId, guarantorName, guarantorCpf, guarantorRg, guarantorCivilStatus, guarantorPhone, guarantorEmail, guarantorAddress, guarantorIncome, guarantorDocUrl, guarantorPropertyRegistryUrl,
         
-        // Checklist Financiamento
         educationLevel, financingDriveLink,
         
-        isTenant, isBuyer, documentUrl, brokerId
+        isTenant, isBuyer, documentUrl, brokerId,
+        password // <--- ADICIONADO
       } = req.body;
 
       if (document) {
@@ -125,22 +130,29 @@ export class ClientController {
         }
       }
 
+      const dataToUpdate: any = {
+        clientType, name, corporateName, document, rg, stateRegistration, cityRegistration,
+        cep, street, neighborhood, city, state, phone, email,
+        maritalStatus, spouseName, spouseCpf, spouseRg, spouseDocUrl,
+        respName, respCpf, respRg, respCep, respStreet, respNeighborhood, respCity, respState, respPhone, respEmail,
+        
+        guaranteeType, insuranceCompanyId: insuranceCompanyId || null, 
+        guarantorName, guarantorCpf, guarantorRg, guarantorCivilStatus, guarantorPhone, guarantorEmail, guarantorAddress, guarantorDocUrl, guarantorPropertyRegistryUrl,
+        guarantorIncome: guarantorIncome ? Number(guarantorIncome) : null,
+        
+        educationLevel, financingDriveLink,
+        
+        isTenant, isBuyer, documentUrl, brokerId: brokerId || null
+      };
+
+      // Se a imobiliária preencheu uma nova senha na edição, nós encriptamos e atualizamos.
+      if (password) {
+        dataToUpdate.password = await bcrypt.hash(password, 10);
+      }
+
       await prisma.client.updateMany({
         where: { id, realEstateId },
-        data: {
-          clientType, name, corporateName, document, rg, stateRegistration, cityRegistration,
-          cep, street, neighborhood, city, state, phone, email,
-          maritalStatus, spouseName, spouseCpf, spouseRg, spouseDocUrl,
-          respName, respCpf, respRg, respCep, respStreet, respNeighborhood, respCity, respState, respPhone, respEmail,
-          
-          guaranteeType, insuranceCompanyId: insuranceCompanyId || null, 
-          guarantorName, guarantorCpf, guarantorRg, guarantorCivilStatus, guarantorPhone, guarantorEmail, guarantorAddress, guarantorDocUrl, guarantorPropertyRegistryUrl,
-          guarantorIncome: guarantorIncome ? Number(guarantorIncome) : null,
-          
-          educationLevel, financingDriveLink,
-          
-          isTenant, isBuyer, documentUrl, brokerId: brokerId || null
-        }
+        data: dataToUpdate
       });
 
       const leadPhone = phone || respPhone || '';
