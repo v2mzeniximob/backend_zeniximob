@@ -84,7 +84,8 @@ export class ClientPortalController {
     }
   }
 
-  // ==========================================
+ 
+ // ==========================================
   // 2. BUSCAR DADOS DO DASHBOARD 
   // ==========================================
   async getDashboard(req: Request, res: Response) {
@@ -131,7 +132,6 @@ export class ClientPortalController {
             contracts: {
               where: { status: 'Ativo' },
               include: {
-                // Aqui estamos garantindo que ele busque todas as faturas para repasse
                 invoices: { orderBy: { dueDate: 'desc' } }
               }
             }
@@ -139,9 +139,14 @@ export class ClientPortalController {
           orderBy: { createdAt: 'desc' }
         });
 
-        // Adicionado a busca de chamados (tickets) para o proprietário!
+        // CORREÇÃO: Busca os tickets baseados nos imóveis do proprietário, 
+        // evitando o erro de coluna inexistente no banco.
         const tickets = await prisma.ticket.findMany({
-          where: { ownerId: user.id },
+          where: { 
+            property: {
+              ownerId: user.id 
+            }
+          },
           include: { property: { select: { title: true } } },
           orderBy: { createdAt: 'desc' }
         });
