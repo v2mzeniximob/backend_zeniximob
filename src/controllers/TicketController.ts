@@ -1,4 +1,3 @@
-// Caminho: src/controllers/TicketController.ts
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
@@ -6,24 +5,48 @@ const prisma = new PrismaClient() as any;
 
 export class TicketController {
   
-  // Criar um chamado (Pode ser criado pelo Inquilino no portal ou pelo Corretor no CRM)
+  // Criar um chamado (Pode ser criado pelo Inquilino/Proprietário no portal ou Corretor no CRM)
   async create(req: Request, res: Response) {
     try {
-      const { title, description, priority, imageUrl, propertyId, clientId } = req.body;
+      const { title, description, priority, imageUrl, propertyId, clientId, ownerId } = req.body;
+      const user = req.user as any; // Pega os dados do token (authMiddleware)
+
+      // Identifica quem está abrindo o chamado com base no token do Portal
+      const isTenant = user?.role === 'CLIENT' || user?.role === 'INQUILINO';
+      const isOwner = user?.role === 'PROPRIETARIO';
+
+      // Monta os dados base do ticket
+      const ticketData: any = {
+        title, 
+        description, 
+        priority: priority || 'Média', 
+        imageUrl,
+        propertyId
+      };
+
+      // Se for pelo portal, força o ID do usuário logado por segurança
+      if (isTenant) {
+        ticketData.clientId = user.id;
+      } else if (isOwner) {
+        ticketData.ownerId = user.id; 
+      } else {
+        // Se for criado pelo CRM (Corretor), usa o que veio do frontend
+        if (clientId) ticketData.clientId = clientId;
+        if (ownerId) ticketData.ownerId = ownerId;
+      }
 
       const ticket = await prisma.ticket.create({
-        data: {
-          title, description, priority: priority || 'Média', imageUrl,
-          propertyId, clientId
-        }
+        data: ticketData
       });
+      
       return res.status(201).json(ticket);
     } catch (error) {
+      console.error('Erro ao criar ticket:', error);
       return res.status(500).json({ error: 'Erro ao criar ticket.' });
     }
   }
 
-  // Listar chamados da Imobiliária
+  // Listar chamados da Imobiliária (Para o CRM)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -33,12 +56,15 @@ export class TicketController {
         where: { property: { realEstateId } },
         include: {
           property: { select: { title: true, address: true } },
-          client: { select: { name: true, phone: true } }
+          client: { select: { name: true, phone: true } },
+          // Se tiver relação com owner no schema, pode descomentar a linha abaixo:
+          // owner: { select: { name: true, phone: true } }
         },
         orderBy: { createdAt: 'desc' }
       });
       return res.json(tickets);
     } catch (error) {
+      console.error('Erro ao listar tickets:', error);
       return res.status(500).json({ error: 'Erro ao listar tickets.' });
     }
   }
@@ -55,6 +81,7 @@ export class TicketController {
       });
       return res.json(ticket);
     } catch (error) {
+      console.error('Erro ao atualizar ticket:', error);
       return res.status(500).json({ error: 'Erro ao atualizar ticket.' });
     }
   }

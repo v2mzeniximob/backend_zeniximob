@@ -121,7 +121,7 @@ routes.patch('/clients/:id/status', authMiddleware, clientController.toggleStatu
 // Rota para a Imobiliária gerar o acesso (Senha) do Cliente ou Proprietário
 routes.post('/portal/generate-access', authMiddleware, clientPortalController.createAccess);
 
-// ROTAS DA TELA DE INQUILINOS (Foco Financeiro/Contratos)
+// ROTAS DA TELA DE INQUILINOS (Foco Financeiro e Contratos)
 routes.post('/tenants', authMiddleware, tenantController.create);
 routes.get('/tenants', authMiddleware, tenantController.list);
 routes.put('/tenants/:id', authMiddleware, tenantController.update);
@@ -203,9 +203,9 @@ routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
 routes.post('/ai/generate-description', authMiddleware, aiController.generateDescription);
 
 // Manutenções (Tickets)
-routes.post('/tickets', authMiddleware, ticketController.create);
-routes.get('/tickets', authMiddleware, ticketController.list);
-routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
+routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
+routes.get('/portal/tickets', authMiddleware, portalOnly, ticketController.list);
+routes.patch('/portal/tickets/:id/status', authMiddleware, portalOnly, ticketController.updateStatus);
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
