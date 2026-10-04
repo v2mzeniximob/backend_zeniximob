@@ -5,7 +5,7 @@ const prisma = new PrismaClient() as any;
 
 export class TicketController {
   
-  // Criar um chamado (Pode ser criado pelo Inquilino/Proprietário no portal ou Corretor no CRM)
+  // Criar um chamado original
   async create(req: Request, res: Response) {
     try {
       const { title, description, priority, imageUrl, propertyId, clientId } = req.body;
@@ -21,18 +21,13 @@ export class TicketController {
         propertyId
       };
 
-      // Se for inquilino, vincula o ID dele. Se for proprietário, o vinculo já é feito pelo propertyId
       if (isTenant) {
         ticketData.clientId = user.id;
       } else if (!user?.role) {
-        // Se veio do CRM e mandou clientId
         if (clientId) ticketData.clientId = clientId;
       }
 
-      const ticket = await prisma.ticket.create({
-        data: ticketData
-      });
-      
+      const ticket = await prisma.ticket.create({ data: ticketData });
       return res.status(201).json(ticket);
     } catch (error) {
       console.error('Erro ao criar ticket:', error);
@@ -40,7 +35,36 @@ export class TicketController {
     }
   }
 
-  // Listar chamados da Imobiliária (Para o CRM)
+  // ==========================================
+  // NOVA FUNÇÃO: Adicionar interação ao chamado
+  // ==========================================
+  async addMessage(req: Request, res: Response) {
+    try {
+      const { id } = req.params; // ID do Ticket
+      const { message } = req.body;
+      const user = req.user as any;
+
+      // Define quem está a enviar a mensagem
+      let sender = 'ADMIN'; // Padrão é a imobiliária
+      if (user?.role === 'CLIENT' || user?.role === 'INQUILINO') sender = 'CLIENT';
+      if (user?.role === 'OWNER' || user?.role === 'PROPRIETARIO') sender = 'OWNER';
+
+      const newMessage = await prisma.ticketMessage.create({
+        data: {
+          ticketId: id,
+          message,
+          sender
+        }
+      });
+
+      return res.status(201).json(newMessage);
+    } catch (error) {
+      console.error('Erro ao adicionar mensagem:', error);
+      return res.status(500).json({ error: 'Erro ao adicionar mensagem ao chamado.' });
+    }
+  }
+
+  // Listar chamados da Imobiliária (ATUALIZADO PARA INCLUIR MENSAGENS)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -51,8 +75,7 @@ export class TicketController {
         include: {
           property: { select: { title: true, address: true } },
           client: { select: { name: true, phone: true } },
-          // Se tiver relação com owner no schema, pode descomentar a linha abaixo:
-          // owner: { select: { name: true, phone: true } }
+          messages: { orderBy: { createdAt: 'asc' } } // <--- Inclui as mensagens do mais antigo ao mais recente
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -63,7 +86,7 @@ export class TicketController {
     }
   }
 
-  // Atualizar Status do Ticket (Aberto -> Em Andamento -> Concluído)
+  // Atualizar Status do Ticket
   async updateStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;

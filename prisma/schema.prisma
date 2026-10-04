@@ -574,5 +574,16 @@ model Ticket {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  messages  TicketMessage[]
+
   @@map("tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(uuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  message   String
+  sender    String   // Vai guardar se foi 'ADMIN', 'CLIENT' ou 'OWNER'
+  createdAt DateTime @default(now())
 }

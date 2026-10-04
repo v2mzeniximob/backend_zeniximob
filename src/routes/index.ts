@@ -10,7 +10,7 @@ import { LeadController } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
 import { ClientController } from '../controllers/ClientController';
 import { TenantController } from '../controllers/TenantController';
-import { authMiddleware, masterOnly, portalOnly } from '../middlewares/authMiddleware'; // <--- portalOnly adicionado aqui
+import { authMiddleware, masterOnly, portalOnly } from '../middlewares/authMiddleware'; 
 import { OwnerController } from '../controllers/OwnerController';
 import { ContractController } from '../controllers/ContractController';
 import { InvoiceController } from '../controllers/InvoiceController';
@@ -22,7 +22,6 @@ import { InsuranceCompanyController } from '../controllers/InsuranceCompanyContr
 import { AiController } from '../controllers/AiController';
 import { XmlController } from '../controllers/XmlController';
 import { TicketController } from '../controllers/TicketController';
-
 
 // Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
@@ -51,7 +50,8 @@ const insuranceCompanyController = new InsuranceCompanyController();
 const aiController = new AiController();
 const xmlController = new XmlController();
 const ticketController = new TicketController();
-const clientPortalController = new ClientPortalController(); // <--- INSTÂNCIA DO NOVO CONTROLADOR
+const clientPortalController = new ClientPortalController(); 
+
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -96,7 +96,10 @@ routes.post('/public/leads', async (req, res) => {
 // ==========================================
 // Aqui usamos o middleware "portalOnly", que só deixa passar quem logou como CLIENT ou OWNER
 routes.get('/portal/dashboard', authMiddleware, portalOnly, clientPortalController.getDashboard);
-// Nota: A criação de tickets pelo Inquilino usará a mesma rota '/tickets' abaixo, protegida apenas pelo authMiddleware
+
+// Tickets (Criação e Envio de Mensagens pelo Portal)
+routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
+routes.post('/portal/tickets/:id/messages', authMiddleware, portalOnly, ticketController.addMessage);
 
 
 // ==========================================
@@ -203,9 +206,11 @@ routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
 routes.post('/ai/generate-description', authMiddleware, aiController.generateDescription);
 
 // Manutenções (Tickets)
-routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
+routes.post('/tickets', authMiddleware, ticketController.create);
 routes.get('/tickets', authMiddleware, ticketController.list);
 routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
+routes.post('/tickets/:id/messages', authMiddleware, ticketController.addMessage);
+
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)

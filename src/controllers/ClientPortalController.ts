@@ -115,7 +115,10 @@ export class ClientPortalController {
 
         const tickets = await prisma.ticket.findMany({
           where: { clientId: user.id },
-          include: { property: { select: { title: true } } },
+          include: { 
+            property: { select: { title: true } },
+            messages: { orderBy: { createdAt: 'asc' } }
+          },
           orderBy: { createdAt: 'desc' }
         });
 
