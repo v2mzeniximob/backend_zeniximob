@@ -6,7 +6,6 @@ const prisma = new PrismaClient() as any;
 
 export class InvoiceController {
   
-  // 1. LISTAR FATURAS GERAIS
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -40,7 +39,6 @@ export class InvoiceController {
     }
   }
 
-  // 2. CRIAR FATURA MANUAL
   async create(req: Request, res: Response) {
     try {
       const { contractId, amount, dueDate, description } = req.body;
@@ -62,7 +60,6 @@ export class InvoiceController {
     }
   }
 
-  // 3. MARCAR COMO PAGA MANUALMENTE
   async markAsPaid(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -129,20 +126,15 @@ export class InvoiceController {
       let streetNumber = 'S/N';
       
       if (rawAddress.includes(',')) {
-        // Se tem vírgula, separa
         const parts = rawAddress.split(',');
         streetName = parts[0].trim();
-        // Remove espaços e limpa o número
         streetNumber = parts[1].replace(/\D/g, '') || 'S/N'; 
       } else {
-        // Se NÃO tem vírgula (Ex: "Rua Josefina Grassini 120")
-        // O Regex procura a última sequência de números na frase
         const match = rawAddress.match(/(.*?)\s+(\d+)\s*$/);
         if (match) {
-          streetName = match[1].trim(); // Pega "Rua Josefina Grassini"
-          streetNumber = match[2];      // Pega "120"
+          streetName = match[1].trim(); 
+          streetNumber = match[2];      
         } else {
-          // Último recurso: procura qualquer número
           const numMatch = rawAddress.match(/\d+/);
           if (numMatch) {
             streetNumber = numMatch[0];
@@ -151,7 +143,8 @@ export class InvoiceController {
         }
       }
 
-      // MP recusa "S/N" ou vazio, exige sempre um número. Vamos forçar um caso não exista.
+      // Forçar envio do street_number como STRING rigorosa exigida pelo suporte
+      streetNumber = String(streetNumber);
       if (!streetNumber || streetNumber === 'S/N') streetNumber = '100';
 
       let federalUnit = property?.state ? property.state.trim().toUpperCase() : 'SP';
@@ -161,31 +154,49 @@ export class InvoiceController {
       const city = property?.city || 'São Paulo';
 
       // ==========================================
+      // FORMATAÇÃO DA DATA DE VENCIMENTO (ISO 8601)
+      // ==========================================
+      const dueDateObj = new Date(invoice.dueDate);
+      // Ajusta para o final do dia do vencimento para evitar que boleto vença muito cedo
+      dueDateObj.setUTCHours(23, 59, 59, 999);
+      // Formato exigido: yyyy-MM-dd'T'HH:mm:ss.SSSZ
+      const dateOfExpiration = dueDateObj.toISOString();
+
+      // ==========================================
       // MONTAGEM DO PAYLOAD 
       // ==========================================
-      const paymentData = {
+      const payerData: any = {
+        email: email,
+        first_name: firstName,
+        last_name: lastName,
+        identification: { type: docType, number: cleanDoc }
+      };
+
+      if (method === 'boleto') {
+        payerData.address = {
+           zip_code: cep,
+           street_name: streetName.substring(0, 200),
+           street_number: streetNumber.substring(0, 200),
+           neighborhood: neighborhood.substring(0, 200),
+           city: city.substring(0, 200),
+           federal_unit: federalUnit
+        };
+      }
+
+      const paymentData: any = {
         transaction_amount: Number(Number(invoice.totalAmount).toFixed(2)), 
         description: chargeDescription.substring(0, 200),
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
-        payer: {
-          email: email,
-          first_name: firstName,
-          last_name: lastName,
-          identification: { type: docType, number: cleanDoc },
-          // O ENDEREÇO VOLTOU! PERFEITAMENTE SEPARADO.
-          address: {
-             zip_code: cep,
-             street_name: streetName.substring(0, 200),
-             street_number: streetNumber.substring(0, 200),
-             neighborhood: neighborhood.substring(0, 200),
-             city: city.substring(0, 200),
-             federal_unit: federalUnit
-          }
-        }
+        payer: payerData
       };
 
+      // Adicionando o Vencimento apenas se for boleto, conforme sugerido pelo MP
+      if (method === 'boleto') {
+        paymentData.date_of_expiration = dateOfExpiration;
+      }
+
       console.log("==========================================");
-      console.log(`🚀 GERANDO COBRANÇA - AMBIENTE DE TESTES DO MP`);
+      console.log(`🚀 GERANDO COBRANÇA - MP`);
       console.log("📦 PAYLOAD ENVIADO PARA O MP:");
       console.log(JSON.stringify(paymentData, null, 2));
       console.log("==========================================");
@@ -195,7 +206,7 @@ export class InvoiceController {
         headers: {
           'Authorization': `Bearer ${tokenMP}`,
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': uuidv4()
+          'X-Idempotency-Key': uuidv4() // Idempotência (Garante que a requisição é única)
         },
         body: JSON.stringify(paymentData)
       });
@@ -247,7 +258,6 @@ export class InvoiceController {
     }
   }
 
-  // 5. ATUALIZAR DADOS DO REPASSE
   async updateRepasse(req: Request, res: Response) {
     try {
       const { id } = req.params;
