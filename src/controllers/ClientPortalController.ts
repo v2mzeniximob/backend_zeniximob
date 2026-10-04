@@ -1,50 +1,66 @@
-// Caminho: src/controllers/ClientPortalController.ts
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import process from 'process';
 
 const prisma = new PrismaClient() as any;
+const secret = process.env.JWT_SECRET || 'zeniximob_super_secret_key_2024';
 
 export class ClientPortalController {
-  
-  // 1. Rota de Login (Inquilino ou Proprietário)
+
+  // ==========================================
+  // 1. FAZER LOGIN NO PORTAL
+  // ==========================================
   async login(req: Request, res: Response) {
     try {
-      const { document, password, role } = req.body; // role: 'CLIENT' ou 'OWNER'
+      const { document, password, role } = req.body;
 
       if (!document || !password || !role) {
-        return res.status(400).json({ error: 'Preencha CPF/CNPJ, Senha e o Tipo de Acesso.' });
+        return res.status(400).json({ error: 'Credenciais incompletas.' });
       }
 
-      // Remove máscaras do documento
-      const cleanDocument = document.replace(/\D/g, '');
+      let userFound: any = null;
 
-      let user;
-      if (role === 'OWNER') {
-        user = await prisma.owner.findFirst({ where: { cpfOrCnpj: { contains: cleanDocument } } });
-      } else {
-        user = await prisma.client.findFirst({ where: { document: { contains: cleanDocument } } });
+      // Procura na tabela correta dependendo de quem está tentando logar
+      if (role === 'CLIENT') {
+        userFound = await prisma.client.findUnique({ where: { document } });
+      } else if (role === 'OWNER') {
+        userFound = await prisma.owner.findFirst({ where: { cpfOrCnpj: document } });
       }
 
-      if (!user || !user.password) {
-        return res.status(401).json({ error: 'Credenciais inválidas ou acesso ainda não liberado pela imobiliária.' });
+      if (!userFound) {
+        return res.status(404).json({ error: 'Usuário não encontrado com este documento.' });
       }
 
-      // Verifica a senha
-      const isValid = await bcrypt.compare(password, user.password);
-      if (!isValid) return res.status(401).json({ error: 'Senha incorreta.' });
+      if (!userFound.password) {
+        return res.status(401).json({ error: 'Acesso não liberado. Solicite a sua senha à imobiliária.' });
+      }
 
-      // Gera o Token JWT para o Cliente
+      // Verifica se a senha bate com a encriptação (Bcrypt)
+      const isValidPassword = await bcrypt.compare(password, userFound.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Senha incorreta.' });
+      }
+
+      // GERA O TOKEN COM A ROLE EXATA ('CLIENT' ou 'OWNER') PARA PASSAR NO MIDDLEWARE!
       const token = jwt.sign(
-        { id: user.id, role: role, realEstateId: user.realEstateId },
-        process.env.JWT_SECRET || 'secret',
-        { expiresIn: '7d' } // Cliente fica logado por 7 dias
+        { 
+          id: userFound.id, 
+          role: role, // Aqui está o segredo que vai resolver o erro 403!
+          realEstateId: userFound.realEstateId 
+        }, 
+        secret, 
+        { expiresIn: '7d' }
       );
 
       return res.json({
         token,
-        user: { id: user.id, name: user.name, role: role }
+        user: {
+          id: userFound.id,
+          name: userFound.name || userFound.corporateName,
+          role: role
+        }
       });
     } catch (error) {
       console.error('Erro no login do portal:', error);
@@ -52,65 +68,73 @@ export class ClientPortalController {
     }
   }
 
-  // 2. Rota para a Imobiliária GERAR A SENHA do Cliente/Proprietário
-  async createAccess(req: Request, res: Response) {
-    try {
-      const { id, role, password } = req.body;
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      if (role === 'OWNER') {
-        await prisma.owner.update({ where: { id }, data: { password: hashedPassword } });
-      } else {
-        await prisma.client.update({ where: { id }, data: { password: hashedPassword } });
-      }
-
-      return res.json({ message: 'Acesso gerado com sucesso!' });
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao gerar senha de acesso.' });
-    }
-  }
-
-  // 3. Buscar Dados do Dashboard do Usuário Logado
+  // ==========================================
+  // 2. BUSCAR DADOS DO DASHBOARD 
+  // ==========================================
   async getDashboard(req: Request, res: Response) {
     try {
-      const userId = (req as any).user.id;
-      const role = (req as any).user.role;
+      const user = req.user as any;
+      if (!user) return res.status(401).json({ error: 'Não autorizado.' });
 
-      if (role === 'CLIENT') {
-        // Traz os contratos do Inquilino, junto com boletos e vistorias
-        const contracts = await prisma.contract.findMany({
-          where: { tenantId: userId },
+      // ----------------------------------------------------
+      // VISÃO DO INQUILINO (CLIENT)
+      // ----------------------------------------------------
+      if (user.role === 'CLIENT') {
+        const contractsRaw = await prisma.contract.findMany({
+          where: { tenantId: user.id, status: 'Ativo' },
           include: {
-            property: { select: { title: true, address: true, coverImage: true } },
-            invoices: { orderBy: { dueDate: 'asc' } },
-            inspections: true
+            property: { select: { title: true, address: true, imageUrls: true } },
+            invoices: { orderBy: { dueDate: 'desc' } }
           }
         });
-        
-        // Traz os tickets (manutenções) abertos por ele
+
+        // Prepara a imagem de capa para o frontend não quebrar
+        const contracts = contractsRaw.map((c: any) => ({
+          ...c,
+          property: {
+            ...c.property,
+            coverImage: c.property.imageUrls && c.property.imageUrls.length > 0 ? c.property.imageUrls[0] : null
+          }
+        }));
+
         const tickets = await prisma.ticket.findMany({
-          where: { clientId: userId },
+          where: { clientId: user.id },
+          include: { property: { select: { title: true } } },
           orderBy: { createdAt: 'desc' }
         });
 
         return res.json({ contracts, tickets });
+      }
 
-      } else if (role === 'OWNER') {
-        // Traz os imóveis do Proprietário, contratos vinculados e financeiro
+      // ----------------------------------------------------
+      // VISÃO DO PROPRIETÁRIO (OWNER)
+      // ----------------------------------------------------
+      if (user.role === 'OWNER') {
         const properties = await prisma.property.findMany({
-          where: { ownerId: userId },
+          where: { ownerId: user.id },
           include: {
             contracts: {
-              include: { invoices: { orderBy: { dueDate: 'desc' }, take: 12 } }
+              where: { status: 'Ativo' },
+              include: {
+                invoices: { orderBy: { dueDate: 'desc' } }
+              }
             }
-          }
+          },
+          orderBy: { createdAt: 'desc' }
         });
+
         return res.json({ properties });
       }
 
-      return res.status(403).json({ error: 'Acesso negado.' });
+      return res.status(403).json({ error: 'Perfil não reconhecido.' });
     } catch (error) {
-      return res.status(500).json({ error: 'Erro ao buscar dashboard do portal.' });
+      console.error('Erro ao buscar dashboard:', error);
+      return res.status(500).json({ error: 'Erro ao carregar os dados do painel.' });
     }
+  }
+
+  // Rota antiga para evitar erros de rotas que já estavam declaradas
+  async createAccess(req: Request, res: Response) {
+     return res.json({ message: "Acesso agora é gerido no cadastro do cliente/proprietário." });
   }
 }
