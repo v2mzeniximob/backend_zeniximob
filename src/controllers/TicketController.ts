@@ -8,14 +8,11 @@ export class TicketController {
   // Criar um chamado (Pode ser criado pelo Inquilino/Proprietário no portal ou Corretor no CRM)
   async create(req: Request, res: Response) {
     try {
-      const { title, description, priority, imageUrl, propertyId, clientId, ownerId } = req.body;
-      const user = req.user as any; // Pega os dados do token (authMiddleware)
+      const { title, description, priority, imageUrl, propertyId, clientId } = req.body;
+      const user = req.user as any; 
 
-      // Identifica quem está abrindo o chamado com base no token do Portal
       const isTenant = user?.role === 'CLIENT' || user?.role === 'INQUILINO';
-      const isOwner = user?.role === 'PROPRIETARIO';
 
-      // Monta os dados base do ticket
       const ticketData: any = {
         title, 
         description, 
@@ -24,15 +21,12 @@ export class TicketController {
         propertyId
       };
 
-      // Se for pelo portal, força o ID do usuário logado por segurança
+      // Se for inquilino, vincula o ID dele. Se for proprietário, o vinculo já é feito pelo propertyId
       if (isTenant) {
         ticketData.clientId = user.id;
-      } else if (isOwner) {
-        ticketData.ownerId = user.id; 
-      } else {
-        // Se for criado pelo CRM (Corretor), usa o que veio do frontend
+      } else if (!user?.role) {
+        // Se veio do CRM e mandou clientId
         if (clientId) ticketData.clientId = clientId;
-        if (ownerId) ticketData.ownerId = ownerId;
       }
 
       const ticket = await prisma.ticket.create({
