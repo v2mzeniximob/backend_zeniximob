@@ -76,7 +76,7 @@ export class InvoiceController {
     }
   }
 
-  // 4. GERAR COBRANÇA (PIX OU BOLETO)
+  // 4. 🚀 GERAR COBRANÇA (PIX OU BOLETO) 🚀
   async generateCharge(req: Request, res: Response) {
     try {
       const { id } = req.params; 
@@ -107,7 +107,7 @@ export class InvoiceController {
       const property = invoice.contract.property;
 
       // ==========================================
-      // TRATAMENTO BLINDADO DE DADOS (ANTI ERRO 500)
+      // TRATAMENTO DE DADOS
       // ==========================================
       
       const email = tenant?.email?.trim() || 'cliente@mail.com';
@@ -124,7 +124,7 @@ export class InvoiceController {
       
       let rawAddress = property?.address || 'Rua Principal, 100';
       let streetName = rawAddress;
-      let streetNumber = '100'; // MP não gosta de S/N
+      let streetNumber = '100'; 
       
       if (rawAddress.includes(',')) {
         const parts = rawAddress.split(',');
@@ -139,7 +139,7 @@ export class InvoiceController {
       const city = property?.city || 'São Paulo';
 
       // ==========================================
-      // CONSTRUÇÃO SEPARADA (PIX VS BOLETO)
+      // CONSTRUÇÃO DO PAYLOAD MERCADO PAGO
       // ==========================================
       const payerData: any = {
         email: email,
@@ -148,7 +148,6 @@ export class InvoiceController {
         identification: { type: docType, number: cleanDoc }
       };
 
-      // O Mercado pago pode dar erro 500 se mandarmos endereço no PIX. Portanto, só mandamos no boleto:
       if (method === 'boleto') {
         payerData.address = {
            zip_code: cep,
@@ -161,12 +160,21 @@ export class InvoiceController {
       }
 
       const paymentData = {
-        // Asseguramos que o valor é um número float com duas casas decimais rigorosamente
         transaction_amount: Number(Number(invoice.totalAmount).toFixed(2)), 
         description: chargeDescription.substring(0, 200),
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
         payer: payerData
       };
+
+      // ==========================================
+      // LOGS DE DEPURAÇÃO PARA O RENDER
+      // ==========================================
+      console.log("==========================================");
+      console.log("🚀 INICIANDO GERAÇÃO NO MERCADO PAGO");
+      console.log(`Fatura ID: ${invoice.id} | Método: ${method}`);
+      console.log("📦 PAYLOAD ENVIADO PARA O MP:");
+      console.log(JSON.stringify(paymentData, null, 2));
+      console.log("==========================================");
 
       const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
         method: 'POST',
@@ -181,10 +189,14 @@ export class InvoiceController {
       const mpResult = await mpResponse.json();
 
       if (!mpResponse.ok) {
-        console.error('Payload rejeitado pelo MP:', JSON.stringify(paymentData, null, 2));
-        console.error('Erro detalhado do MP:', mpResult);
+        console.error("❌ ERRO RETORNADO PELO MERCADO PAGO:");
+        console.error(JSON.stringify(mpResult, null, 2));
+        console.log("==========================================");
         return res.status(400).json({ error: 'Erro ao gerar cobrança no Mercado Pago.', detail: mpResult });
       }
+
+      console.log("✅ SUCESSO! Pagamento criado no MP:", mpResult.id);
+      console.log("==========================================");
 
       const paymentId = mpResult.id.toString();
       let pixQrCode = null;
@@ -221,7 +233,7 @@ export class InvoiceController {
       });
 
     } catch (error) {
-      console.error('Erro Crítico ao gerar cobrança:', error);
+      console.error('❌ ERRO CRÍTICO NO SERVIDOR:', error);
       return res.status(500).json({ error: 'Erro interno ao comunicar com o Gateway.' });
     }
   }
