@@ -204,8 +204,8 @@ routes.post('/ai/generate-description', authMiddleware, aiController.generateDes
 
 // Manutenções (Tickets)
 routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
-routes.get('/portal/tickets', authMiddleware, portalOnly, ticketController.list);
-routes.patch('/portal/tickets/:id/status', authMiddleware, portalOnly, ticketController.updateStatus);
+routes.get('/tickets', authMiddleware, ticketController.list);
+routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
