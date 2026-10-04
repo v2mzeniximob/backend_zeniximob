@@ -12,7 +12,6 @@ export class ContractController {
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      // Adicionamos depositValue e depositDate no recebimento do body
       const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl, depositValue, depositDate } = req.body;
       
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
@@ -21,9 +20,6 @@ export class ContractController {
       const contractType = type || 'Locação';
       const isSale = contractType === 'Venda';
 
-      // ==========================================================
-      // NOVA TRAVA: VERIFICAÇÃO DE PROPOSTA ACEITA
-      // ==========================================================
       const acceptedProposal = await prisma.proposal.findFirst({
         where: {
           propertyId: propertyId,
@@ -39,7 +35,6 @@ export class ContractController {
         });
       }
 
-      // Trava de Segurança: Impede dois contratos ativos no mesmo imóvel
       const activeContract = await prisma.contract.findFirst({
         where: { propertyId: propertyId, status: 'Ativo' }
       });
@@ -48,7 +43,6 @@ export class ContractController {
         return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo ou já foi vendido.' });
       }
 
-      // Cria o Contrato salvando também os dados do Caução
       const contract = await prisma.contract.create({
         data: {
           type: contractType, 
@@ -66,15 +60,11 @@ export class ContractController {
         }
       });
 
-      // ==========================================================
-      // A MAGIA DA AUTOMAÇÃO: Diferencia Venda vs Locação
-      // ==========================================================
       await prisma.client.update({
         where: { id: tenantId },
         data: isSale ? { isBuyer: true } : { isTenant: true }
       });
 
-      // Atualiza o Status do Imóvel
       await prisma.property.update({ 
         where: { id: propertyId }, 
         data: { 
@@ -83,22 +73,18 @@ export class ContractController {
         } 
       });
 
-      // ==========================================================
-      // GERAÇÃO DE FATURAS (Caução + Boletos de Aluguel/Venda)
-      // ==========================================================
-      
-      // 1. GERAÇÃO DA FATURA DE CAUÇÃO (Se for locação e tiver valor preenchido)
+      // GERAÇÃO DA FATURA DE CAUÇÃO
       if (depositValue && Number(depositValue) > 0 && depositDate) {
         try {
           await prisma.invoice.create({
             data: {
               contractId: contract.id,
               totalAmount: Number(depositValue),
-              realEstateFee: 0, // Caução não tem desconto de taxa administrativa
+              realEstateFee: 0,
               ownerAmount: Number(depositValue),
               dueDate: new Date(depositDate),
               status: 'Pendente',
-              description: 'Caução' // Título amigável da Fatura
+              description: 'Caução' 
             }
           });
         } catch (caucaoError) {
@@ -106,21 +92,18 @@ export class ContractController {
         }
       }
 
-      // 2. GERAÇÃO DAS PARCELAS RECORRENTES (Aluguel ou Venda)
+      // GERAÇÃO DAS PARCELAS RECORRENTES
       if (startDate && rentValue) {
         const start = new Date(startDate);
-        // Se for Venda e não tiver data de fim, gera 1 parcela só (o Início = Fim)
         const end = endDate ? new Date(endDate) : new Date(startDate); 
         const rentNumber = parseFloat(rentValue.toString().replace(',', '.'));
         
-        // Cálculos Financeiros (Comissão da Imobiliária vs Repasse ao Dono)
         const adminFee = adminFeePercent ? (rentNumber * (Number(adminFeePercent) / 100)) : 0;
         const repasse = rentNumber - adminFee;
 
         if (start <= end && !isNaN(rentNumber)) {
           let currentMonth = new Date(start);
           
-          // O Loop roda 1 vez para Vendas, ou "X" vezes para meses de Locação
           while (currentMonth <= end) {
             try {
               await prisma.invoice.create({
@@ -131,13 +114,12 @@ export class ContractController {
                   ownerAmount: repasse,
                   dueDate: new Date(currentMonth),
                   status: 'Pendente',
-                  description: isSale ? 'Parcela de Venda' : 'Aluguel Mensal' // Adicionado o campo description
+                  description: isSale ? 'Parcela de Venda' : 'Aluguel Mensal' 
                 }
               });
             } catch (invoiceError) {
               console.error('Falha ao gerar parcela:', invoiceError);
             }
-            // Avança 1 mês para a próxima parcela
             currentMonth.setMonth(currentMonth.getMonth() + 1);
           }
         }
@@ -150,7 +132,7 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS (COM FATURAS E VISTORIAS)
+  // 2. LISTAR CONTRATOS (CORRIGIDO PARA TRAZER E-MAIL E TELEFONE)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -165,20 +147,19 @@ export class ContractController {
         where: whereClause,
         include: {
           property: { select: { title: true, address: true, owner: { select: { name: true } } } },
-          tenant: { select: { name: true, document: true, clientType: true } },
+          // AQUI ESTÁ A CORREÇÃO MÁGICA: Adicionado email e phone na busca
+          tenant: { select: { name: true, document: true, clientType: true, email: true, phone: true, cpf: true, corporateName: true } },
           invoices: { orderBy: { dueDate: 'asc' } },
           inspections: true
         },
         orderBy: { createdAt: 'desc' }
       });
 
-      // Formata a resposta para o frontend
       const mappedContracts = contracts.map((c: any) => {
         if (c.invoices) {
            c.invoices = c.invoices.map((inv: any, index: number) => ({
               ...inv,
               amount: inv.totalAmount,
-              // Mantém o título "Caução" se vier do banco, caso contrário formata normal
               description: inv.description || (c.type === 'Venda' ? `Parcela Única / Sinal` : `Aluguel - Parcela ${index + 1}`)
            }));
         }
@@ -204,7 +185,6 @@ export class ContractController {
         include: { property: true }
       });
 
-      // Se o contrato for encerrado/rescindido, devolvemos o imóvel para "Vago/Disponível"
       if (status === 'Encerrado' || status === 'Rescindido') {
         await prisma.property.update({ 
           where: { id: contract.propertyId }, 
@@ -221,7 +201,7 @@ export class ContractController {
   // 4. ADICIONAR VISTORIA (INSPECTION)
   async addInspection(req: Request, res: Response) {
     try {
-      const { id } = req.params; // contractId
+      const { id } = req.params;
       const { type, date, reportUrl } = req.body;
 
       const inspection = await prisma.inspection.create({
@@ -250,13 +230,9 @@ export class ContractController {
         return res.status(404).json({ error: 'Contrato não encontrado.' });
       }
 
-      // Exclui as faturas vinculadas primeiro para evitar erro de restrição de chave estrangeira (Foreign Key Constraint)
       await prisma.invoice.deleteMany({ where: { contractId: id } });
-      
-      // Exclui o contrato (as vistorias são apagadas automaticamente pelo Cascade)
       await prisma.contract.delete({ where: { id } });
 
-      // Libera o imóvel
       await prisma.property.update({
         where: { id: contract.propertyId },
         data: { rentStatus: 'Vago', tenantId: null }
