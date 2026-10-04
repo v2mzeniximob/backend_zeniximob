@@ -191,6 +191,7 @@ routes.get('/invoices', authMiddleware, invoiceController.list);
 routes.post('/invoices', authMiddleware, invoiceController.create);
 routes.patch('/invoices/:id/pay', authMiddleware, invoiceController.markAsPaid);
 routes.post('/invoices/:id/charge', authMiddleware, invoiceController.generateCharge);
+routes.put('/invoices/:id/repasse', authMiddleware, invoiceController.updateRepasse);
 
 // Configurações da Própria Loja
 routes.get('/my-store', authMiddleware, realEstateController.getMyStore);

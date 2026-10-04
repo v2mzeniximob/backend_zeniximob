@@ -18,7 +18,7 @@ export class InvoiceController {
           contract: {
             include: {
               property: { select: { title: true } },
-              tenant: { select: { name: true, document: true, email: true } } // Ajustado para ler 'document' do Client
+              tenant: { select: { name: true, document: true, email: true } }
             }
           }
         },
@@ -30,7 +30,7 @@ export class InvoiceController {
         return {
          ...inv,
          amount: inv.totalAmount,
-         description: isSale ? `Venda - Parcela ${idx + 1}` : `Aluguel - Parcela ${idx + 1}`
+         description: inv.description || (isSale ? `Venda - Parcela ${idx + 1}` : `Aluguel - Parcela ${idx + 1}`)
         };
       });
 
@@ -43,7 +43,7 @@ export class InvoiceController {
   // 2. CRIAR FATURA MANUAL
   async create(req: Request, res: Response) {
     try {
-      const { contractId, amount, dueDate } = req.body;
+      const { contractId, amount, dueDate, description } = req.body;
       const amt = Number(amount);
       const invoice = await prisma.invoice.create({
         data: {
@@ -52,10 +52,11 @@ export class InvoiceController {
           realEstateFee: 0,
           ownerAmount: amt,
           dueDate: new Date(dueDate),
-          status: 'Pendente'
+          status: 'Pendente',
+          description: description || 'Nova Fatura'
         }
       });
-      return res.status(201).json({ ...invoice, amount: invoice.totalAmount, description: 'Nova Fatura' });
+      return res.status(201).json({ ...invoice, amount: invoice.totalAmount });
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao criar fatura.' });
     }
@@ -75,7 +76,7 @@ export class InvoiceController {
     }
   }
 
-  // 4. 🚀 GERAR COBRANÇA (PIX OU BOLETO) 🚀
+  // 4. GERAR COBRANÇA (PIX OU BOLETO)
   async generateCharge(req: Request, res: Response) {
     try {
       const { id } = req.params; 
@@ -100,22 +101,24 @@ export class InvoiceController {
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já se encontra paga.' });
 
       const isSale = invoice.contract?.type === 'Venda';
-      const chargeDescription = isSale ? 'Pagamento de Parcela de Venda' : 'Pagamento de Aluguel';
+      const chargeDescription = invoice.description || (isSale ? 'Pagamento de Parcela de Venda' : 'Pagamento de Aluguel');
 
       // ==========================================
       // TRATAMENTO DO CLIENTE (Nome, Sobrenome, CPF)
       // ==========================================
       const tenant = invoice.contract.tenant;
-      const email = tenant?.email || 'email_padrao@suaimobiliaria.com';
-      const cpf = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111'; // Usa o document do Client
+      // Correção: E-mail genérico mais limpo, exigido pelo MP se o cliente não tiver um válido
+      const email = tenant?.email?.trim() || 'cliente@sememail.com';
+      const cpf = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111';
       
-      const fullName = tenant?.name?.trim() || 'Cliente Sobrenome';
-      const nameParts = fullName.split(' ');
-      const firstName = nameParts[0];
+      // Correção: Garantir que o nome tenha pelo menos duas partes
+      const rawName = tenant?.name?.trim() || 'Cliente';
+      const nameParts = rawName.split(' ');
+      const firstName = nameParts[0] || 'Cliente';
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
       // ==========================================
-      // TRATAMENTO DO ENDEREÇO MÁGICO (Regra da Febraban para Boleto)
+      // TRATAMENTO DO ENDEREÇO (Boleto)
       // ==========================================
       const property = invoice.contract.property;
       const cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
@@ -124,7 +127,6 @@ export class InvoiceController {
       let streetName = rawAddress;
       let streetNumber = 'S/N';
       
-      // Separador inteligente: tenta dividir pela vírgula (Rua X, 123) ou procura o primeiro número
       if (rawAddress.includes(',')) {
         const parts = rawAddress.split(',');
         streetName = parts[0].trim();
@@ -146,7 +148,7 @@ export class InvoiceController {
       // ==========================================
       const paymentData = {
         transaction_amount: Number(invoice.totalAmount),
-        description: chargeDescription, // Agora é dinâmico (Venda ou Aluguel)
+        description: chargeDescription,
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
         payer: {
           email: email,
@@ -218,6 +220,35 @@ export class InvoiceController {
     } catch (error) {
       console.error('Erro ao gerar cobrança:', error);
       return res.status(500).json({ error: 'Erro interno ao comunicar com o Gateway.' });
+    }
+  }
+
+  // 5. ATUALIZAR DADOS DO REPASSE (Proprietário)
+  async updateRepasse(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { iptuValue, condoValue, waterValue, fineValue, transferStatus, iptuDocUrl, condoDocUrl, waterDocUrl, fineDocUrl } = req.body;
+
+      const updated = await prisma.invoice.update({
+        where: { id },
+        data: {
+          iptuValue: Number(iptuValue || 0),
+          condoValue: Number(condoValue || 0),
+          waterValue: Number(waterValue || 0),
+          fineValue: Number(fineValue || 0),
+          transferStatus: transferStatus || 'Aguardando',
+          transferDate: transferStatus === 'Repassado' ? new Date() : null,
+          iptuDocUrl,
+          condoDocUrl,
+          waterDocUrl,
+          fineDocUrl
+        }
+      });
+
+      return res.json({ message: 'Repasse atualizado com sucesso!', invoice: updated });
+    } catch (error) {
+      console.error('Erro ao atualizar repasse:', error);
+      return res.status(500).json({ error: 'Erro ao atualizar dados do repasse.' });
     }
   }
 }

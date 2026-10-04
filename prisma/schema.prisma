@@ -452,12 +452,16 @@ model Contract {
   adminFeePercent   Float      
   readjustmentIndex String?     
   
+  // NOVOS CAMPOS PARA O CAUÇÃO
+  depositValue      Float?       @default(0) // Valor do Caução
+  depositDate       DateTime?    // Data de vencimento do boleto de caução
+  
   documentUrl       String?      @db.Text // PDF anexado após assinatura
 
   propertyId        String
   property          Property     @relation(fields: [propertyId], references: [id])
   
-  tenantId          String?      
+  tenantId          String?     
   tenant            Client?      @relation(fields: [tenantId], references: [id])
   
   invoices          Invoice[]
@@ -491,10 +495,31 @@ model Invoice {
   paidDate       DateTime?
   status         String   @default("Pendente") // Pendente, Pago, Vencido
   
-  // Valores
+  // Título Dinâmico (ex: "Aluguel Mensal", "Caução")
+  description    String?  
+  
+  // Valores da Cobrança do Inquilino
   totalAmount    Float
-  realEstateFee  Float    // Parte da Imobiliária (Comissão/Taxa Admin)
-  ownerAmount    Float    // Repasse ao Proprietário
+  
+  // DETALHAMENTO DO REPASSE PARA O PROPRIETÁRIO
+  realEstateFee  Float    // Parte da Imobiliária (Comissão/Taxa Admin calculada da % do contrato)
+  ownerAmount    Float    // Repasse Base ao Proprietário (Aluguel - Taxa)
+  
+  iptuValue      Float?   @default(0)
+  iptuDocUrl     String?  @db.Text
+  
+  condoValue     Float?   @default(0)
+  condoDocUrl    String?  @db.Text
+  
+  waterValue     Float?   @default(0)
+  waterDocUrl    String?  @db.Text
+  
+  fineValue      Float?   @default(0) // Multas (atraso, quebra)
+  fineDocUrl     String?  @db.Text
+  
+  // Status específico para o repasse ao proprietário
+  transferStatus String   @default("Aguardando") // Aguardando, Repassado
+  transferDate   DateTime? 
   
   // Gateway de Pagamento
   barcode        String?
@@ -511,7 +536,6 @@ model Invoice {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
-
 // ==========================================
 // PROPOSTAS
 // ==========================================
