@@ -12,7 +12,8 @@ export class ContractController {
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl } = req.body;
+      // Adicionamos depositValue e depositDate no recebimento do body
+      const { type, propertyId, tenantId, startDate, endDate, rentValue, adminFeePercent, readjustmentIndex, documentUrl, depositValue, depositDate } = req.body;
       
       if (!propertyId) return res.status(400).json({ error: 'Imóvel é obrigatório.' });
       if (!tenantId) return res.status(400).json({ error: 'Cliente é obrigatório.' });
@@ -47,7 +48,7 @@ export class ContractController {
         return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo ou já foi vendido.' });
       }
 
-      // Cria o Contrato
+      // Cria o Contrato salvando também os dados do Caução
       const contract = await prisma.contract.create({
         data: {
           type: contractType, 
@@ -59,6 +60,8 @@ export class ContractController {
           rentValue: Number(rentValue), 
           adminFeePercent: Number(adminFeePercent || 0), 
           readjustmentIndex, 
+          depositValue: depositValue ? Number(depositValue) : 0,
+          depositDate: depositDate ? new Date(depositDate) : null,
           documentUrl
         }
       });
@@ -80,7 +83,30 @@ export class ContractController {
         } 
       });
 
-      // GERAÇÃO DE FATURAS (Boletos de Aluguel OU Parcelas da Venda)
+      // ==========================================================
+      // GERAÇÃO DE FATURAS (Caução + Boletos de Aluguel/Venda)
+      // ==========================================================
+      
+      // 1. GERAÇÃO DA FATURA DE CAUÇÃO (Se for locação e tiver valor preenchido)
+      if (depositValue && Number(depositValue) > 0 && depositDate) {
+        try {
+          await prisma.invoice.create({
+            data: {
+              contractId: contract.id,
+              totalAmount: Number(depositValue),
+              realEstateFee: 0, // Caução não tem desconto de taxa administrativa
+              ownerAmount: Number(depositValue),
+              dueDate: new Date(depositDate),
+              status: 'Pendente',
+              description: 'Caução' // Título amigável da Fatura
+            }
+          });
+        } catch (caucaoError) {
+          console.error('Falha ao gerar Caução:', caucaoError);
+        }
+      }
+
+      // 2. GERAÇÃO DAS PARCELAS RECORRENTES (Aluguel ou Venda)
       if (startDate && rentValue) {
         const start = new Date(startDate);
         // Se for Venda e não tiver data de fim, gera 1 parcela só (o Início = Fim)
@@ -104,7 +130,8 @@ export class ContractController {
                   realEstateFee: adminFee,
                   ownerAmount: repasse,
                   dueDate: new Date(currentMonth),
-                  status: 'Pendente'
+                  status: 'Pendente',
+                  description: isSale ? 'Parcela de Venda' : 'Aluguel Mensal' // Adicionado o campo description
                 }
               });
             } catch (invoiceError) {
@@ -151,7 +178,8 @@ export class ContractController {
            c.invoices = c.invoices.map((inv: any, index: number) => ({
               ...inv,
               amount: inv.totalAmount,
-              description: c.type === 'Venda' ? `Parcela Única / Sinal` : `Aluguel - Parcela ${index + 1}`
+              // Mantém o título "Caução" se vier do banco, caso contrário formata normal
+              description: inv.description || (c.type === 'Venda' ? `Parcela Única / Sinal` : `Aluguel - Parcela ${index + 1}`)
            }));
         }
         return c;
