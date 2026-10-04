@@ -132,7 +132,7 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS (CORRIGIDO PARA TRAZER E-MAIL E TELEFONE)
+  // 2. LISTAR CONTRATOS (CORRIGIDO)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -147,8 +147,7 @@ export class ContractController {
         where: whereClause,
         include: {
           property: { select: { title: true, address: true, owner: { select: { name: true } } } },
-          // AQUI ESTÁ A CORREÇÃO MÁGICA: Adicionado email e phone na busca
-          tenant: { select: { name: true, document: true, clientType: true, email: true, phone: true, cpf: true, corporateName: true } },
+          tenant: { select: { name: true, document: true, clientType: true, email: true, phone: true, corporateName: true } },
           invoices: { orderBy: { dueDate: 'asc' } },
           inspections: true
         },
@@ -168,11 +167,10 @@ export class ContractController {
 
       return res.json(mappedContracts);
     } catch (error) { 
-      console.error(error);
+      console.error('Erro detalhado no backend:', error);
       return res.status(500).json({ error: 'Erro ao listar contratos.' }); 
     }
   }
-
   // 3. ATUALIZAR E ENCERRAR CONTRATO
   async update(req: Request, res: Response) {
     try {
