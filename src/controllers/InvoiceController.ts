@@ -18,7 +18,7 @@ export class InvoiceController {
           contract: {
             include: {
               property: { select: { title: true } },
-              tenant: { select: { name: true, document: true, email: true } }
+              tenant: { select: { name: true, document: true, email: true, phone: true, corporateName: true } }
             }
           }
         },
@@ -102,14 +102,12 @@ export class InvoiceController {
 
       const isSale = invoice.contract?.type === 'Venda';
       const chargeDescription = invoice.description || (isSale ? 'Pagamento de Parcela de Venda' : 'Pagamento de Aluguel');
-
       const tenant = invoice.contract.tenant;
-      const property = invoice.contract.property;
 
       // ==========================================
-      // TRATAMENTO DE DADOS DO CLIENTE
+      // TRATAMENTO DE DADOS (SIMPLIFICADO PARA EVITAR 500)
       // ==========================================
-      const email = tenant?.email?.trim() || 'cliente@mail.com';
+      const email = tenant?.email?.trim() || 'cliente@suaimobiliaria.com.br';
       const cleanDoc = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111';
       const docType = cleanDoc.length === 14 ? 'CNPJ' : 'CPF';
       
@@ -119,67 +117,24 @@ export class InvoiceController {
       const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
       // ==========================================
-      // TRATAMENTO INTELIGENTE DE ENDEREÇO
+      // PAYLOAD MERCADO PAGO (SEM ENDEREÇO PARA EVITAR ERRO DE CEP)
       // ==========================================
-      let cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
-      if (cep.length !== 8) cep = '01001000';
-      
-      let rawAddress = property?.address?.trim() || 'Rua Principal, 100';
-      let streetName = rawAddress;
-      let streetNumber = '100'; 
-      
-      if (rawAddress.includes(',')) {
-        // Caso 1: Tem vírgula (Ex: "Rua Josefina Grassini, 120")
-        const parts = rawAddress.split(',');
-        streetName = parts[0].trim();
-        const numMatch = parts[1].match(/\d+/); // Pega apenas os números após a vírgula
-        streetNumber = numMatch ? numMatch[0] : '100';
-      } else {
-        // Caso 2: Não tem vírgula (Ex: "Rua Josefina Grassini 120")
-        // O Regex pega toda a string antes do último bloco de números
-        const numMatch = rawAddress.match(/(.*\D)\s*(\d+)/);
-        if (numMatch) {
-          streetName = numMatch[1].trim(); // Tudo que não for o número ("Rua Josefina Grassini")
-          streetNumber = numMatch[2];      // O número ("120")
-        }
-      }
-
-      let federalUnit = property?.state ? property.state.trim().toUpperCase() : 'SP';
-      if (federalUnit.length !== 2) federalUnit = 'SP'; 
-
-      const neighborhood = property?.neighborhood || 'Centro';
-      const city = property?.city || 'São Paulo';
-
-      // ==========================================
-      // CONSTRUÇÃO DO PAYLOAD MERCADO PAGO
-      // ==========================================
-      const payerData: any = {
-        email: email,
-        first_name: firstName,
-        last_name: lastName,
-        identification: { type: docType, number: cleanDoc }
-      };
-
-      if (method === 'boleto') {
-        payerData.address = {
-           zip_code: cep,
-           street_name: streetName.substring(0, 200),
-           street_number: streetNumber.substring(0, 200),
-           neighborhood: neighborhood.substring(0, 200),
-           city: city.substring(0, 200),
-           federal_unit: federalUnit
-        };
-      }
-
       const paymentData = {
         transaction_amount: Number(Number(invoice.totalAmount).toFixed(2)), 
         description: chargeDescription.substring(0, 200),
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
-        payer: payerData
+        payer: {
+          email: email,
+          first_name: firstName,
+          last_name: lastName,
+          identification: { type: docType, number: cleanDoc }
+          // Endereço removido. O MP exige apenas Nome, Email e CPF para a maioria das contas.
+        }
       };
 
       console.log("==========================================");
       console.log("🚀 INICIANDO GERAÇÃO NO MERCADO PAGO");
+      console.log("🔑 Token Usado:", tokenMP.substring(0, 10) + "********"); // <--- AQUI VOCÊ VAI VER O SEU TOKEN
       console.log("📦 PAYLOAD ENVIADO PARA O MP:");
       console.log(JSON.stringify(paymentData, null, 2));
       console.log("==========================================");
@@ -189,7 +144,7 @@ export class InvoiceController {
         headers: {
           'Authorization': `Bearer ${tokenMP}`,
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': uuidv4()
+          'X-Idempotency-Key': uuidv4() // Idempotência recomendada pelo suporte
         },
         body: JSON.stringify(paymentData)
       });
@@ -230,11 +185,7 @@ export class InvoiceController {
 
       return res.json({ 
         message: 'Cobrança gerada com sucesso!', 
-        invoice: { 
-          ...updatedInvoice, 
-          amount: updatedInvoice.totalAmount,
-          description: chargeDescription
-        } 
+        invoice: { ...updatedInvoice, amount: updatedInvoice.totalAmount, description: chargeDescription } 
       });
 
     } catch (error) {
@@ -258,10 +209,7 @@ export class InvoiceController {
           fineValue: Number(fineValue || 0),
           transferStatus: transferStatus || 'Aguardando',
           transferDate: transferStatus === 'Repassado' ? new Date() : null,
-          iptuDocUrl,
-          condoDocUrl,
-          waterDocUrl,
-          fineDocUrl
+          iptuDocUrl, condoDocUrl, waterDocUrl, fineDocUrl
         }
       });
 
