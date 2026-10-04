@@ -9,22 +9,20 @@ const secret = process.env.JWT_SECRET || 'zeniximob_super_secret_key_2024';
 
 export class ClientPortalController {
 
- // ==========================================
+  // ==========================================
   // 1. FAZER LOGIN NO PORTAL  LÊ O SLUG
   // ==========================================
   async login(req: Request, res: Response) {
     try {
       const { document, password, role } = req.body;
-      const slug = req.headers['x-store-slug'] as string; // <--- Lê a imobiliária vinda do Frontend!
+      const slug = req.headers['x-store-slug'] as string; 
 
       if (!document || !password || !role) {
         return res.status(400).json({ error: 'Credenciais incompletas.' });
       }
 
-      // Remove os pontos e traços do documento
       const cleanDocument = document.replace(/\D/g, '');
 
-      // 1. Se o slug foi enviado, precisamos descobrir qual é o ID desta imobiliária
       let realEstateId = null;
       if (slug) {
         const store = await prisma.realEstate.findUnique({ where: { slug } });
@@ -37,7 +35,6 @@ export class ClientPortalController {
 
       let userFound: any = null;
 
-      // 2. Prepara a busca. Se tivermos o realEstateId, procura SÓ nessa imobiliária.
       if (role === 'CLIENT') {
         const query: any = { document: cleanDocument };
         if (realEstateId) query.realEstateId = realEstateId;
@@ -58,13 +55,11 @@ export class ClientPortalController {
         return res.status(401).json({ error: 'Acesso não liberado. Solicite a sua senha à imobiliária.' });
       }
 
-      // 3. Verifica a Senha
       const isValidPassword = await bcrypt.compare(password, userFound.password);
       if (!isValidPassword) {
         return res.status(401).json({ error: 'Senha incorreta.' });
       }
 
-      // 4. GERA O TOKEN (já com a imobiliária e o papel corretos)
       const token = jwt.sign(
         { 
           id: userFound.id, 
@@ -109,7 +104,6 @@ export class ClientPortalController {
           }
         });
 
-        // Prepara a imagem de capa para o frontend não quebrar
         const contracts = contractsRaw.map((c: any) => ({
           ...c,
           property: {
@@ -137,6 +131,7 @@ export class ClientPortalController {
             contracts: {
               where: { status: 'Ativo' },
               include: {
+                // Aqui estamos garantindo que ele busque todas as faturas para repasse
                 invoices: { orderBy: { dueDate: 'desc' } }
               }
             }
@@ -144,7 +139,14 @@ export class ClientPortalController {
           orderBy: { createdAt: 'desc' }
         });
 
-        return res.json({ properties });
+        // Adicionado a busca de chamados (tickets) para o proprietário!
+        const tickets = await prisma.ticket.findMany({
+          where: { ownerId: user.id },
+          include: { property: { select: { title: true } } },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        return res.json({ properties, tickets });
       }
 
       return res.status(403).json({ error: 'Perfil não reconhecido.' });
