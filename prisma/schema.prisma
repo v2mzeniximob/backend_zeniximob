@@ -119,6 +119,8 @@ model RealEstate {
 
   mpAccessToken   String? @db.Text // Token de Acesso Privado
   mpPublicKey     String? @db.Text // Chave Pública
+  subscriptionStatus  String   @default("Ativo") // Ativo, Inadimplente, Bloqueado
+  paymentGatewayId    String?  // ID do cliente no Asaas/Stripe
 
   properties        Property[]
   leads             Lead[]
@@ -244,6 +246,8 @@ model Property {
   description   String?
   imageUrls     String[]    
   isActive      Boolean     @default(true)
+  exportToPortals     Boolean  @default(false) // Flag para enviar para Zap/VivaReal
+  tickets             Ticket[] // Relacionamento
   
   // Relacionamentos
   realEstateId  String
@@ -304,6 +308,8 @@ model Client {
   // Contatos
   phone             String
   email             String?
+  password          String?  // Senha para acessar o Portal do Inquilino
+  tickets           Ticket[] // Relacionamento com os chamados de manutenção
   
   // Dados do Cônjuge (PF)
   maritalStatus     String?
@@ -546,4 +552,27 @@ model KeyTerm {
   client       Client     @relation(fields: [clientId], references: [id])
   broker       Broker?    @relation(fields: [brokerId], references: [id])
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+}
+
+// ==========================================
+// MÓDULO DE MANUTENÇÕES E OBRAS (TICKETING)
+// ==========================================
+model Ticket {
+  id          String   @id @default(uuid())
+  title       String
+  description String   @db.Text
+  status      String   @default("Aberto") // Aberto, Em Orçamento, Em Andamento, Concluído
+  priority    String   @default("Média")  // Baixa, Média, Alta
+  imageUrl    String?  @db.Text           // Inquilino pode anexar foto do problema
+  
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id])
+  
+  clientId    String?  
+  client      Client?  @relation(fields: [clientId], references: [id]) // Inquilino que abriu
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("tickets")
 }
