@@ -143,8 +143,13 @@ export class RealEstateController {
   async list(req: Request, res: Response) {
     try {
       const stores = await prisma.realEstate.findMany({
-        orderBy: { createdAt: 'desc' },
-        include: { plan: true }
+        include: { 
+          plan: true,
+          masterContracts: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
+        }
       });
 
       const safeStores = stores.map((store: any) => {
