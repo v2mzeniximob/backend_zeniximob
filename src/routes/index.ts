@@ -254,6 +254,7 @@ routes.patch('/master/admins/:id/status', authMiddleware, masterOnly, masterConf
 // CONTRATOS E FATURAS SAAS DO MASTER
 // -----------------------------------
 routes.post('/master/contracts', authMiddleware, masterOnly, masterContractController.create);
+routes.put('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.update);
 routes.get('/master/contracts', authMiddleware, masterOnly, masterContractController.list);
 routes.delete('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.delete);
 

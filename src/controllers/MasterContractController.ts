@@ -70,6 +70,28 @@ export class MasterContractController {
     }
   }
 
+  // ATUALIZAR CONTRATO (ANEXAR DOCUMENTO)
+  async update(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { documentUrl } = req.body;
+
+      const contract = await prisma.masterContract.update({
+        where: { id },
+        data: { 
+          documentUrl,
+          // Se anexou o documento, muda automaticamente o status para Assinado
+          status: documentUrl ? 'Assinado' : 'Ativo' 
+        }
+      });
+
+      return res.json(contract);
+    } catch (error) {
+      console.error("Erro ao atualizar contrato:", error);
+      return res.status(500).json({ error: 'Erro ao atualizar o contrato.' });
+    }
+  }
+
   async list(req: Request, res: Response) {
     try {
       const contracts = await prisma.masterContract.findMany({
