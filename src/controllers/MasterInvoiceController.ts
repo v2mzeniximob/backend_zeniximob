@@ -99,7 +99,7 @@ export class MasterInvoiceController {
       if (isTestEnv || cleanDoc.length < 11) {
         // NÃO use 'test_user_' no e-mail, pois o Mercado Pago bloqueia. Usamos um e-mail genérico do próprio sistema.
         email = `cliente.sandbox.${Date.now()}@zeniximob.com.br`; 
-        cleanDoc = '50645012015'; // CPF válido genérico para testes do Mercado Pago
+        cleanDoc = '00000000000191';
       }
       
       const docType = cleanDoc.length === 14 ? 'CNPJ' : 'CPF';
