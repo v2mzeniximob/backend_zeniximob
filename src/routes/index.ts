@@ -23,10 +23,10 @@ import { AiController } from '../controllers/AiController';
 import { XmlController } from '../controllers/XmlController';
 import { TicketController } from '../controllers/TicketController';
 import { KeyController } from '../controllers/KeyController';
-
-// NOVOS CONTROLLERS DO ECOSSISTEMA MASTER
 import { MasterConfigController } from '../controllers/MasterConfigController';
 import { MasterContractController } from '../controllers/MasterContractController';
+import { MasterInvoiceController } from '../controllers/MasterInvoiceController';
+
 
 // Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
@@ -57,10 +57,9 @@ const xmlController = new XmlController();
 const ticketController = new TicketController();
 const clientPortalController = new ClientPortalController(); 
 const keyController = new KeyController();
-
-// INSTÂNCIAS DOS NOVOS CONTROLLERS DO MASTER
 const masterConfigController = new MasterConfigController();
 const masterContractController = new MasterContractController();
+const masterInvoiceController = new MasterInvoiceController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -242,7 +241,7 @@ routes.get('/master/dashboard/metrics', authMiddleware, masterOnly, dashboardCon
 routes.post('/real-estates/:id/upload', authMiddleware, masterOnly, upload.single('file'), signatureController.uploadRealEstateContract);
 
 // -----------------------------------
-// [NOVO] CONFIGURAÇÕES MASTER & ADMINS SAAS
+// CONFIGURAÇÕES MASTER & ADMINS SAAS
 // -----------------------------------
 routes.get('/master/config', authMiddleware, masterOnly, masterConfigController.get);
 routes.put('/master/config', authMiddleware, masterOnly, masterConfigController.update);
@@ -252,11 +251,16 @@ routes.post('/master/admins', authMiddleware, masterOnly, masterConfigController
 routes.patch('/master/admins/:id/status', authMiddleware, masterOnly, masterConfigController.toggleAdminStatus);
 
 // -----------------------------------
-// [NOVO] CONTRATOS E FATURAS SAAS DO MASTER
+// CONTRATOS E FATURAS SAAS DO MASTER
 // -----------------------------------
 routes.post('/master/contracts', authMiddleware, masterOnly, masterContractController.create);
 routes.get('/master/contracts', authMiddleware, masterOnly, masterContractController.list);
 routes.delete('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.delete);
+
+// Faturas SaaS do Master
+routes.get('/master/invoices', authMiddleware, masterOnly, masterInvoiceController.list);
+routes.patch('/master/invoices/:id/pay', authMiddleware, masterOnly, masterInvoiceController.markAsPaid);
+routes.post('/master/invoices/:id/charge', authMiddleware, masterOnly, masterInvoiceController.generateCharge);
 
 // -----------------------------------
 // CADASTROS E PLANOS (Existentes)
@@ -278,5 +282,7 @@ routes.post('/real-estates', realEstateController.create);
 routes.get('/real-estates', realEstateController.list);
 routes.put('/real-estates/:id', realEstateController.update);
 routes.patch('/real-estates/:id/status', realEstateController.toggleStatus);
+
+
 
 export default routes;
