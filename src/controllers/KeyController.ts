@@ -42,18 +42,31 @@ export class KeyController {
     }
   }
 
+ // 3. RETIRAR A CHAVE (CHECK-OUT)
   async withdraw(req: Request, res: Response) {
     try {
-      const { propertyId, clientName, reason, notes } = req.body;
+      // Agora o frontend também pode mandar o brokerId!
+      const { propertyId, clientName, reason, notes, brokerId } = req.body;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
-      const brokerId = user?.realEstateId ? user.id : null;
+      
+      // Lógica inteligente: 
+      // Se a recepcionista selecionou um corretor na tela, usa o ID selecionado.
+      // Se não selecionou nada, mas quem está logado no sistema já é um corretor, usa o ID dele próprio.
+      const finalBrokerId = brokerId || (user?.realEstateId ? user.id : null);
 
       const property = await prisma.property.findUnique({ where: { id: propertyId } });
       if (property.keyStatus === 'Retirada') return res.status(400).json({ error: 'Chave já retirada.' });
 
       const movement = await prisma.keyMovement.create({
-        data: { propertyId, realEstateId, brokerId, clientName, reason, notes }
+        data: { 
+          propertyId, 
+          realEstateId, 
+          brokerId: finalBrokerId, // Salva o corretor correto
+          clientName, 
+          reason, 
+          notes 
+        }
       });
 
       await prisma.property.update({ where: { id: propertyId }, data: { keyStatus: 'Retirada' } });
