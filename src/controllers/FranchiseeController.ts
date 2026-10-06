@@ -52,15 +52,25 @@ export class FranchiseeController {
   }
 
   // 2. Listar Franqueados (ESTE ERA O VILÃO QUE NÃO TRAZIA TODOS OS DADOS)
-  async list(req: Request, res: Response) {
+ async list(req: Request, res: Response) {
     try {
-      // Retorna todos os dados de forma explícita e integral sem filtrar nada
       const franchisees = await prisma.franchisee.findMany({
-        orderBy: { createdAt: 'desc' }
+        orderBy: { corporateName: 'asc' },
+        include: {
+          masterContracts: {
+            orderBy: { createdAt: 'desc' }, // Traz o contrato mais recente primeiro
+            take: 1 // Pega apenas o último contrato (o válido)
+          }
+        }
       });
-      return res.json(franchisees);
+      // (Resto do código para remover as senhas...)
+      const safeFranchisees = franchisees.map((f: any) => {
+        const { password, ...safe } = f;
+        return safe;
+      });
+      
+      return res.json(safeFranchisees);
     } catch (error) {
-      console.error('[FRANQUEADO_LIST_ERROR]', error);
       return res.status(500).json({ error: 'Erro ao listar franqueados.' });
     }
   }
