@@ -68,6 +68,7 @@ model Franchisee {
 
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
+  masterContracts  MasterContract[]
 }
 
 // ==========================================
@@ -131,6 +132,7 @@ model RealEstate {
   keyTerms          KeyTerm[]    
   insuranceCompanies InsuranceCompany[] 
   keyMovements      KeyMovement[]
+  masterContracts  MasterContract[]
 }
 
 // ==========================================
@@ -638,4 +640,64 @@ model KeyMovement {
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+}
+
+// ==========================================
+// CONFIGURAÇÕES GERAIS DO MASTER
+// ==========================================
+model MasterConfig {
+  id                           String   @id @default(uuid())
+  mpAccessToken                String?  @db.Text
+  mpPublicKey                  String?  @db.Text
+  templateMasterFranchisee     String?  @db.Text
+  templateMasterRealEstate     String?  @db.Text
+  templateFranchiseeRealEstate String?  @db.Text
+  updatedAt                    DateTime @updatedAt
+}
+
+// ==========================================
+// CONTRATOS DO MASTER (SaaS)
+// ==========================================
+model MasterContract {
+  id             String   @id @default(uuid())
+  type           String   // "MASTER_FRANQUEADO", "MASTER_IMOBILIARIA", "FRANQUEADO_IMOBILIARIA"
+  status         String   @default("Ativo")
+  startDate      DateTime
+  endDate        DateTime?
+  value          Float
+  documentUrl    String?  @db.Text
+
+  franchiseeId   String?
+  franchisee     Franchisee? @relation(fields: [franchiseeId], references: [id])
+  
+  realEstateId   String?
+  realEstate     RealEstate? @relation(fields: [realEstateId], references: [id])
+
+  invoices       MasterInvoice[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ==========================================
+// FATURAS DO MASTER (Cobrança SaaS)
+// ==========================================
+model MasterInvoice {
+  id               String   @id @default(uuid())
+  dueDate          DateTime
+  paidDate         DateTime?
+  amount           Float
+  status           String   @default("Pendente") // Pendente, Pago, Vencido
+  description      String?
+
+  mpPaymentId      String?
+  pixQrCode        String?  @db.Text
+  pixQrCodeBase64  String?  @db.Text
+  ticketUrl        String?  @db.Text
+
+  masterContractId String
+  masterContract   MasterContract @relation(fields: [masterContractId], references: [id], onDelete: Cascade)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
