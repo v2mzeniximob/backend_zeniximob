@@ -4,116 +4,124 @@ import { v4 as uuidv4 } from 'uuid';
 
 const prisma = new PrismaClient() as any;
 
-export class MasterInvoiceController {
+export class InvoiceController {
   
-  // ==========================================
-  // 1. LISTAR TODAS AS FATURAS DE ASSINATURA SAAS
-  // ==========================================
   async list(req: Request, res: Response) {
     try {
-      const invoices = await prisma.masterInvoice.findMany({
+      const user = req.user as any;
+      const realEstateId = user?.realEstateId || user?.id;
+
+      const invoices = await prisma.invoice.findMany({
+        where: { contract: { property: { realEstateId } } },
         include: {
-          masterContract: {
+          contract: {
             include: {
-              realEstate: { select: { tradeName: true, corporateName: true, cnpj: true, email: true, address: true, cep: true } },
-              franchisee: { select: { tradeName: true, corporateName: true, cnpj: true, email: true, address: true, cep: true } }
+              property: { select: { title: true } },
+              tenant: { select: { name: true, document: true, email: true, phone: true, corporateName: true } }
             }
           }
         },
         orderBy: { dueDate: 'asc' }
       });
-      return res.json(invoices);
+      
+      const mapped = invoices.map((inv: any, idx: number) => {
+        const isSale = inv.contract?.type === 'Venda';
+        return {
+         ...inv,
+         amount: inv.totalAmount,
+         description: inv.description || (isSale ? `Venda - Parcela ${idx + 1}` : `Aluguel - Parcela ${idx + 1}`)
+        };
+      });
+
+      return res.json(mapped);
     } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao listar faturas do SaaS.' });
+      return res.status(500).json({ error: 'Erro ao listar faturas.' });
     }
   }
 
-  // ==========================================
-  // 2. DAR BAIXA MANUAL NUMA FATURA
-  // ==========================================
+  async create(req: Request, res: Response) {
+    try {
+      const { contractId, amount, dueDate, description } = req.body;
+      const amt = Number(amount);
+      const invoice = await prisma.invoice.create({
+        data: {
+          contractId, 
+          totalAmount: amt,
+          realEstateFee: 0,
+          ownerAmount: amt,
+          dueDate: new Date(dueDate),
+          status: 'Pendente',
+          description: description || 'Nova Fatura'
+        }
+      });
+      return res.status(201).json({ ...invoice, amount: invoice.totalAmount });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao criar fatura.' });
+    }
+  }
+
   async markAsPaid(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      
-      const invoice = await prisma.masterInvoice.update({
+      const updated = await prisma.invoice.update({
         where: { id },
-        data: {
-          status: 'Pago',
-          paidDate: new Date()
-        }
+        data: { status: 'Pago', paidDate: new Date() }
       });
-
-      return res.json(invoice);
+      return res.json({ ...updated, amount: updated.totalAmount });
     } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao dar baixa na fatura.' });
+      return res.status(500).json({ error: 'Erro ao atualizar.' });
     }
   }
 
-  // ==========================================
-  // 3. 🚀 GERAR COBRANÇA (PIX OU BOLETO) NO MASTER 🚀
-  // ==========================================
+  // 4. 🚀 GERAR COBRANÇA (PIX OU BOLETO) 🚀
   async generateCharge(req: Request, res: Response) {
     try {
       const { id } = req.params; 
-      const { method } = req.body; // 'pix' ou 'boleto'
+      const { method } = req.body; 
 
-      // Busca a Fatura e o Contrato associado
-      const invoice = await prisma.masterInvoice.findUnique({
+      const invoice = await prisma.invoice.findUnique({
         where: { id },
         include: {
-          masterContract: {
+          contract: {
             include: {
-              realEstate: true,
-              franchisee: true
+              tenant: true,
+              property: { include: { realEstate: true } }
             }
           }
         }
       });
 
       if (!invoice) return res.status(404).json({ error: 'Fatura não encontrada.' });
-
-      // Busca as Credenciais do Master
-      const config = await prisma.masterConfig.findFirst();
-      const tokenMP = config?.mpAccessToken;
       
-      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado no Master. Vá em Configurações.' });
+      const tokenMP = invoice.contract?.property?.realEstate?.mpAccessToken;
+      if (!tokenMP) return res.status(400).json({ error: 'Mercado Pago não configurado.' });
       if (invoice.status === 'Pago') return res.status(400).json({ error: 'Esta fatura já está paga.' });
 
-      const chargeDescription = invoice.description || 'Assinatura Zenix SaaS';
+      const isSale = invoice.contract?.type === 'Venda';
+      const chargeDescription = invoice.description || (isSale ? 'Pagamento de Parcela de Venda' : 'Pagamento de Aluguel');
 
-      // Define quem é o cliente (Franqueado ou Imobiliária)
-      const clientNode = invoice.masterContract?.realEstate || invoice.masterContract?.franchisee;
+      const tenant = invoice.contract.tenant;
+      const property = invoice.contract.property;
 
       // ==========================================
-      // TRATAMENTO DOS DADOS DO CLIENTE (Com verificação de TESTE)
+      // TRATAMENTO DOS DADOS DO CLIENTE
       // ==========================================
-      const isTestEnv = tokenMP.startsWith('TEST-');
-
-      let email = clientNode?.email?.trim() || 'cliente@zeniximob.com.br';
-      let cleanDoc = clientNode?.cnpj ? clientNode.cnpj.replace(/\D/g, '') : '';
-      
-      // Se for ambiente de TESTE ou o CNPJ estiver vazio/inválido, forçamos dados genéricos do Sandbox para não dar erro
-      if (isTestEnv || cleanDoc.length < 11) {
-        email = 'test_user_123456@testuser.com';
-        cleanDoc = '50645012015'; // CPF válido genérico para testes do Mercado Pago
-      }
-      
+      const email = tenant?.email?.trim() || 'cliente@suaimobiliaria.com.br';
+      const cleanDoc = tenant?.document ? tenant.document.replace(/\D/g, '') : '11111111111';
       const docType = cleanDoc.length === 14 ? 'CNPJ' : 'CPF';
       
-      const rawName = clientNode?.tradeName || clientNode?.corporateName || 'Cliente Zenix';
+      const rawName = tenant?.name?.trim() || 'Cliente';
       const nameParts = rawName.split(' ');
       const firstName = nameParts[0] || 'Cliente';
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'SaaS';
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Sobrenome';
 
       // ==========================================
-      // SEPARAÇÃO INTELIGENTE DE RUA E NÚMERO (Para Boletos)
+      // SEPARAÇÃO INTELIGENTE DE RUA E NÚMERO
       // ==========================================
-      let cep = clientNode?.cep ? clientNode.cep.replace(/\D/g, '') : '01001000';
+      let cep = property?.cep ? property.cep.replace(/\D/g, '') : '01001000';
       if (cep.length !== 8) cep = '01001000';
       
-      let rawAddress = clientNode?.address?.trim() || 'Rua Principal, 100';
+      let rawAddress = property?.address?.trim() || 'Rua Principal, 100';
       let streetName = rawAddress;
       let streetNumber = 'S/N';
       
@@ -135,22 +143,27 @@ export class MasterInvoiceController {
         }
       }
 
+      // Forçar envio do street_number como STRING rigorosa exigida pelo suporte
       streetNumber = String(streetNumber);
       if (!streetNumber || streetNumber === 'S/N') streetNumber = '100';
 
-      const federalUnit = 'SP'; // Fallback padrão
-      const neighborhood = 'Centro'; // Fallback padrão
-      const city = 'São Paulo'; // Fallback padrão
+      let federalUnit = property?.state ? property.state.trim().toUpperCase() : 'SP';
+      if (federalUnit.length !== 2) federalUnit = 'SP'; 
+
+      const neighborhood = property?.neighborhood || 'Centro';
+      const city = property?.city || 'São Paulo';
 
       // ==========================================
       // FORMATAÇÃO DA DATA DE VENCIMENTO (ISO 8601)
       // ==========================================
       const dueDateObj = new Date(invoice.dueDate);
+      // Ajusta para o final do dia do vencimento para evitar que boleto vença muito cedo
       dueDateObj.setUTCHours(23, 59, 59, 999);
+      // Formato exigido: yyyy-MM-dd'T'HH:mm:ss.SSSZ
       const dateOfExpiration = dueDateObj.toISOString();
 
       // ==========================================
-      // MONTAGEM DO PAYLOAD
+      // MONTAGEM DO PAYLOAD 
       // ==========================================
       const payerData: any = {
         email: email,
@@ -171,30 +184,29 @@ export class MasterInvoiceController {
       }
 
       const paymentData: any = {
-        transaction_amount: Number(Number(invoice.amount).toFixed(2)), 
+        transaction_amount: Number(Number(invoice.totalAmount).toFixed(2)), 
         description: chargeDescription.substring(0, 200),
         payment_method_id: method === 'boleto' ? 'bolbradesco' : 'pix',
         payer: payerData
       };
 
+      // Adicionando o Vencimento apenas se for boleto, conforme sugerido pelo MP
       if (method === 'boleto') {
         paymentData.date_of_expiration = dateOfExpiration;
       }
 
       console.log("==========================================");
-      console.log(`🚀 GERANDO COBRANÇA MASTER SAAS - MP`);
-      console.log("📦 PAYLOAD ENVIADO:", JSON.stringify(paymentData, null, 2));
+      console.log(`🚀 GERANDO COBRANÇA - MP`);
+      console.log("📦 PAYLOAD ENVIADO PARA O MP:");
+      console.log(JSON.stringify(paymentData, null, 2));
       console.log("==========================================");
 
-      // ==========================================
-      // REQUISIÇÃO DIRETA A API DO MERCADO PAGO
-      // ==========================================
       const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${tokenMP}`,
           'Content-Type': 'application/json',
-          'X-Idempotency-Key': uuidv4() // Garante que a requisição não duplica
+          'X-Idempotency-Key': uuidv4() // Idempotência (Garante que a requisição é única)
         },
         body: JSON.stringify(paymentData)
       });
@@ -202,15 +214,14 @@ export class MasterInvoiceController {
       const mpResult = await mpResponse.json();
 
       if (!mpResponse.ok) {
-        console.error("❌ ERRO MERCADO PAGO:", JSON.stringify(mpResult, null, 2));
+        console.error("❌ ERRO RETORNADO PELO MERCADO PAGO:");
+        console.error(JSON.stringify(mpResult, null, 2));
+        console.log("==========================================");
         return res.status(400).json({ error: 'Erro ao gerar cobrança no Mercado Pago.', detail: mpResult });
       }
 
-      console.log("✅ Cobrança Master gerada com sucesso! ID:", mpResult.id);
+      console.log("✅ Cobrança gerada com sucesso! ID:", mpResult.id);
 
-      // ==========================================
-      // ATUALIZAR A FATURA NO BANCO DE DADOS
-      // ==========================================
       const paymentId = mpResult.id.toString();
       let pixQrCode = null;
       let pixQrCodeBase64 = null;
@@ -225,26 +236,50 @@ export class MasterInvoiceController {
         ticketUrl = mpResult.transaction_details?.external_resource_url || mpResult.point_of_interaction?.transaction_data?.ticket_url;
       }
 
-      const updatedInvoice = await prisma.masterInvoice.update({
+      const updatedInvoice = await prisma.invoice.update({
         where: { id },
         data: {
           mpPaymentId: paymentId,
           pixQrCode,
           pixQrCodeBase64,
           ticketUrl,
-          status: 'Pendente' // ou 'Aguardando Pagamento'
+          status: 'Aguardando Pagamento'
         }
       });
 
       return res.json({ 
         message: 'Cobrança gerada com sucesso!', 
-        invoice: updatedInvoice,
-        method
+        invoice: { ...updatedInvoice, amount: updatedInvoice.totalAmount, description: chargeDescription } 
       });
 
     } catch (error) {
-      console.error('❌ ERRO CRÍTICO NO MASTER INVOICE CONTROLLER:', error);
-      return res.status(500).json({ error: 'Erro interno ao comunicar com o Gateway do Mercado Pago.' });
+      console.error('❌ ERRO CRÍTICO NO SERVIDOR:', error);
+      return res.status(500).json({ error: 'Erro interno ao comunicar com o Gateway.' });
+    }
+  }
+
+  async updateRepasse(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { iptuValue, condoValue, waterValue, fineValue, transferStatus, iptuDocUrl, condoDocUrl, waterDocUrl, fineDocUrl } = req.body;
+
+      const updated = await prisma.invoice.update({
+        where: { id },
+        data: {
+          iptuValue: Number(iptuValue || 0),
+          condoValue: Number(condoValue || 0),
+          waterValue: Number(waterValue || 0),
+          fineValue: Number(fineValue || 0),
+          transferStatus: transferStatus || 'Aguardando',
+          transferDate: transferStatus === 'Repassado' ? new Date() : null,
+          iptuDocUrl, condoDocUrl, waterDocUrl, fineDocUrl
+        }
+      });
+
+      return res.json({ message: 'Repasse atualizado com sucesso!', invoice: updated });
+    } catch (error) {
+      console.error('Erro ao atualizar repasse:', error);
+      return res.status(500).json({ error: 'Erro ao atualizar dados do repasse.' });
     }
   }
 }
