@@ -94,9 +94,11 @@ export class MasterInvoiceController {
       let email = clientNode?.email?.trim() || 'cliente@zeniximob.com.br';
       let cleanDoc = clientNode?.cnpj ? clientNode.cnpj.replace(/\D/g, '') : '';
       
-      // Se for ambiente de TESTE ou o CNPJ estiver vazio/inválido, forçamos dados genéricos do Sandbox para não dar erro
+   
+     // Se for ambiente de TESTE ou o CNPJ estiver vazio/inválido, forçamos dados genéricos do Sandbox para não dar erro
       if (isTestEnv || cleanDoc.length < 11) {
-        email = 'test_user_123456@testuser.com';
+        // NÃO use 'test_user_' no e-mail, pois o Mercado Pago bloqueia. Usamos um e-mail genérico do próprio sistema.
+        email = `cliente.sandbox.${Date.now()}@zeniximob.com.br`; 
         cleanDoc = '50645012015'; // CPF válido genérico para testes do Mercado Pago
       }
       
