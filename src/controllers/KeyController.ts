@@ -18,7 +18,7 @@ export class KeyController {
             where: { returnedAt: null },
             include: { 
               broker: { select: { name: true } },
-              realEstate: { select: { name: true, tradeName: true } }
+              realEstate: { select: { tradeName: true, corporateName: true } }
             }
           }
         },
@@ -31,7 +31,6 @@ export class KeyController {
       return res.status(500).json({ error: 'Erro ao listar quadro de chaves.' });
     }
   }
-
   async updateKeyCode(req: Request, res: Response) {
     try {
       const { id } = req.params;
