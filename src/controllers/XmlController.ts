@@ -1,84 +1,137 @@
-// Caminho: src/controllers/XmlController.ts
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient() as any;
 
 export class XmlController {
+  
   async generateFeed(req: Request, res: Response) {
     try {
-      const { slug } = req.params; // Pega o slug da imobiliária na URL
+      // 1. Pega o slug da URL (ex: "vivian")
+      const { slug } = req.params; 
 
-      // Encontra a imobiliária e os imóveis marcados para exportação
-      const store = await prisma.realEstate.findUnique({
-        where: { slug },
-        include: {
-          properties: {
-            where: { exportToPortals: true, isActive: true },
-            include: { images: true }
-          }
+      // 2. Busca a imobiliária dona desse slug
+      const realEstate = await prisma.realEstate.findFirst({
+        where: { slug: slug }
+      });
+
+      if (!realEstate) {
+        return res.status(404).json({ error: 'Imobiliária não encontrada para este link.' });
+      }
+
+      // 3. Busca apenas imóveis ATIVOS e MARCADOS para exportação
+      const properties = await prisma.property.findMany({
+        where: {
+          realEstateId: realEstate.id,
+          exportToPortals: true
         }
       });
 
-      if (!store) return res.status(404).send('Imobiliária não encontrada');
-
-      // Monta o XML no padrão de mercado (Zap/VivaReal)
+      // 4. Inicia a construção segura do XML (Padrão VRSync - VivaReal/Zap)
       let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-      xml += `<Carga xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n`;
-      xml += `  <Imoveis>\n`;
+      xml += `<ListingDataFeed xmlns="http://www.vivareal.com/schemas/1.0/VRSync" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.vivareal.com/schemas/1.0/VRSync  http://xml.vivareal.com/vrsync.xsd">\n`;
+      xml += `  <Header>\n`;
+      xml += `    <Provider><![CDATA[${realEstate.tradeName || realEstate.name || 'ZenixImob'}]]></Provider>\n`;
+      xml += `    <Email>${realEstate.email || 'contato@suaimobiliaria.com.br'}</Email>\n`;
+      xml += `  </Header>\n`;
+      xml += `  <Listings>\n`;
 
-      store.properties.forEach((prop: any) => {
-        const isRent = prop.transaction.includes('Aluguel') || prop.transaction.includes('Locação');
-        const isSale = prop.transaction.includes('Venda');
+      // 5. Loop blindado contra erros (se faltar algum dado, ele contorna)
+      properties.forEach((prop: any) => {
+        const transactionType = prop.transaction === 'Venda' ? 'For Sale' : 'For Rent';
+        const propertyType = getVivaRealType(prop.type); 
 
-        xml += `    <Imovel>\n`;
-        xml += `      <CodigoImovel>${prop.id}</CodigoImovel>\n`;
-        xml += `      <TipoImovel>${prop.type}</TipoImovel>\n`;
-        xml += `      <TituloImovel><![CDATA[${prop.title}]]></TituloImovel>\n`;
-        xml += `      <Observacao><![CDATA[${prop.description}]]></Observacao>\n`;
-        xml += `      <QtdDormitorios>${prop.bedrooms}</QtdDormitorios>\n`;
-        xml += `      <QtdSuites>${prop.suites || 0}</QtdSuites>\n`;
-        xml += `      <QtdBanheiros>${prop.bathrooms}</QtdBanheiros>\n`;
-        xml += `      <QtdVagas>${prop.garage}</QtdVagas>\n`;
-        xml += `      <AreaTotal>${prop.totalArea || prop.usefulArea}</AreaTotal>\n`;
-        xml += `      <AreaUtil>${prop.usefulArea}</AreaUtil>\n`;
+        xml += `    <Listing>\n`;
+        xml += `      <ListingID>${prop.id}</ListingID>\n`;
+        xml += `      <Title><![CDATA[${prop.title || 'Imóvel'}]]></Title>\n`;
+        xml += `      <TransactionType>${transactionType}</TransactionType>\n`;
         
-        xml += `      <PrecoVenda>${isSale ? prop.price : 0}</PrecoVenda>\n`;
-        xml += `      <PrecoLocacao>${isRent ? prop.price : 0}</PrecoLocacao>\n`;
-        xml += `      <ValorCondominio>${prop.condoFee || 0}</ValorCondominio>\n`;
-        xml += `      <ValorIPTU>${prop.iptu || 0}</ValorIPTU>\n`;
-
-        xml += `      <Bairro><![CDATA[${prop.neighborhood}]]></Bairro>\n`;
-        xml += `      <Cidade><![CDATA[${prop.city}]]></Cidade>\n`;
-        xml += `      <UF>${prop.state}</UF>\n`;
-        xml += `      <CEP>${prop.cep}</CEP>\n`;
-
-        // Imagens
-        if (prop.images && prop.images.length > 0) {
-          xml += `      <Fotos>\n`;
-          prop.images.forEach((img: any, index: number) => {
-            xml += `        <Foto>\n`;
-            xml += `          <NomeArquivo><![CDATA[Foto ${index + 1}]]></NomeArquivo>\n`;
-            xml += `          <URLArquivo><![CDATA[${img.url}]]></URLArquivo>\n`;
-            xml += `          <Principal>${index === 0 ? 1 : 0}</Principal>\n`;
-            xml += `        </Foto>\n`;
+        // Mídias (Fotos) - Protegido contra "null" ou "undefined"
+        xml += `      <Media>\n`;
+        if (prop.imageUrls && Array.isArray(prop.imageUrls)) {
+          prop.imageUrls.forEach((img: string) => {
+             if(img) {
+               xml += `        <Item medium="image">\n`;
+               xml += `          <Url><![CDATA[${img}]]></Url>\n`;
+               xml += `        </Item>\n`;
+             }
           });
-          xml += `      </Fotos>\n`;
         }
+        xml += `      </Media>\n`;
 
-        xml += `    </Imovel>\n`;
+        // Detalhes Financeiros e Estruturais (Forçando Number para evitar crash)
+        xml += `      <Details>\n`;
+        xml += `        <UsageType>${prop.category === 'Comercial' ? 'Commercial' : 'Residential'}</UsageType>\n`;
+        xml += `        <PropertyType>${propertyType}</PropertyType>\n`;
+        xml += `        <Description><![CDATA[${prop.description || prop.title || ''}]]></Description>\n`;
+        xml += `        <ListPrice>${Number(prop.price || 0)}</ListPrice>\n`;
+        
+        if (prop.condoFee) xml += `        <PropertyAdministrationFee>${Number(prop.condoFee)}</PropertyAdministrationFee>\n`;
+        if (prop.iptu) xml += `        <YearlyTax>${Number(prop.iptu)}</YearlyTax>\n`;
+        
+        xml += `        <LivingArea>${Number(prop.area || 0)}</LivingArea>\n`;
+        xml += `        <Bedrooms>${Number(prop.bedrooms || 0)}</Bedrooms>\n`;
+        xml += `        <Bathrooms>${Number(prop.bathrooms || 0)}</Bathrooms>\n`;
+        xml += `        <Garage>${Number(prop.garage || 0)}</Garage>\n`;
+        xml += `      </Details>\n`;
+
+        // Localização
+        xml += `      <Location>\n`;
+        xml += `        <Country abbreviation="BR">Brasil</Country>\n`;
+        xml += `        <State abbreviation="${prop.state || 'SP'}"><![CDATA[${prop.state || 'SP'}]]></State>\n`;
+        xml += `        <City><![CDATA[${prop.city || ''}]]></City>\n`;
+        xml += `        <Neighborhood><![CDATA[${prop.neighborhood || ''}]]></Neighborhood>\n`;
+        xml += `        <Address><![CDATA[${prop.address || ''}]]></Address>\n`;
+        
+        const rawCep = prop.cep ? prop.cep.replace(/\D/g, '') : '';
+        if(rawCep) {
+          xml += `        <PostalCode>${rawCep}</PostalCode>\n`;
+        }
+        
+        xml += `      </Location>\n`;
+        xml += `    </Listing>\n`;
       });
 
-      xml += `  </Imoveis>\n`;
-      xml += `</Carga>`;
+      xml += `  </Listings>\n`;
+      xml += `</ListingDataFeed>`;
 
-      // Retorna com o header de XML
-      res.set('Content-Type', 'text/xml');
+      // 6. Define que o retorno é um ficheiro XML e envia
+      res.header('Content-Type', 'application/xml');
       return res.send(xml);
 
     } catch (error) {
-      console.error('Erro ao gerar XML:', error);
+      // LOG super detalhado no Render caso algo fuja ao controle
+      console.error("=========================================");
+      console.error("❌ ERRO CRÍTICO AO GERAR O XML DA IMOBILIÁRIA");
+      console.error(error);
+      console.error("=========================================");
       return res.status(500).json({ error: 'Erro interno ao gerar feed XML.' });
     }
   }
+
+  // Ativar/Desativar exportação de 1 imóvel
+  async toggleExport(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { exportToPortals } = req.body;
+      const property = await prisma.property.update({
+        where: { id },
+        data: { exportToPortals }
+      });
+      return res.json(property);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar exportação.' });
+    }
+  }
+}
+
+// Conversor de tipos da imobiliária para o padrão Inglês exigido pelos portais
+function getVivaRealType(type: string) {
+  const t = (type || '').toLowerCase();
+  if (t.includes('apartamento')) return 'Apartment';
+  if (t.includes('casa')) return 'Home';
+  if (t.includes('terreno') || t.includes('lote')) return 'Land Lot';
+  if (t.includes('comercial') || t.includes('loja')) return 'Commercial/Industrial';
+  if (t.includes('fazenda') || t.includes('sítio') || t.includes('chácara')) return 'Farm/Agriculture';
+  return 'Residential / Commercial';
 }
