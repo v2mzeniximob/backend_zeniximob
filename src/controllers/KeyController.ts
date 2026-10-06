@@ -27,6 +27,7 @@ export class KeyController {
 
       return res.json(properties);
     } catch (error) {
+      console.error("❌ ERRO CRÍTICO NO GET /keys:", error); 
       return res.status(500).json({ error: 'Erro ao listar quadro de chaves.' });
     }
   }
