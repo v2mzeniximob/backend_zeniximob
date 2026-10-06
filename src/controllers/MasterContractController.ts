@@ -1,21 +1,18 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-// O "as any" protege-nos contra atrasos de tipagem do TypeScript
 const prisma = new PrismaClient() as any;
 
 export class MasterContractController {
   
-  // 1. CRIAR CONTRATO E GERAR AS FATURAS RECORRENTES
   async create(req: Request, res: Response) {
     try {
-      const { type, franchiseeId, realEstateId, startDate, endDate, value, documentUrl } = req.body;
+      const { type, franchiseeId, realEstateId, planId, startDate, endDate, value, documentUrl } = req.body;
 
-      // Validações básicas
       if (!type) return res.status(400).json({ error: 'Tipo de contrato é obrigatório.' });
       if (!startDate || !value) return res.status(400).json({ error: 'Data de início e valor são obrigatórios.' });
 
-      // Cria o contrato na tabela do Master
+      // 1. Cria o contrato
       const contract = await prisma.masterContract.create({
         data: {
           type,
@@ -28,27 +25,41 @@ export class MasterContractController {
         }
       });
 
-      // 2. GERAR AS FATURAS DO MASTER (INVOICES)
+      // 2. Se um Plano foi selecionado e for contrato de Imobiliária, atualiza a Imobiliária
+      if (planId && realEstateId && type === 'MASTER_IMOBILIARIA') {
+        await prisma.realEstate.update({
+          where: { id: realEstateId },
+          data: { planId }
+        });
+      }
+
+      // 3. GERAR AS FATURAS RECORRENTES (LOOP DE DATAS)
+      // Ajustamos para UTC para evitar problemas de fuso horário pulando dias
       const start = new Date(startDate);
-      // Se não houver data de fim, gera apenas 1 fatura (Setup/Mensal avulso). 
-      // Se houver, gera faturas para todos os meses até o fim.
-      const end = endDate ? new Date(endDate) : new Date(startDate); 
+      start.setUTCHours(12, 0, 0, 0); 
+      
+      const endLimit = endDate ? new Date(endDate) : new Date(startDate);
+      endLimit.setUTCHours(12, 0, 0, 0);
+
       const val = Number(value);
 
-      if (start <= end && !isNaN(val)) {
+      if (start <= endLimit && !isNaN(val)) {
         let currentMonth = new Date(start);
+        let count = 1;
         
-        while (currentMonth <= end) {
+        while (currentMonth <= endLimit) {
           await prisma.masterInvoice.create({
             data: {
               masterContractId: contract.id,
               amount: val,
               dueDate: new Date(currentMonth),
               status: 'Pendente',
-              description: `Assinatura SaaS - ${type.replace(/_/g, ' x ')}`
+              description: `Mensalidade SaaS - Parcela ${count}`
             }
           });
-          currentMonth.setMonth(currentMonth.getMonth() + 1);
+          // Avança exatamente 1 mês
+          currentMonth.setUTCMonth(currentMonth.getUTCMonth() + 1);
+          count++;
         }
       }
 
@@ -59,7 +70,6 @@ export class MasterContractController {
     }
   }
 
-  // 3. LISTAR CONTRATOS DO MASTER
   async list(req: Request, res: Response) {
     try {
       const contracts = await prisma.masterContract.findMany({
@@ -76,15 +86,11 @@ export class MasterContractController {
     }
   }
 
-  // 4. DELETAR CONTRATO
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      
-      // Apaga as faturas primeiro (Cascata manual por segurança)
       await prisma.masterInvoice.deleteMany({ where: { masterContractId: id } });
       await prisma.masterContract.delete({ where: { id } });
-      
       return res.json({ message: 'Contrato e faturas excluídos com sucesso.' });
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao excluir contrato.' });
