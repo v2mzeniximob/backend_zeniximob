@@ -26,6 +26,7 @@ import { KeyController } from '../controllers/KeyController';
 import { MasterConfigController } from '../controllers/MasterConfigController';
 import { MasterContractController } from '../controllers/MasterContractController';
 import { MasterInvoiceController } from '../controllers/MasterInvoiceController';
+import { checkSubscription, requireModule } from '../middlewares/subscriptionMiddleware';
 
 
 // Importa o Middleware de Upload do Multer
@@ -60,6 +61,7 @@ const keyController = new KeyController();
 const masterConfigController = new MasterConfigController();
 const masterContractController = new MasterContractController();
 const masterInvoiceController = new MasterInvoiceController();
+
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -284,6 +286,11 @@ routes.get('/real-estates', realEstateController.list);
 routes.put('/real-estates/:id', realEstateController.update);
 routes.patch('/real-estates/:id/status', realEstateController.toggleStatus);
 
+// Aplica a validação geral de plano ativo nas rotas operacionais:
+routes.use('/properties', authMiddleware, checkSubscription);
+routes.use('/contracts', authMiddleware, checkSubscription);
 
+// Exemplo de rota bloqueada caso o plano não contenha o módulo de chaves:
+routes.get('/keys', authMiddleware, checkSubscription, requireModule('keys'), keyController.list);
 
 export default routes;

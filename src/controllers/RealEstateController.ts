@@ -9,26 +9,30 @@ export class RealEstateController {
   // ROTAS DA PRÓPRIA IMOBILIÁRIA (O Dono a editar a sua loja)
   // ========================================================
   
-  async getMyStore(req: Request, res: Response) {
-    try {
-      const user = req.user as any;
-      const realEstateId = user?.realEstateId || user?.id;
-      
-      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
-
-      const store = await prisma.realEstate.findUnique({
-        where: { id: realEstateId }
-      });
-
-      if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
-
-      const { password, mpAccessToken, ...safeStore } = store;
-      return res.json(safeStore);
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao buscar dados da imobiliária.' });
+ async getMyStore(req: Request, res: Response) {
+  const user = req.user as any;
+  const store = await prisma.realEstate.findUnique({
+    where: { id: user.realEstateId || user.id },
+    include: {
+      plan: {
+        select: { id: true, name: true, modules: true, maxProperties: true, maxUsers: true }
+      },
+      masterContracts: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { status: true, documentUrl: true }
+      }
     }
-  }
+  });
+
+  const { password, mpAccessToken, ...safeStore } = store;
+
+  return res.json({
+    ...safeStore,
+    modules: store.plan?.modules || [], // Array ex: ["properties", "crm", "keys", "financial", "contracts"]
+    contractStatus: store.masterContracts?.[0]?.status || 'Sem Contrato'
+  });
+}
 
   async updateMyStore(req: Request, res: Response) {
     try {
