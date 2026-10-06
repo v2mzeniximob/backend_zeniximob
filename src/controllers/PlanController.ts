@@ -1,101 +1,103 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient() as any;
 
 export class PlanController {
   
-  // 1. CRIAR NOVO PLANO
-  async create(req: Request, res: Response): Promise<any> {
+  async create(req: Request, res: Response) {
     try {
-      const { name, price, modules, hasSupport, supportPrice } = req.body;
-
-      // Validação básica
-      if (!name || price === undefined) {
-        return res.status(400).json({ error: 'Nome e valor do plano são obrigatórios.' });
-      }
+      const { name, price, modules, hasSupport, supportPrice, isActive } = req.body;
 
       const plan = await prisma.plan.create({
         data: {
           name,
-          price,
-          modules: modules || [], // Ex: ["CRM", "FINANCEIRO", "SITE"]
-          hasSupport: hasSupport || false,
-          supportPrice: hasSupport ? supportPrice : null, // Só salva valor se tiver suporte
-        },
+          price: Number(price),
+          modules: Array.isArray(modules) ? modules : [], // Garante que é um array para o JSON
+          hasSupport: Boolean(hasSupport),
+          supportPrice: supportPrice ? Number(supportPrice) : null,
+          isActive: isActive !== undefined ? Boolean(isActive) : true
+        }
       });
 
       return res.status(201).json(plan);
     } catch (error) {
-      console.error('Erro ao criar plano:', error);
-      return res.status(500).json({ error: 'Erro interno ao criar o plano.' });
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao criar plano.' });
     }
   }
 
-  // 2. LISTAR TODOS OS PLANOS
-  async list(req: Request, res: Response): Promise<any> {
+  async list(req: Request, res: Response) {
     try {
       const plans = await prisma.plan.findMany({
-        orderBy: { createdAt: 'desc' } // Mostra os mais recentes primeiro
+        orderBy: { price: 'asc' },
+        include: {
+          _count: {
+            select: { realEstates: true } // Traz quantas imobiliárias assinam este plano
+          }
+        }
       });
       return res.json(plans);
     } catch (error) {
-      console.error('Erro ao listar planos:', error);
-      return res.status(500).json({ error: 'Erro interno ao buscar planos.' });
+      return res.status(500).json({ error: 'Erro ao listar planos.' });
     }
   }
 
-// 3. EDITAR UM PLANO
-  async update(req: Request, res: Response): Promise<any> {
+  async update(req: Request, res: Response) {
     try {
-      const id = req.params.id as string; // Correção aqui
-      const { name, price, modules, hasSupport, supportPrice } = req.body;
+      const { id } = req.params;
+      const { name, price, modules, hasSupport, supportPrice, isActive } = req.body;
 
-      const planExists = await prisma.plan.findUnique({ where: { id } });
-      if (!planExists) {
-        return res.status(404).json({ error: 'Plano não encontrado.' });
-      }
-
-      const updatedPlan = await prisma.plan.update({
+      const plan = await prisma.plan.update({
         where: { id },
         data: {
           name,
-          price,
-          modules,
-          hasSupport,
-          supportPrice: hasSupport ? supportPrice : null,
-        },
+          price: Number(price),
+          modules: Array.isArray(modules) ? modules : [],
+          hasSupport: Boolean(hasSupport),
+          supportPrice: supportPrice ? Number(supportPrice) : null,
+          isActive: isActive !== undefined ? Boolean(isActive) : true
+        }
       });
 
-      return res.json(updatedPlan);
+      return res.json(plan);
     } catch (error) {
-      console.error('Erro ao atualizar plano:', error);
-      return res.status(500).json({ error: 'Erro interno ao atualizar o plano.' });
+      return res.status(500).json({ error: 'Erro ao atualizar plano.' });
     }
   }
 
-  // 4. ATIVAR / INATIVAR PLANO
-  async toggleStatus(req: Request, res: Response): Promise<any> {
+  // ATIVAR / DESATIVAR PLANO RAPIDAMENTE
+  async toggleStatus(req: Request, res: Response) {
     try {
-      const id = req.params.id as string; // Correção aqui
+      const { id } = req.params;
+      const { isActive } = req.body;
 
-      const plan = await prisma.plan.findUnique({ where: { id } });
-      if (!plan) {
-        return res.status(404).json({ error: 'Plano não encontrado.' });
+      const plan = await prisma.plan.update({
+        where: { id },
+        data: { isActive: Boolean(isActive) }
+      });
+
+      return res.json(plan);
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao alterar status do plano.' });
+    }
+  }
+
+  async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      
+      // Verifica se existem imobiliárias usando este plano antes de excluir
+      const inUse = await prisma.realEstate.count({ where: { planId: id } });
+      if (inUse > 0) {
+        return res.status(400).json({ error: 'Não é possível excluir um plano que possui imobiliárias ativas.' });
       }
 
-      const updatedPlan = await prisma.plan.update({
-        where: { id },
-        data: { isActive: !plan.isActive },
-      });
-
-      return res.json({ 
-        message: `Plano ${updatedPlan.isActive ? 'ativado' : 'inativado'} com sucesso!`,
-        plan: updatedPlan 
-      });
+      await prisma.plan.delete({ where: { id } });
+      return res.json({ message: 'Plano excluído com sucesso.' });
     } catch (error) {
-      console.error('Erro ao alterar status do plano:', error);
-      return res.status(500).json({ error: 'Erro interno ao alterar status.' });
+      return res.status(500).json({ error: 'Erro ao excluir plano.' });
     }
   }
 }
