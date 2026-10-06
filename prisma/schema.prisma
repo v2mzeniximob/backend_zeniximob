@@ -125,11 +125,12 @@ model RealEstate {
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
-  clients           Client[]     // Relacionamento unificado com Clientes
+  clients           Client[]   
   owners            Owner[]      
   proposals         Proposal[]   
   keyTerms          KeyTerm[]    
-  insuranceCompanies InsuranceCompany[] // Seguradoras cadastradas
+  insuranceCompanies InsuranceCompany[] 
+  keyMovements      KeyMovement[]
 }
 
 // ==========================================
@@ -179,6 +180,7 @@ model Broker {
 
   proposals Proposal[]
   keyTerms  KeyTerm[]
+  keyMovements KeyMovement[]
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -269,6 +271,10 @@ model Property {
 
   tenantId        String?
   tenant          Client?   @relation(fields: [tenantId], references: [id])
+
+  keyCode     String?   // Ex: "Gaveta 14", "Claviculário A"
+  keyStatus   String    @default("Disponível") // "Disponível", "Retirada", "Indisponível"
+  keyMovements KeyMovement[]
   
   leads           Lead[]
   visits          Visit[]     
@@ -558,27 +564,6 @@ model Proposal {
 }
 
 // ==========================================
-// TERMOS DE CHAVES
-// ==========================================
-model KeyTerm {
-  id           String   @id @default(uuid())
-  type         String   // "Venda" ou "Locação"
-  status       String   @default("Pendente") // Pendente, Assinado
-  documentUrl  String?
-  propertyId   String
-  clientId     String
-  brokerId     String?
-  realEstateId String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  property     Property   @relation(fields: [propertyId], references: [id])
-  client       Client     @relation(fields: [clientId], references: [id])
-  broker       Broker?    @relation(fields: [brokerId], references: [id])
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
-}
-
-// ==========================================
 // MÓDULO DE MANUTENÇÕES E OBRAS (TICKETING)
 // ==========================================
 model Ticket {
@@ -610,4 +595,47 @@ model TicketMessage {
   message   String
   sender    String   // Vai guardar se foi 'ADMIN', 'CLIENT' ou 'OWNER'
   createdAt DateTime @default(now())
+}
+
+model KeyTerm {
+  id           String   @id @default(uuid())
+  type         String   // "Entrega - Locação", "Entrega - Venda", "Devolução"
+  status       String   @default("Pendente") // Pendente, Assinado
+  documentUrl  String?
+  propertyId   String
+  clientId     String
+  brokerId     String?
+  realEstateId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  property     Property @relation(fields: [propertyId], references: [id])
+  client       Client   @relation(fields: [clientId], references: [id])
+  broker       Broker?  @relation(fields: [brokerId], references: [id])
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+
+  // LIGAÇÃO: Um Termo pode gerar um registro físico de saída/entrada de chave
+  keyMovement  KeyMovement?
+}
+
+model KeyMovement {
+  id           String    @id @default(uuid())
+  propertyId   String
+  clientName   String?   
+  reason       String?   
+  withdrawnAt  DateTime  @default(now())
+  returnedAt   DateTime?
+  notes        String?
+
+  keyTermId    String?   @unique
+  keyTerm      KeyTerm?  @relation(fields: [keyTermId], references: [id])
+
+  property     Property   @relation(fields: [propertyId], references: [id])
+
+  // Substituímos o "User" pelas suas tabelas reais:
+  brokerId     String?
+  broker       Broker?    @relation(fields: [brokerId], references: [id])
+  
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
 }

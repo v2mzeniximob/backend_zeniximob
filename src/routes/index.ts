@@ -22,6 +22,7 @@ import { InsuranceCompanyController } from '../controllers/InsuranceCompanyContr
 import { AiController } from '../controllers/AiController';
 import { XmlController } from '../controllers/XmlController';
 import { TicketController } from '../controllers/TicketController';
+import { KeyController } from '../controllers/KeyController';
 
 // Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
@@ -51,7 +52,7 @@ const aiController = new AiController();
 const xmlController = new XmlController();
 const ticketController = new TicketController();
 const clientPortalController = new ClientPortalController(); 
-
+const keyController = new KeyController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -151,11 +152,18 @@ routes.put('/proposals/:id', authMiddleware, proposalController.update);
 routes.delete('/proposals/:id', authMiddleware, proposalController.delete);
 routes.patch('/proposals/:id/status', authMiddleware, proposalController.updateStatus);
 
+// ROTAS DE TERMOS (DOCUMENTOS)
 routes.post('/key-terms', authMiddleware, keyTermController.create);
 routes.get('/key-terms', authMiddleware, keyTermController.list);
+routes.patch('/key-terms/:id/status', authMiddleware, keyTermController.updateStatus);
 routes.put('/key-terms/:id', authMiddleware, keyTermController.update);
 routes.delete('/key-terms/:id', authMiddleware, keyTermController.delete);
-routes.patch('/key-terms/:id/status', authMiddleware, keyTermController.updateStatus);
+
+// ROTAS DO QUADRO FÍSICO DE CHAVES
+routes.get('/keys', authMiddleware, keyController.list);
+routes.patch('/keys/:id/code', authMiddleware, keyController.updateKeyCode);
+routes.post('/keys/withdraw', authMiddleware, keyController.withdraw);
+routes.patch('/keys/:movementId/return', authMiddleware, keyController.returnKey);
 
 // Seguradoras (Seguro Fiança)
 routes.post('/insurance-companies', authMiddleware, insuranceCompanyController.create);
@@ -211,6 +219,8 @@ routes.post('/tickets', authMiddleware, ticketController.create);
 routes.get('/tickets', authMiddleware, ticketController.list);
 routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
 routes.post('/tickets/:id/messages', authMiddleware, ticketController.addMessage);
+
+
 
 
 // ==========================================
