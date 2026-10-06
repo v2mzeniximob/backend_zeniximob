@@ -5,7 +5,7 @@ const prisma = new PrismaClient() as any;
 
 export class ContractController {
   
-  // 1. CRIAR CONTRATO (LOCAÇÃO OU VENDA) E GERAR FATURAS/PARCELAS
+  // 1. CRIAR CONTRATO (LOCAÇÃO OU VENDA), GERAR FATURAS E ATUALIZAR CRM
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -43,6 +43,7 @@ export class ContractController {
         return res.status(400).json({ error: 'Este imóvel já possui um contrato ativo ou já foi vendido.' });
       }
 
+      // CRIA O CONTRATO
       const contract = await prisma.contract.create({
         data: {
           type: contractType, 
@@ -60,11 +61,13 @@ export class ContractController {
         }
       });
 
+      // ATUALIZA O CLIENTE PARA INQUILINO OU COMPRADOR
       await prisma.client.update({
         where: { id: tenantId },
         data: isSale ? { isBuyer: true } : { isTenant: true }
       });
 
+      // ATUALIZA O STATUS DO IMÓVEL
       await prisma.property.update({ 
         where: { id: propertyId }, 
         data: { 
@@ -73,7 +76,26 @@ export class ContractController {
         } 
       });
 
-      // GERAÇÃO DA FATURA DE CAUÇÃO
+      // ==========================================
+      // AUTOMAÇÃO DO CRM: MOVER CARD PARA "FECHADO"
+      // ==========================================
+      try {
+        await prisma.lead.updateMany({
+          where: {
+            clientId: tenantId,
+            propertyId: propertyId 
+          },
+          data: {
+            status: 'Fechado' // O card vai automaticamente para a coluna "Fechado"
+          }
+        });
+        console.log(`Lead do cliente movido para 'Fechado' com sucesso no CRM.`);
+      } catch (crmError) {
+        console.error('Aviso: Erro ao mover lead no funil do CRM:', crmError);
+      }
+      // ==========================================
+
+      // GERAÇÃO DA FATURA DE CAUÇÃO (SE HOUVER)
       if (depositValue && Number(depositValue) > 0 && depositDate) {
         try {
           await prisma.invoice.create({
@@ -92,7 +114,7 @@ export class ContractController {
         }
       }
 
-      // GERAÇÃO DAS PARCELAS RECORRENTES
+      // GERAÇÃO DAS PARCELAS RECORRENTES (ALUGUEL OU PARCELA DE VENDA)
       if (startDate && rentValue) {
         const start = new Date(startDate);
         const end = endDate ? new Date(endDate) : new Date(startDate); 
@@ -132,7 +154,7 @@ export class ContractController {
     }
   }
 
-  // 2. LISTAR CONTRATOS (CORRIGIDO)
+  // 2. LISTAR CONTRATOS (COM DADOS CORRETOS DO CLIENTE PARA O FINANCEIRO)
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -147,6 +169,7 @@ export class ContractController {
         where: whereClause,
         include: {
           property: { select: { title: true, address: true, owner: { select: { name: true } } } },
+          // Inclui os contatos do cliente sem quebrar a busca
           tenant: { select: { name: true, document: true, clientType: true, email: true, phone: true, corporateName: true } },
           invoices: { orderBy: { dueDate: 'asc' } },
           inspections: true
@@ -171,6 +194,7 @@ export class ContractController {
       return res.status(500).json({ error: 'Erro ao listar contratos.' }); 
     }
   }
+
   // 3. ATUALIZAR E ENCERRAR CONTRATO
   async update(req: Request, res: Response) {
     try {
@@ -183,6 +207,7 @@ export class ContractController {
         include: { property: true }
       });
 
+      // Se o contrato acabar, o imóvel volta a ficar vago automaticamente
       if (status === 'Encerrado' || status === 'Rescindido') {
         await prisma.property.update({ 
           where: { id: contract.propertyId }, 
@@ -228,9 +253,11 @@ export class ContractController {
         return res.status(404).json({ error: 'Contrato não encontrado.' });
       }
 
+      // Exclui as faturas vinculadas primeiro
       await prisma.invoice.deleteMany({ where: { contractId: id } });
       await prisma.contract.delete({ where: { id } });
 
+      // Libera o imóvel
       await prisma.property.update({
         where: { id: contract.propertyId },
         data: { rentStatus: 'Vago', tenantId: null }
