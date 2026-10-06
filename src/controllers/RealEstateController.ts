@@ -196,6 +196,7 @@ export class RealEstateController {
         data: { isActive: !store.isActive }
       });
 
+      // Retirar campos sensíveis antes de enviar a resposta
       const { password, mpAccessToken, ...safeStore } = updated;
       return res.json(safeStore);
     } catch (error) {
