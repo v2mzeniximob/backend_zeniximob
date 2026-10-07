@@ -9,30 +9,62 @@ export class RealEstateController {
   // ROTAS DA PRÓPRIA IMOBILIÁRIA (O Dono a editar a sua loja)
   // ========================================================
   
- async getMyStore(req: Request, res: Response) {
-  const user = req.user as any;
-  const store = await prisma.realEstate.findUnique({
-    where: { id: user.realEstateId || user.id },
-    include: {
-      plan: {
-        select: { id: true, name: true, modules: true, maxProperties: true, maxUsers: true }
-      },
-      masterContracts: {
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-        select: { status: true, documentUrl: true }
+async getMyStore(req: Request, res: Response) {
+    try {
+      const user = req.user as any;
+      // Garante que pega o ID correto, seja do token do corretor ou do dono da imobiliária
+      const realEstateId = user?.realEstateId || user?.id;
+
+      if (!realEstateId) {
+        return res.status(400).json({ error: 'ID da imobiliária não encontrado na sessão.' });
       }
+
+      // Busca a loja e inclui os relacionamentos de forma segura
+      const store = await prisma.realEstate.findUnique({
+        where: { id: realEstateId },
+        include: {
+          plan: true,
+          masterContracts: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
+        }
+      });
+
+      if (!store) {
+        return res.status(404).json({ error: 'Imobiliária não encontrada.' });
+      }
+
+      // Removemos os campos sensíveis. Usamos default objects ({}) caso o store.plan venha nulo
+      const { password, mpAccessToken, ...safeStore } = store;
+
+      // Tratamento à prova de bala para garantir que os módulos sejam sempre um Array
+      let modulesArray: string[] = [];
+      if (store.plan && store.plan.modules) {
+        if (Array.isArray(store.plan.modules)) {
+          modulesArray = store.plan.modules;
+        } else if (typeof store.plan.modules === 'string') {
+          try { 
+            modulesArray = JSON.parse(store.plan.modules); 
+          } catch (e) {
+            console.error("Erro ao converter módulos do plano.");
+          }
+        }
+      }
+
+      return res.json({
+        ...safeStore,
+        modules: modulesArray,
+        contractStatus: store.masterContracts && store.masterContracts.length > 0 
+          ? store.masterContracts[0].status 
+          : null
+      });
+
+    } catch (error) {
+      console.error('Erro fatal no getMyStore:', error);
+      return res.status(500).json({ error: 'Erro interno ao carregar dados da imobiliária.' });
     }
-  });
-
-  const { password, mpAccessToken, ...safeStore } = store;
-
-  return res.json({
-    ...safeStore,
-    modules: store.plan?.modules || [], // Array ex: ["properties", "crm", "keys", "financial", "contracts"]
-    contractStatus: store.masterContracts?.[0]?.status || 'Sem Contrato'
-  });
-}
+  }
 
   async updateMyStore(req: Request, res: Response) {
     try {
