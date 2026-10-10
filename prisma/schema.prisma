@@ -455,8 +455,9 @@ model Client {
   @@map("clients")
 }
 
+
 // ==========================================
-// LEADS (CRM)
+// LEADS E PERFIL DE BUSCA (CRM MATCHMAKING)
 // ==========================================
 model Lead {
   id          String      @id @default(uuid())
@@ -477,6 +478,14 @@ model Lead {
   
   brokerId    String?
   broker      Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+
+  searchType          String?   // "Casa", "Apartamento", "Comercial", "Qualquer"
+  searchTransaction   String?   // "Locação", "Venda", "Qualquer"
+  searchMinPrice      Float?    // Valor mínimo que deseja pagar
+  searchMaxPrice      Float?    // Valor máximo que deseja pagar
+  searchNeighborhoods String[]  // Array com os bairros desejados
+  searchMinBedrooms   Int?      // Número mínimo de quartos
+  searchMinGarage     Int?      // Número mínimo de vagas
 
   history     LeadHistory[] 
 

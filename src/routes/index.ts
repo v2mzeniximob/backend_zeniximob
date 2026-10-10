@@ -205,6 +205,7 @@ routes.get('/leads', authMiddleware, leadController.list);
 routes.post('/leads', authMiddleware, leadController.create);
 routes.put('/leads/:id', authMiddleware, leadController.update);
 routes.post('/leads/:id/history', authMiddleware, leadController.addHistoryEvent);
+routes.get('/leads/:id/matches', authMiddleware, leadController.getMatches);
 
 // Corretores
 routes.get('/brokers', authMiddleware, brokerController.list);
