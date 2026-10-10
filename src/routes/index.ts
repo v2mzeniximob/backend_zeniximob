@@ -28,8 +28,8 @@ import { MasterContractController } from '../controllers/MasterContractControlle
 import { MasterInvoiceController } from '../controllers/MasterInvoiceController';
 import { checkSubscription, requireModule } from '../middlewares/subscriptionMiddleware';
 import { CondominiumController } from '../controllers/CondominiumController';
-// NOVO: Importação do DealController para a Esteira de Vendas (Kanban)
 import { DealController } from '../controllers/DealController';
+import { DimobController } from '../controllers/DimobController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -64,6 +64,7 @@ const masterContractController = new MasterContractController();
 const masterInvoiceController = new MasterInvoiceController();
 const condominiumController = new CondominiumController();
 const dealController = new DealController();
+const dimobController = new DimobController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -216,6 +217,9 @@ routes.post('/tickets', authMiddleware, ticketController.create);
 routes.get('/tickets', authMiddleware, ticketController.list);
 routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
 routes.post('/tickets/:id/messages', authMiddleware, ticketController.addMessage);
+
+routes.get('/dimob/summary', authMiddleware, dimobController.getSummary);
+routes.get('/dimob/export', authMiddleware, dimobController.exportTxt);
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
