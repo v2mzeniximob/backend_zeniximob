@@ -180,8 +180,19 @@ model Deal {
   realEstateId    String
   realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
 
+  history         DealHistory[]
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model DealHistory {
+  id          String   @id @default(uuid())
+  dealId      String
+  deal        Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  authorName  String?  // Nome de quem escreveu
+  note        String   @db.Text // Texto da observação
+  createdAt   DateTime @default(now())
 }
 
 // ==========================================

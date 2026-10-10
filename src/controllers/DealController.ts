@@ -117,27 +117,71 @@ export class DealController {
     }
   }
 
+ // Atualizar dados do negócio e adicionar nova observação ao histórico
   async updateDeal(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const realEstateId = await getRealEstateId(req);
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { title, transactionType, agreedPrice, status } = req.body;
+      const { title, transactionType, agreedPrice, status, newObservation, authorName } = req.body;
+
+      // Se houver uma nova observação, grava na tabela de histórico imutável
+      if (newObservation && newObservation.trim() !== '') {
+        await prisma.dealHistory.create({
+          data: {
+            dealId: id,
+            note: newObservation,
+            authorName: authorName || 'Equipe'
+          }
+        });
+      }
 
       const deal = await prisma.deal.update({
         where: { id, realEstateId },
         data: {
           title,
           transactionType,
-          agreedPrice: agreedPrice ? Number(agreedPrice) : undefined,
+          agreedPrice: agreedPrice !== undefined && agreedPrice !== '' ? Number(agreedPrice) : undefined,
           status
+        },
+        include: {
+          lead: true,
+          property: true,
+          broker: true,
+          history: { orderBy: { createdAt: 'desc' } }
         }
       });
 
       return res.json(deal);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar negócio.' });
+    }
+  }
+
+  // Obter detalhes de um negócio específico com o histórico completo
+  async getDealDetails(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const realEstateId = await getRealEstateId(req);
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+
+      const deal = await prisma.deal.findFirst({
+        where: { id, realEstateId },
+        include: {
+          lead: true,
+          property: true,
+          broker: true,
+          history: { orderBy: { createdAt: 'desc' } }
+        }
+      });
+
+      if (!deal) return res.status(404).json({ error: 'Negócio não encontrado.' });
+
+      return res.json(deal);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao buscar detalhes do negócio.' });
     }
   }
 

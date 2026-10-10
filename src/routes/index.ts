@@ -188,6 +188,7 @@ routes.post('/deals', authMiddleware, dealController.createDeal);
 routes.put('/deals/:id', authMiddleware, dealController.updateDeal);
 routes.patch('/deals/:id/move', authMiddleware, dealController.moveDeal);
 routes.delete('/deals/:id', authMiddleware, dealController.deleteDeal);
+routes.get('/deals/:id', authMiddleware, dealController.getDealDetails);
 
 routes.get('/brokers', authMiddleware, brokerController.list);
 routes.post('/brokers', authMiddleware, brokerController.create);
