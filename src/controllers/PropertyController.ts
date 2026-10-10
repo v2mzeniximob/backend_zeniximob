@@ -23,8 +23,12 @@ const PUBLIC_PROPERTY_FIELDS = {
   area: true, bedrooms: true, bathrooms: true, garage: true, yearBuilt: true, amenities: true,
   cep: true, address: true, neighborhood: true, city: true, state: true, latitude: true, longitude: true,
   description: true, imageUrls: true, isActive: true, exportToPortals: true,
+  
+  // NOVOS CAMPOS PÚBLICOS
+  videoUrl: true, tour360Url: true, 
+  acceptsFinancing: true, acceptsExchange: true, exchangeDetails: true, exclusive: true,
+
   realEstateId: true, brokerId: true, createdAt: true, updatedAt: true,
-  // NOVO: Exibe os dados básicos do condomínio na vitrine
   condominium: { select: { id: true, name: true, hasGarage: true, hasCoveredGarage: true } }
 };
 
@@ -39,15 +43,13 @@ export class PropertyController {
         title, type, category, transaction, price, condoFee, iptu, area, 
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
-        ownerId,       // Vínculo com o Proprietário
-        inspectionUrl, // Vistoria Inicial de Captação
-        rentProposalUrl, saleProposalUrl, keyTermUrl,
-        exportToPortals,
-        // ===================================
-        // NOVOS CAMPOS: CONDOMÍNIO E IPTU
-        // ===================================
-        condominiumId,
-        iptuRegistration
+        ownerId, inspectionUrl, rentProposalUrl, saleProposalUrl, keyTermUrl, exportToPortals,
+        condominiumId, iptuRegistration,
+        
+        // NOVOS CAMPOS
+        acceptsFinancing, acceptsExchange, exchangeDetails,
+        videoUrl, tour360Url,
+        exclusive, exclusiveUntil, captatorId
       } = req.body;
 
       const property = await prisma.property.create({
@@ -59,10 +61,9 @@ export class PropertyController {
           amenities: amenities || [], cep, address, neighborhood, city, state,
           latitude: latitude ? Number(latitude) : null, longitude: longitude ? Number(longitude) : null,
           description, imageUrls: imageUrls || [], 
+          
           brokerId: brokerId || null,
           ownerId: ownerId || null,
-          
-          // LIGAÇÃO DE CONDOMÍNIO E NÚMERO DE IPTU
           condominiumId: condominiumId === "" ? null : condominiumId,
           iptuRegistration: iptuRegistration || null,
 
@@ -72,12 +73,24 @@ export class PropertyController {
           keyTermUrl: keyTermUrl || null,            
           exportToPortals: exportToPortals ? Boolean(exportToPortals) : false,
           rentStatus: 'Vago',
+
+          // NOVOS DADOS SALVOS
+          acceptsFinancing: Boolean(acceptsFinancing),
+          acceptsExchange: Boolean(acceptsExchange),
+          exchangeDetails: exchangeDetails || null,
+          videoUrl: videoUrl || null,
+          tour360Url: tour360Url || null,
+          exclusive: Boolean(exclusive),
+          exclusiveUntil: exclusiveUntil ? new Date(exclusiveUntil) : null,
+          captatorId: captatorId === "" ? null : captatorId,
+
           realEstateId
         },
         include: { 
           broker: { select: { id: true, name: true, phone: true } },
+          captator: { select: { id: true, name: true, phone: true } }, // Inclui o angariador
           owner: { select: { id: true, name: true, phone: true } },
-          condominium: { select: { id: true, name: true } } // Retorna o condomínio recém vinculado
+          condominium: { select: { id: true, name: true } } 
         }
       });
       return res.status(201).json(property);
@@ -96,8 +109,9 @@ export class PropertyController {
         where: { realEstateId },
         include: {
           broker: { select: { id: true, name: true, phone: true } },
+          captator: { select: { id: true, name: true, phone: true } },
           owner: { select: { id: true, name: true, phone: true, bankData: true } },
-          condominium: { select: { id: true, name: true } }, // Permite exibir o nome do condomínio na listagem
+          condominium: { select: { id: true, name: true } }, 
           contracts: {
             where: { status: 'Ativo' },
             select: { id: true, rentValue: true, status: true, tenant: { select: { name: true } } }
@@ -125,12 +139,12 @@ export class PropertyController {
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId, inspectionUrl, rentStatus,
         rentProposalUrl, saleProposalUrl, keyTermUrl,
-        exportToPortals,
-        // ===================================
-        // NOVOS CAMPOS: CONDOMÍNIO E IPTU
-        // ===================================
-        condominiumId,
-        iptuRegistration
+        exportToPortals, condominiumId, iptuRegistration,
+
+        // NOVOS CAMPOS
+        acceptsFinancing, acceptsExchange, exchangeDetails,
+        videoUrl, tour360Url,
+        exclusive, exclusiveUntil, captatorId
       } = req.body;
 
       const property = await prisma.property.update({
@@ -151,8 +165,6 @@ export class PropertyController {
           
           brokerId: brokerId === "" ? null : brokerId,
           ownerId: ownerId === "" ? null : ownerId,
-          
-          // LIGAÇÃO DE CONDOMÍNIO E NÚMERO DE IPTU
           condominiumId: condominiumId === "" ? null : condominiumId,
           iptuRegistration: iptuRegistration === "" ? null : iptuRegistration,
 
@@ -161,10 +173,21 @@ export class PropertyController {
           saleProposalUrl: saleProposalUrl === "" ? null : saleProposalUrl, 
           keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                  
           exportToPortals: exportToPortals !== undefined ? Boolean(exportToPortals) : undefined,
-          rentStatus: rentStatus || undefined
+          rentStatus: rentStatus || undefined,
+
+          // NOVOS DADOS ATUALIZADOS
+          acceptsFinancing: acceptsFinancing !== undefined ? Boolean(acceptsFinancing) : undefined,
+          acceptsExchange: acceptsExchange !== undefined ? Boolean(acceptsExchange) : undefined,
+          exchangeDetails: exchangeDetails === "" ? null : exchangeDetails,
+          videoUrl: videoUrl === "" ? null : videoUrl,
+          tour360Url: tour360Url === "" ? null : tour360Url,
+          exclusive: exclusive !== undefined ? Boolean(exclusive) : undefined,
+          exclusiveUntil: exclusiveUntil ? new Date(exclusiveUntil) : null,
+          captatorId: captatorId === "" ? null : captatorId,
         },
         include: { 
           broker: { select: { id: true, name: true, phone: true } },
+          captator: { select: { id: true, name: true, phone: true } },
           owner: { select: { id: true, name: true, phone: true } },
           condominium: { select: { id: true, name: true } }
         }
@@ -194,7 +217,6 @@ export class PropertyController {
     }
   }
 
-  // Vitrine (Todos os imóveis)
   async listPublicByStore(req: Request, res: Response) {
     try {
       const { slug } = req.params;
@@ -224,7 +246,6 @@ export class PropertyController {
     }
   }
 
-  // Detalhes de UM imóvel na vitrine
   async getPublicProperty(req: Request, res: Response) {
     try {
       const { slug, propertyId } = req.params;
@@ -241,7 +262,7 @@ export class PropertyController {
           broker: { 
             select: { name: true, creci: true, phone: true, email: true, profileImageUrl: true } 
           },
-          condominium: true // Exibe todos os detalhes do condomínio na página pública do imóvel
+          condominium: true 
         }
       });
 

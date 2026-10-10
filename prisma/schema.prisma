@@ -219,7 +219,10 @@ model Broker {
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  properties   Property[]
+  // Relacionamentos ajustados com nomes específicos
+  properties         Property[] @relation("PropertyBroker")
+  capturedProperties Property[] @relation("PropertyCaptator") // Imóveis que ele angariou
+
   leads        Lead[]
   visits       Visit[]    
   clients      Client[]   
@@ -289,26 +292,40 @@ model Property {
   state             String?      
   latitude          Float?      
   longitude         Float?
-  iptuRegistration  String?     // NOVO: Inscrição Imobiliária (IPTU)
+  iptuRegistration  String?     // Inscrição Imobiliária (IPTU)
   
   // Mídia e Status
-  description   String?
-  imageUrls     String[]    
-  isActive      Boolean     @default(true)
-  exportToPortals     Boolean  @default(false) // Flag para enviar para Zap/VivaReal
-  tickets             Ticket[] // Relacionamento
+  description       String?
+  imageUrls         String[]    
+  videoUrl          String?      // Link do YouTube/Vimeo
+  tour360Url        String?      // Link do Tour Virtual (Matterport, etc)
+  isActive          Boolean      @default(true)
+  exportToPortals   Boolean      @default(false) // Flag para enviar para Zap/VivaReal
+  tickets           Ticket[]     // Relacionamento
   
+  // Condições de Negociação (NOVO)
+  acceptsFinancing  Boolean      @default(false)
+  acceptsExchange   Boolean      @default(false)
+  exchangeDetails   String?      @db.Text
+  
+  // Captação (NOVO)
+  exclusive         Boolean      @default(false)
+  exclusiveUntil    DateTime?
+
   // Relacionamentos
   realEstateId  String
   realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
   brokerId      String?
-  broker        Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  broker        Broker?     @relation("PropertyBroker", fields: [brokerId], references: [id], onDelete: SetNull)
+
+  // NOVO: Corretor que Angariou (Captador)
+  captatorId    String?
+  captator      Broker?     @relation("PropertyCaptator", fields: [captatorId], references: [id], onDelete: SetNull)
 
   ownerId       String?     
   owner         Owner?      @relation(fields: [ownerId], references: [id])
 
-  // NOVO: Relacionamento opcional com o Condomínio
   condominiumId String?
   condominium   Condominium? @relation(fields: [condominiumId], references: [id], onDelete: SetNull)
 
