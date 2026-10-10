@@ -27,11 +27,10 @@ import { MasterConfigController } from '../controllers/MasterConfigController';
 import { MasterContractController } from '../controllers/MasterContractController';
 import { MasterInvoiceController } from '../controllers/MasterInvoiceController';
 import { checkSubscription, requireModule } from '../middlewares/subscriptionMiddleware';
-// NOVO: Importação do Condominium Controller
 import { CondominiumController } from '../controllers/CondominiumController';
+// NOVO: Importação do DealController para a Esteira de Vendas (Kanban)
+import { DealController } from '../controllers/DealController';
 
-
-// Importa o Middleware de Upload do Multer
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
 
@@ -63,26 +62,19 @@ const keyController = new KeyController();
 const masterConfigController = new MasterConfigController();
 const masterContractController = new MasterContractController();
 const masterInvoiceController = new MasterInvoiceController();
-// NOVO: Instância do Condominium Controller
 const condominiumController = new CondominiumController();
-
+const dealController = new DealController();
 
 // ==========================================
 // ROTAS PÚBLICAS
 // ==========================================
 routes.post('/login', authController.login);
-routes.post('/portal/login', clientPortalController.login); // <--- LOGIN PARA O INQUILINO/PROPRIETÁRIO
+routes.post('/portal/login', clientPortalController.login);
 
-// Vitrine da Loja (Lista todos os imóveis ativos)
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
-
-// Detalhes de um único imóvel na vitrine (Página detalhada)
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
-
-// Feed XML para Portais Imobiliários (Público)
 routes.get('/public/xml/:slug', xmlController.generateFeed);
 
-// Rota pública para leads (quando o cliente envia mensagem na vitrine)
 routes.post('/public/leads', async (req, res) => {
   try {
     const { name, phone, email, interest, status, notes, propertyId, realEstateId, brokerId } = req.body;
@@ -104,17 +96,12 @@ routes.post('/public/leads', async (req, res) => {
   }
 });
 
-
 // ==========================================
 // ROTAS DO PORTAL DO CLIENTE (Inquilino / Proprietário)
 // ==========================================
-// Aqui usamos o middleware "portalOnly", que só deixa passar quem logou como CLIENT ou OWNER
 routes.get('/portal/dashboard', authMiddleware, portalOnly, clientPortalController.getDashboard);
-
-// Tickets (Criação e Envio de Mensagens pelo Portal)
 routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
 routes.post('/portal/tickets/:id/messages', authMiddleware, portalOnly, ticketController.addMessage);
-
 
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
@@ -125,32 +112,25 @@ routes.get('/integrations/cnpj/:cnpj', authMiddleware, integrationController.get
 // ==========================================
 // ROTAS DA IMOBILIÁRIA (Protegidas)
 // ==========================================
-
-// Dashboard da Imobiliária
 routes.get('/dashboard/metrics', authMiddleware, dashboardController.getRealEstateMetrics);
 
-// ROTAS DA TELA DE CLIENTES (CRM Geral)
 routes.post('/clients', authMiddleware, clientController.create);
 routes.get('/clients', authMiddleware, clientController.list);
 routes.put('/clients/:id', authMiddleware, clientController.update);
 routes.patch('/clients/:id/status', authMiddleware, clientController.toggleStatus);
 
-// Rota para a Imobiliária gerar o acesso (Senha) do Cliente ou Proprietário
 routes.post('/portal/generate-access', authMiddleware, clientPortalController.createAccess);
 
-// ROTAS DA TELA DE INQUILINOS (Foco Financeiro e Contratos)
 routes.post('/tenants', authMiddleware, tenantController.create);
 routes.get('/tenants', authMiddleware, tenantController.list);
 routes.put('/tenants/:id', authMiddleware, tenantController.update);
 routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
 
-// ROTAS DE CONDOMÍNIOS
 routes.post('/condominiums', authMiddleware, condominiumController.create);
 routes.get('/condominiums', authMiddleware, condominiumController.list);
 routes.put('/condominiums/:id', authMiddleware, condominiumController.update);
 routes.patch('/condominiums/:id/status', authMiddleware, condominiumController.toggleStatus);
 
-// Imóveis
 routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
 routes.put('/properties/:id', authMiddleware, propertyController.update);
@@ -158,104 +138,90 @@ routes.patch('/properties/:id/status', authMiddleware, propertyController.toggle
 routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 
-// Proprietários (Owners)
 routes.get('/owners', authMiddleware, ownerController.list);
 routes.post('/owners', authMiddleware, ownerController.create);
 routes.put('/owners/:id', authMiddleware, ownerController.update);
 routes.patch('/owners/:id/status', authMiddleware, ownerController.toggleStatus);
 
-// Propostas e Termos 
 routes.post('/proposals', authMiddleware, proposalController.create);
 routes.get('/proposals', authMiddleware, proposalController.list);
 routes.put('/proposals/:id', authMiddleware, proposalController.update);
 routes.delete('/proposals/:id', authMiddleware, proposalController.delete);
 routes.patch('/proposals/:id/status', authMiddleware, proposalController.updateStatus);
 
-// ROTAS DE TERMOS (DOCUMENTOS)
 routes.post('/key-terms', authMiddleware, keyTermController.create);
 routes.get('/key-terms', authMiddleware, keyTermController.list);
 routes.patch('/key-terms/:id/status', authMiddleware, keyTermController.updateStatus);
 routes.put('/key-terms/:id', authMiddleware, keyTermController.update);
 routes.delete('/key-terms/:id', authMiddleware, keyTermController.delete);
 
-// ROTAS DO QUADRO FÍSICO DE CHAVES
 routes.get('/keys', authMiddleware, keyController.list);
 routes.patch('/keys/:id/code', authMiddleware, keyController.updateKeyCode);
 routes.post('/keys/withdraw', authMiddleware, keyController.withdraw);
 routes.patch('/keys/:movementId/return', authMiddleware, keyController.returnKey);
 
-// Seguradoras (Seguro Fiança)
 routes.post('/insurance-companies', authMiddleware, insuranceCompanyController.create);
 routes.get('/insurance-companies', authMiddleware, insuranceCompanyController.list);
 routes.patch('/insurance-companies/:id/status', authMiddleware, insuranceCompanyController.toggleStatus);
 
-// Contratos e Vistorias
 routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
 routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 
-// ROTAS DE ASSINATURA (UPLOADS DE PDFs GOV.BR)
 routes.post('/contracts/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadTenantContract);
 routes.post('/owners/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadOwnerContract);
 
-// Leads
 routes.get('/leads', authMiddleware, leadController.list);
 routes.post('/leads', authMiddleware, leadController.create);
 routes.put('/leads/:id', authMiddleware, leadController.update);
 routes.post('/leads/:id/history', authMiddleware, leadController.addHistoryEvent);
 routes.get('/leads/:id/matches', authMiddleware, leadController.getMatches);
 
-// Corretores
+// ==========================================
+// NOVO: ESTEIRA DE VENDAS E LOCAÇÃO (KANBAN)
+// ==========================================
+routes.get('/deals/stages', authMiddleware, dealController.listStages);
+routes.post('/deals/stages', authMiddleware, dealController.createStage);
+routes.post('/deals', authMiddleware, dealController.createDeal);
+routes.put('/deals/:id', authMiddleware, dealController.updateDeal);
+routes.patch('/deals/:id/move', authMiddleware, dealController.moveDeal);
+routes.delete('/deals/:id', authMiddleware, dealController.deleteDeal);
+
 routes.get('/brokers', authMiddleware, brokerController.list);
 routes.post('/brokers', authMiddleware, brokerController.create);
 routes.get('/brokers/reports/commissions', authMiddleware, brokerController.getCommissionReport);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
 
-// Financeiro (Faturas e Repasses)   
 routes.get('/invoices', authMiddleware, invoiceController.list);
 routes.post('/invoices', authMiddleware, invoiceController.create);
 routes.patch('/invoices/:id/pay', authMiddleware, invoiceController.markAsPaid);
 routes.post('/invoices/:id/charge', authMiddleware, invoiceController.generateCharge);
 routes.put('/invoices/:id/repasse', authMiddleware, invoiceController.updateRepasse);
 
-// Configurações da Própria Loja
 routes.get('/my-store', authMiddleware, realEstateController.getMyStore);
 routes.put('/my-store', authMiddleware, realEstateController.updateMyStore);
 
-// Gestão de Visitas
 routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
 
-// ROTAS DE INTELIGÊNCIA ARTIFICIAL (AI)
 routes.post('/ai/generate-description', authMiddleware, aiController.generateDescription);
 
-// Manutenções (Tickets)
 routes.post('/tickets', authMiddleware, ticketController.create);
 routes.get('/tickets', authMiddleware, ticketController.list);
 routes.patch('/tickets/:id/status', authMiddleware, ticketController.updateStatus);
 routes.post('/tickets/:id/messages', authMiddleware, ticketController.addMessage);
 
-
-
-
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
-
-// Dashboard do Master SaaS
 routes.get('/master/dashboard/metrics', authMiddleware, masterOnly, dashboardController.getMasterStats);
-
-// Upload Contrato Plataforma x Imobiliária
 routes.post('/real-estates/:id/upload', authMiddleware, masterOnly, upload.single('file'), signatureController.uploadRealEstateContract);
 
-// -----------------------------------
-// CONFIGURAÇÕES MASTER & ADMINS SAAS
-// -----------------------------------
 routes.get('/master/config', authMiddleware, masterOnly, masterConfigController.get);
 routes.put('/master/config', authMiddleware, masterOnly, masterConfigController.update);
 
@@ -263,22 +229,15 @@ routes.get('/master/admins', authMiddleware, masterOnly, masterConfigController.
 routes.post('/master/admins', authMiddleware, masterOnly, masterConfigController.createAdmin);
 routes.patch('/master/admins/:id/status', authMiddleware, masterOnly, masterConfigController.toggleAdminStatus);
 
-// -----------------------------------
-// CONTRATOS E FATURAS SAAS DO MASTER
-// -----------------------------------
 routes.post('/master/contracts', authMiddleware, masterOnly, masterContractController.create);
 routes.put('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.update);
 routes.get('/master/contracts', authMiddleware, masterOnly, masterContractController.list);
 routes.delete('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.delete);
 
-// Faturas SaaS do Master
 routes.get('/master/invoices', authMiddleware, masterOnly, masterInvoiceController.list);
 routes.patch('/master/invoices/:id/pay', authMiddleware, masterOnly, masterInvoiceController.markAsPaid);
 routes.post('/master/invoices/:id/charge', authMiddleware, masterOnly, masterInvoiceController.generateCharge);
 
-// -----------------------------------
-// CADASTROS E PLANOS (Existentes)
-// -----------------------------------
 routes.use('/plans', authMiddleware, masterOnly); 
 routes.post('/plans', planController.create);
 routes.get('/plans', planController.list);
@@ -297,11 +256,8 @@ routes.get('/real-estates', realEstateController.list);
 routes.put('/real-estates/:id', realEstateController.update);
 routes.patch('/real-estates/:id/status', realEstateController.toggleStatus);
 
-// Aplica a validação geral de plano ativo nas rotas operacionais:
 routes.use('/properties', authMiddleware, checkSubscription);
 routes.use('/contracts', authMiddleware, checkSubscription);
-
-// Exemplo de rota bloqueada caso o plano não contenha o módulo de chaves:
 routes.get('/keys', authMiddleware, checkSubscription, requireModule('keys'), keyController.list);
 
 export default routes;

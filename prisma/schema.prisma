@@ -133,7 +133,55 @@ model RealEstate {
   insuranceCompanies InsuranceCompany[] 
   keyMovements      KeyMovement[]
   masterContracts  MasterContract[]
-  condominiums      Condominium[] // NOVO: Relacionamento com os Condomínios da loja
+  condominiums      Condominium[] // Relacionamento com os Condomínios da loja
+
+  // NOVO: Relacionamentos do Kanban
+  pipelineStages    PipelineStage[]
+  deals             Deal[]
+}
+
+// ==========================================
+// ESTEIRA DE VENDAS E LOCAÇÃO (KANBAN)
+// ==========================================
+model PipelineStage {
+  id           String   @id @default(uuid())
+  name         String
+  orderIndex   Int
+  colorCode    String   @default("#94A3B8")
+  
+  realEstateId String
+  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  deals        Deal[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Deal {
+  id              String   @id @default(uuid())
+  title           String   // Ex: "Compra - Apto Tatuapé"
+  transactionType String   // "Venda" ou "Locação"
+  status          String   @default("IN_PROGRESS") // IN_PROGRESS, WON, LOST
+  agreedPrice     Float?
+  
+  stageId         String
+  stage           PipelineStage @relation(fields: [stageId], references: [id])
+  
+  leadId          String
+  lead            Lead      @relation(fields: [leadId], references: [id])
+  
+  propertyId      String
+  property        Property  @relation(fields: [propertyId], references: [id])
+  
+  brokerId        String
+  broker          Broker    @relation(fields: [brokerId], references: [id])
+
+  realEstateId    String
+  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // ==========================================
@@ -230,6 +278,9 @@ model Broker {
   proposals Proposal[]
   keyTerms  KeyTerm[]
   keyMovements KeyMovement[]
+
+  // NOVO: Relacionamento com Negócios (Kanban)
+  deals        Deal[]
 
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -350,6 +401,9 @@ model Property {
 
   proposals Proposal[]
   keyTerms  KeyTerm[]
+
+  // NOVO: Relacionamento com Negócios (Kanban)
+  deals           Deal[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -488,6 +542,9 @@ model Lead {
   searchMinGarage     Int?      // Número mínimo de vagas
 
   history     LeadHistory[] 
+  
+  // NOVO: Relacionamento com Negócios (Kanban)
+  deals       Deal[]
 
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
