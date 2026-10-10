@@ -27,6 +27,8 @@ import { MasterConfigController } from '../controllers/MasterConfigController';
 import { MasterContractController } from '../controllers/MasterContractController';
 import { MasterInvoiceController } from '../controllers/MasterInvoiceController';
 import { checkSubscription, requireModule } from '../middlewares/subscriptionMiddleware';
+// NOVO: Importação do Condominium Controller
+import { CondominiumController } from '../controllers/CondominiumController';
 
 
 // Importa o Middleware de Upload do Multer
@@ -61,6 +63,8 @@ const keyController = new KeyController();
 const masterConfigController = new MasterConfigController();
 const masterContractController = new MasterContractController();
 const masterInvoiceController = new MasterInvoiceController();
+// NOVO: Instância do Condominium Controller
+const condominiumController = new CondominiumController();
 
 
 // ==========================================
@@ -139,6 +143,12 @@ routes.post('/tenants', authMiddleware, tenantController.create);
 routes.get('/tenants', authMiddleware, tenantController.list);
 routes.put('/tenants/:id', authMiddleware, tenantController.update);
 routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
+
+// ROTAS DE CONDOMÍNIOS
+routes.post('/condominiums', authMiddleware, condominiumController.create);
+routes.get('/condominiums', authMiddleware, condominiumController.list);
+routes.put('/condominiums/:id', authMiddleware, condominiumController.update);
+routes.patch('/condominiums/:id/status', authMiddleware, condominiumController.toggleStatus);
 
 // Imóveis
 routes.get('/properties', authMiddleware, propertyController.list);

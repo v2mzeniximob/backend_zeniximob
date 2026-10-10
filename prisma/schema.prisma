@@ -133,6 +133,50 @@ model RealEstate {
   insuranceCompanies InsuranceCompany[] 
   keyMovements      KeyMovement[]
   masterContracts  MasterContract[]
+  condominiums      Condominium[] // NOVO: Relacionamento com os Condomínios da loja
+}
+
+// ==========================================
+// CONDOMÍNIOS
+// ==========================================
+model Condominium {
+  id                String     @id @default(uuid())
+  cnpj              String?
+  name              String     // Razão Social / Nome do condomínio
+  
+  // Endereço
+  cep               String?
+  address           String?    // Logradouro, número, complemento
+  neighborhood      String?
+  city              String?
+  state             String?
+  
+  type              String?    // Horizontal (casas) ou Vertical (prédios)
+  
+  // Administração
+  adminName         String?    // Nome da administradora
+  managerName       String?    // Síndico atual
+  email             String?    // E-mail de contato
+  phone             String?    // Telefone de contato
+  
+  // Detalhes Técnicos e Vagas
+  towerOrBlock      String?    // Torre, bloco ou quadra
+  privateArea       Float?     // Fração ideal / Área privativa (m²)
+  hasGarage         Boolean    @default(false)
+  hasCoveredGarage  Boolean    @default(false)
+  
+  isActive          Boolean    @default(true)
+  
+  // Relacionamentos
+  realEstateId      String
+  realEstate        RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  properties        Property[] // Imóveis vinculados a este condomínio
+
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@map("condominiums")
 }
 
 // ==========================================
@@ -238,13 +282,14 @@ model Property {
   amenities     String[]    // Array com as características
   
   // Localização Detalhada
-  cep           String
-  address       String
-  neighborhood  String?     
-  city          String?     
-  state         String?     
-  latitude      Float?      
-  longitude     Float?      
+  cep               String
+  address           String
+  neighborhood      String?      
+  city              String?      
+  state             String?      
+  latitude          Float?      
+  longitude         Float?
+  iptuRegistration  String?     // NOVO: Inscrição Imobiliária (IPTU)
   
   // Mídia e Status
   description   String?
@@ -263,6 +308,10 @@ model Property {
   ownerId       String?     
   owner         Owner?      @relation(fields: [ownerId], references: [id])
 
+  // NOVO: Relacionamento opcional com o Condomínio
+  condominiumId String?
+  condominium   Condominium? @relation(fields: [condominiumId], references: [id], onDelete: SetNull)
+
   rentStatus      String?   @default("Vago") // "Vago", "Alugado", "Vendido"
   inspectionUrl   String?   // Upload do Documento de Vistoria
   contractUrl     String?   // Upload do Contrato de Aluguel
@@ -274,8 +323,8 @@ model Property {
   tenantId        String?
   tenant          Client?   @relation(fields: [tenantId], references: [id])
 
-  keyCode     String?   // Ex: "Gaveta 14", "Claviculário A"
-  keyStatus   String    @default("Disponível") // "Disponível", "Retirada", "Indisponível"
+  keyCode      String?   // Ex: "Gaveta 14", "Claviculário A"
+  keyStatus    String    @default("Disponível") // "Disponível", "Retirada", "Indisponível"
   keyMovements KeyMovement[]
   
   leads           Lead[]

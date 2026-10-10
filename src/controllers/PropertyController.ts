@@ -23,7 +23,9 @@ const PUBLIC_PROPERTY_FIELDS = {
   area: true, bedrooms: true, bathrooms: true, garage: true, yearBuilt: true, amenities: true,
   cep: true, address: true, neighborhood: true, city: true, state: true, latitude: true, longitude: true,
   description: true, imageUrls: true, isActive: true, exportToPortals: true,
-  realEstateId: true, brokerId: true, createdAt: true, updatedAt: true
+  realEstateId: true, brokerId: true, createdAt: true, updatedAt: true,
+  // NOVO: Exibe os dados básicos do condomínio na vitrine
+  condominium: { select: { id: true, name: true, hasGarage: true, hasCoveredGarage: true } }
 };
 
 export class PropertyController {
@@ -40,7 +42,12 @@ export class PropertyController {
         ownerId,       // Vínculo com o Proprietário
         inspectionUrl, // Vistoria Inicial de Captação
         rentProposalUrl, saleProposalUrl, keyTermUrl,
-        exportToPortals // <--- ADICIONADO AQUI
+        exportToPortals,
+        // ===================================
+        // NOVOS CAMPOS: CONDOMÍNIO E IPTU
+        // ===================================
+        condominiumId,
+        iptuRegistration
       } = req.body;
 
       const property = await prisma.property.create({
@@ -54,17 +61,23 @@ export class PropertyController {
           description, imageUrls: imageUrls || [], 
           brokerId: brokerId || null,
           ownerId: ownerId || null,
+          
+          // LIGAÇÃO DE CONDOMÍNIO E NÚMERO DE IPTU
+          condominiumId: condominiumId === "" ? null : condominiumId,
+          iptuRegistration: iptuRegistration || null,
+
           inspectionUrl: inspectionUrl || null,
           rentProposalUrl: rentProposalUrl || null, 
           saleProposalUrl: saleProposalUrl || null, 
-          keyTermUrl: keyTermUrl || null,           
-          exportToPortals: exportToPortals ? Boolean(exportToPortals) : false, // <--- ADICIONADO AQUI
+          keyTermUrl: keyTermUrl || null,            
+          exportToPortals: exportToPortals ? Boolean(exportToPortals) : false,
           rentStatus: 'Vago',
           realEstateId
         },
         include: { 
           broker: { select: { id: true, name: true, phone: true } },
-          owner: { select: { id: true, name: true, phone: true } }
+          owner: { select: { id: true, name: true, phone: true } },
+          condominium: { select: { id: true, name: true } } // Retorna o condomínio recém vinculado
         }
       });
       return res.status(201).json(property);
@@ -84,6 +97,7 @@ export class PropertyController {
         include: {
           broker: { select: { id: true, name: true, phone: true } },
           owner: { select: { id: true, name: true, phone: true, bankData: true } },
+          condominium: { select: { id: true, name: true } }, // Permite exibir o nome do condomínio na listagem
           contracts: {
             where: { status: 'Ativo' },
             select: { id: true, rentValue: true, status: true, tenant: { select: { name: true } } }
@@ -111,7 +125,12 @@ export class PropertyController {
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId, inspectionUrl, rentStatus,
         rentProposalUrl, saleProposalUrl, keyTermUrl,
-        exportToPortals // <--- ADICIONADO AQUI
+        exportToPortals,
+        // ===================================
+        // NOVOS CAMPOS: CONDOMÍNIO E IPTU
+        // ===================================
+        condominiumId,
+        iptuRegistration
       } = req.body;
 
       const property = await prisma.property.update({
@@ -129,18 +148,25 @@ export class PropertyController {
           amenities: amenities || [], cep, address, neighborhood, city, state,
           latitude: latitude ? Number(latitude) : null, longitude: longitude ? Number(longitude) : null,
           description, imageUrls: imageUrls || [], 
+          
           brokerId: brokerId === "" ? null : brokerId,
           ownerId: ownerId === "" ? null : ownerId,
+          
+          // LIGAÇÃO DE CONDOMÍNIO E NÚMERO DE IPTU
+          condominiumId: condominiumId === "" ? null : condominiumId,
+          iptuRegistration: iptuRegistration === "" ? null : iptuRegistration,
+
           inspectionUrl: inspectionUrl === "" ? null : inspectionUrl,
           rentProposalUrl: rentProposalUrl === "" ? null : rentProposalUrl, 
           saleProposalUrl: saleProposalUrl === "" ? null : saleProposalUrl, 
-          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                 
-          exportToPortals: exportToPortals !== undefined ? Boolean(exportToPortals) : undefined, // <--- ADICIONADO AQUI
+          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                  
+          exportToPortals: exportToPortals !== undefined ? Boolean(exportToPortals) : undefined,
           rentStatus: rentStatus || undefined
         },
         include: { 
           broker: { select: { id: true, name: true, phone: true } },
-          owner: { select: { id: true, name: true, phone: true } }
+          owner: { select: { id: true, name: true, phone: true } },
+          condominium: { select: { id: true, name: true } }
         }
       });
       return res.json(property);
@@ -214,7 +240,8 @@ export class PropertyController {
         include: { 
           broker: { 
             select: { name: true, creci: true, phone: true, email: true, profileImageUrl: true } 
-          } 
+          },
+          condominium: true // Exibe todos os detalhes do condomínio na página pública do imóvel
         }
       });
 
