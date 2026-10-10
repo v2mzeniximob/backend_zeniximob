@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient() as any;
 
@@ -13,7 +14,7 @@ export class KeyController {
       const properties = await prisma.property.findMany({
         where: { realEstateId },
         select: {
-          id: true, title: true, address: true, keyCode: true, keyStatus: true,
+          id: true, title: true, address: true, keyCode: true, keyStatus: true, qrCodeHash: true,
           keyMovements: {
             where: { returnedAt: null },
             include: { 
@@ -25,12 +26,25 @@ export class KeyController {
         orderBy: { title: 'asc' }
       });
 
+      // Garante que todo imóvel tenha um hash de QR Code gerado para as etiquetas
+      for (const prop of properties) {
+        if (!prop.qrCodeHash) {
+          const hash = crypto.createHash('sha256').update(prop.id + Date.now()).digest('hex').substring(0, 16);
+          await prisma.property.update({
+            where: { id: prop.id },
+            data: { qrCodeHash: hash }
+          });
+          prop.qrCodeHash = hash;
+        }
+      }
+
       return res.json(properties);
     } catch (error) {
       console.error("❌ ERRO CRÍTICO NO GET /keys:", error); 
       return res.status(500).json({ error: 'Erro ao listar quadro de chaves.' });
     }
   }
+
   async updateKeyCode(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -42,30 +56,29 @@ export class KeyController {
     }
   }
 
- // 3. RETIRAR A CHAVE (CHECK-OUT)
+  // 3. RETIRAR A CHAVE (CHECK-OUT COM SLA E ASSINATURA DIGITAL)
   async withdraw(req: Request, res: Response) {
     try {
-      // Agora o frontend também pode mandar o brokerId!
-      const { propertyId, clientName, reason, notes, brokerId } = req.body;
+      const { propertyId, clientName, reason, notes, brokerId, expectedReturnAt, digitalSignatureUrl } = req.body;
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
       
-      // Lógica inteligente: 
-      // Se a recepcionista selecionou um corretor na tela, usa o ID selecionado.
-      // Se não selecionou nada, mas quem está logado no sistema já é um corretor, usa o ID dele próprio.
       const finalBrokerId = brokerId || (user?.realEstateId ? user.id : null);
 
       const property = await prisma.property.findUnique({ where: { id: propertyId } });
-      if (property.keyStatus === 'Retirada') return res.status(400).json({ error: 'Chave já retirada.' });
+      if (!property) return res.status(404).json({ error: 'Imóvel não encontrado.' });
+      if (property.keyStatus === 'Retirada') return res.status(400).json({ error: 'Chave já se encontra retirada.' });
 
       const movement = await prisma.keyMovement.create({
         data: { 
           propertyId, 
           realEstateId, 
-          brokerId: finalBrokerId, // Salva o corretor correto
+          brokerId: finalBrokerId, 
           clientName, 
           reason, 
-          notes 
+          notes,
+          expectedReturnAt: expectedReturnAt ? new Date(expectedReturnAt) : null,
+          digitalSignatureUrl: digitalSignatureUrl || null
         }
       });
 
@@ -73,6 +86,7 @@ export class KeyController {
 
       return res.status(201).json(movement);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao retirar chave.' });
     }
   }
@@ -93,7 +107,7 @@ export class KeyController {
       const { propertyId } = req.params;
       const history = await prisma.keyMovement.findMany({
         where: { propertyId },
-        include: { broker: { select: { name: true } }, realEstate: { select: { name: true } } },
+        include: { broker: { select: { name: true } }, realEstate: { select: { tradeName: true } } },
         orderBy: { withdrawnAt: 'desc' }
       });
       return res.json(history);

@@ -391,8 +391,9 @@ model Property {
   tenantId        String?
   tenant          Client?   @relation(fields: [tenantId], references: [id])
 
-  keyCode      String?   // Ex: "Gaveta 14", "Claviculário A"
+  keyCode      String?   // Ex: "Gaveta 14", "A-12"
   keyStatus    String    @default("Disponível") // "Disponível", "Retirada", "Indisponível"
+  qrCodeHash   String?   @unique // Hash de segurança único para imprimir no QR Code da chave
   keyMovements KeyMovement[]
   
   leads           Lead[]
@@ -753,20 +754,22 @@ model KeyTerm {
 }
 
 model KeyMovement {
-  id           String    @id @default(uuid())
-  propertyId   String
-  clientName   String?   
-  reason       String?   
-  withdrawnAt  DateTime  @default(now())
-  returnedAt   DateTime?
-  notes        String?
+  id                  String    @id @default(uuid())
+  propertyId          String
+  clientName          String?   
+  reason              String?   // Ex: "Visita", "Vistoria", "Manutenção"
+  withdrawnAt         DateTime  @default(now())
+  
+  // NOVO: SLA de devolução e Assinatura Digital
+  expectedReturnAt    DateTime? // Prazo limite acordado para devolução (ex: devolver em 4h)
+  returnedAt          DateTime?
+  digitalSignatureUrl String?   @db.Text // Assinatura feita no ecrã (Canvas)
+  notes               String?
 
   keyTermId    String?   @unique
   keyTerm      KeyTerm?  @relation(fields: [keyTermId], references: [id])
 
   property     Property   @relation(fields: [propertyId], references: [id])
-
-  // Substituímos o "User" pelas suas tabelas reais:
   brokerId     String?
   broker       Broker?    @relation(fields: [brokerId], references: [id])
   
