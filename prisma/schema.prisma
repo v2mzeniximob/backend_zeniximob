@@ -123,6 +123,8 @@ model RealEstate {
   subscriptionStatus  String   @default("Ativo") // Ativo, Inadimplente, Bloqueado
   paymentGatewayId    String?  // ID do cliente no Asaas/Stripe
 
+  whatsappConfig  WhatsappConfig?
+
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
@@ -846,4 +848,20 @@ model MasterInvoice {
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+}
+
+model WhatsappConfig {
+  id              String     @id @default(uuid())
+  realEstateId    String     @unique
+  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  instanceName    String     @unique // Nome único da instância na Evolution API (ex: zenix_imob_123)
+  status          String     @default("DISCONNECTED") // DISCONNECTED, QR_READY, CONNECTED
+  qrCodeBase64    String?    @db.Text // Guarda o QR code temporário
+  
+  botEnabled      Boolean    @default(false) // Se o robô de triagem está ligado
+  welcomeMessage  String?    @db.Text // Mensagem de saudação do bot
+  
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }
