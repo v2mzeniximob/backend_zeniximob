@@ -31,6 +31,8 @@ import { CondominiumController } from '../controllers/CondominiumController';
 import { DealController } from '../controllers/DealController';
 import { DimobController } from '../controllers/DimobController';
 import { InspectionController } from '../controllers/InspectionController';
+import { WhatsappController } from '../controllers/WhatsappController';
+import { WebhookController } from '../controllers/WebhookController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -67,6 +69,9 @@ const condominiumController = new CondominiumController();
 const dealController = new DealController();
 const dimobController = new DimobController();
 const inspectionController = new InspectionController();
+const whatsappController = new WhatsappController();
+const webhookController = new WebhookController();
+
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -98,6 +103,12 @@ routes.post('/public/leads', async (req, res) => {
     return res.status(500).json({ error: 'Erro ao registar mensagem do cliente.' });
   }
 });
+
+// ==========================================
+// WEBHOOKS PÚBLICOS 
+// ==========================================
+// A Evolution API envia POSTs para esta rota quando recebe mensagens
+routes.post('/webhook/whatsapp/:instanceName', webhookController.receive);
 
 // ==========================================
 // ROTAS DO PORTAL DO CLIENTE (Inquilino / Proprietário)
@@ -212,6 +223,14 @@ routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
+
+// ==========================================
+// ROTAS WHATSAPP & ROBÔ IA
+// ==========================================
+routes.get('/whatsapp/status', authMiddleware, whatsappController.getStatus);
+routes.post('/whatsapp/connect', authMiddleware, whatsappController.connect);
+routes.post('/whatsapp/disconnect', authMiddleware, whatsappController.disconnect);
+routes.put('/whatsapp/settings', authMiddleware, whatsappController.updateSettings);
 
 // ==========================================
 // ROTAS DE VISTORIAS (INSPECTIONS)
