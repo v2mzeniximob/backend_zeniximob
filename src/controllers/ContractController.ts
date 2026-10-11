@@ -221,8 +221,8 @@ export class ContractController {
     }
   }
 
-  // 4. ADICIONAR VISTORIA (INSPECTION)
-  async addInspection(req: Request, res: Response) {
+  // ADICIONAR VISTORIA (INSPECTION)
+ /* async addInspection(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const { type, date, reportUrl } = req.body;
@@ -241,9 +241,9 @@ export class ContractController {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao adicionar vistoria.' });
     }
-  }
+  }*/
 
-  // 5. DELETAR CONTRATO (E EXCLUIR FATURAS)
+  // 4.  DELETAR CONTRATO (E EXCLUIR FATURAS)
   async delete(req: Request, res: Response) {
     try {
       const { id } = req.params;

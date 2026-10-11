@@ -30,6 +30,7 @@ import { checkSubscription, requireModule } from '../middlewares/subscriptionMid
 import { CondominiumController } from '../controllers/CondominiumController';
 import { DealController } from '../controllers/DealController';
 import { DimobController } from '../controllers/DimobController';
+import { InspectionController } from '../controllers/InspectionController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -65,6 +66,7 @@ const masterInvoiceController = new MasterInvoiceController();
 const condominiumController = new CondominiumController();
 const dealController = new DealController();
 const dimobController = new DimobController();
+const inspectionController = new InspectionController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -168,7 +170,7 @@ routes.patch('/insurance-companies/:id/status', authMiddleware, insuranceCompany
 routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
-routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
+//routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 
 routes.post('/contracts/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadTenantContract);
@@ -210,6 +212,13 @@ routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
+
+// ==========================================
+// ROTAS DE VISTORIAS (INSPECTIONS)
+// ==========================================
+routes.post('/contracts/:contractId/inspections', authMiddleware, inspectionController.create);
+routes.put('/inspections/:id', authMiddleware, inspectionController.update);
+routes.delete('/inspections/:id', authMiddleware, inspectionController.delete);
 
 routes.post('/ai/generate-description', authMiddleware, aiController.generateDescription);
 
