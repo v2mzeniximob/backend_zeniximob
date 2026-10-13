@@ -39,7 +39,10 @@ app.get('/public/stores/:slug', async (req, res) => {
 
     const properties = await prisma.property.findMany({
       where: { 
-        realEstateId: realEstate.id 
+        realEstateId: realEstate.id,
+        status: {
+      notIn: ['Vendido', 'Alugado', 'VENDIDO', 'ALUGADO']
+    }
       },
       orderBy: { 
         createdAt: 'desc' 
