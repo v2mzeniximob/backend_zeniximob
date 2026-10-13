@@ -16,7 +16,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // ==========================================
 // LIBERTAR ACESSO PÚBLICO À PASTA DE UPLOADS
 // ==========================================
-// Isto diz ao Express para permitir a leitura de ficheiros que estão na pasta "uploads"
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // ==========================================
@@ -41,8 +40,8 @@ app.get('/public/stores/:slug', async (req, res) => {
       where: { 
         realEstateId: realEstate.id,
         status: {
-      notIn: ['Vendido', 'Alugado', 'VENDIDO', 'ALUGADO']
-    }
+          notIn: ['Vendido', 'Alugado', 'VENDIDO', 'ALUGADO']
+        }
       },
       orderBy: { 
         createdAt: 'desc' 
@@ -75,7 +74,10 @@ app.get('/public/stores/:slug/properties/:propertyId', async (req, res) => {
       where: { 
         id: propertyId,
         realEstateId: realEstate.id,
-        isActive: true 
+        isActive: true,
+        status: {
+          notIn: ['Vendido', 'Alugado', 'VENDIDO', 'ALUGADO']
+        }
       },
       include: {
         broker: true // Traz os dados do corretor responsável
@@ -83,7 +85,7 @@ app.get('/public/stores/:slug/properties/:propertyId', async (req, res) => {
     });
 
     if (!property) {
-      return res.status(404).json({ error: 'Imóvel não encontrado.' });
+      return res.status(404).json({ error: 'Imóvel não encontrado ou indisponível.' });
     }
 
     return res.json({ realEstate, property });
