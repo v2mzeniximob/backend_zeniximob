@@ -125,6 +125,15 @@ model RealEstate {
 
   whatsappConfig  WhatsappConfig?
 
+  rouletteEnabled        Boolean  @default(false)
+  rouletteTimeoutMinutes Int      @default(30) // Tempo em minutos para repescagem
+  agencySplitPercent     Float    @default(50) // % padrão da Imobiliária
+  sellerSplitPercent     Float    @default(35) // % padrão do Corretor Vendedor
+  captatorSplitPercent   Float    @default(10) // % padrão do Corretor Captador
+  managerSplitPercent    Float    @default(5)  // % padrão do Gerente
+
+  commissions            Commission[]
+  valuations             PropertyValuation[]
   properties        Property[]
   leads             Lead[]
   brokers           Broker[]
@@ -135,7 +144,7 @@ model RealEstate {
   insuranceCompanies InsuranceCompany[] 
   keyMovements      KeyMovement[]
   masterContracts  MasterContract[]
-  condominiums      Condominium[] // Relacionamento com os Condomínios da loja
+  condominiums      Condominium[] 
 
   // NOVO: Relacionamentos do Kanban
   pipelineStages    PipelineStage[]
@@ -279,6 +288,16 @@ model Broker {
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+
+  role               String    @default("Corretor") // "Corretor", "Captador", "Gerente"
+  captureCommission  Float?    @default(10) // % quando ele é o Captador do imóvel
+  managerCommission  Float?    @default(5)  // % de Gerência sobre negócios da equipe
+  
+  // Controle da Roleta de Leads
+  inRoulette         Boolean   @default(true)
+  lastLeadAssignedAt DateTime? // Controla quem é o próximo da fila circular
+
+  commissions        Commission[]
   
   // Relacionamentos ajustados com nomes específicos
   properties         Property[] @relation("PropertyBroker")
@@ -554,6 +573,11 @@ model Lead {
   searchNeighborhoods String[]  // Array com os bairros desejados
   searchMinBedrooms   Int?      // Número mínimo de quartos
   searchMinGarage     Int?      // Número mínimo de vagas
+
+  // Controle de Repescagem Automática (SLA de Atendimento)
+  assignedAt         DateTime? @default(now()) // Hora exata em que o corretor recebeu o lead
+  firstContactAt     DateTime? // Preenchido quando o corretor interage (trava a repescagem)
+  reassignedCount    Int       @default(0)     // Quantas vezes o lead mudou de corretor por atraso
 
   history     LeadHistory[] 
   
@@ -864,4 +888,69 @@ model WhatsappConfig {
   
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+}
+
+// ==========================================
+// RATEIO DE COMISSÕES (SPLIT DE CORRETAGEM)
+// ==========================================
+model Commission {
+  id              String     @id @default(uuid())
+  realEstateId    String
+  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  brokerId        String?
+  broker          Broker?    @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  
+  contractId      String?
+  propertyTitle   String     // Título do imóvel negociado
+  transactionType String     // "Venda" ou "Locação"
+  dealValue       Float      // Valor total da venda ou 1º aluguel
+  totalCommission Float      // Valor total da comissão bruta gerada
+  
+  roleInDeal      String     // "Vendedor", "Captador", "Gerente", "Imobiliária"
+  percentage      Float      // % que este participante recebeu no rateio
+  amount          Float      // Valor em R$ líquido deste participante
+  
+  status          String     @default("Pendente") // "Pendente", "Pago"
+  paidAt          DateTime?
+  notes           String?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+// ==========================================
+// AVALIADOR DE IMÓVEIS (LAUDO PTAM / ACM)
+// ==========================================
+model PropertyValuation {
+  id                  String     @id @default(uuid())
+  realEstateId        String
+  realEstate          RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  ownerName           String
+  ownerPhone          String?
+  propertyTitle       String
+  address             String
+  neighborhood        String
+  city                String
+  type                String     // Casa, Apartamento, Comercial, Terreno
+  transaction         String     // Venda ou Aluguel
+  
+  area                Float
+  bedrooms            Int        @default(0)
+  bathrooms           Int        @default(0)
+  garage              Int        @default(0)
+  conservationState   String     @default("Padrão") // "Novo/Reformado", "Padrão", "Precisa de Reforma"
+  
+  avgSqmPrice         Float      // Preço médio do m² calculado
+  estimatedPrice      Float      // Valor justo estimado
+  minPrice            Float      // Faixa mínima (Liquidez Rápida)
+  maxPrice            Float      // Faixa máxima (Teto de Mercado)
+  
+  comparablesJson     Json       // Guarda a lista de imóveis comparáveis usados no laudo
+  brokerName          String?
+  brokerCreci         String?
+  notes               String?    @db.Text
+
+  createdAt           DateTime   @default(now())
 }

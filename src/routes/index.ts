@@ -33,6 +33,7 @@ import { DimobController } from '../controllers/DimobController';
 import { InspectionController } from '../controllers/InspectionController';
 import { WhatsappController } from '../controllers/WhatsappController';
 import { WebhookController } from '../controllers/WebhookController';
+import { ValuationController } from '../controllers/ValuationController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -71,6 +72,7 @@ const dimobController = new DimobController();
 const inspectionController = new InspectionController();
 const whatsappController = new WhatsappController();
 const webhookController = new WebhookController();
+const valuationController = new ValuationController();
 
 
 // ==========================================
@@ -192,6 +194,8 @@ routes.post('/leads', authMiddleware, leadController.create);
 routes.put('/leads/:id', authMiddleware, leadController.update);
 routes.post('/leads/:id/history', authMiddleware, leadController.addHistoryEvent);
 routes.get('/leads/:id/matches', authMiddleware, leadController.getMatches);
+routes.get('/leads/roulette/settings', authMiddleware, leadController.getRouletteSettings);
+routes.put('/leads/roulette/settings', authMiddleware, leadController.updateRouletteSettings);
 
 // ==========================================
 // NOVO: ESTEIRA DE VENDAS E LOCAÇÃO (KANBAN)
@@ -209,6 +213,9 @@ routes.post('/brokers', authMiddleware, brokerController.create);
 routes.get('/brokers/reports/commissions', authMiddleware, brokerController.getCommissionReport);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
+routes.patch('/brokers/:id/roulette', authMiddleware, brokerController.toggleRoulette);
+routes.get('/brokers/split-settings', authMiddleware, brokerController.getSplitSettings);
+routes.put('/brokers/split-settings', authMiddleware, brokerController.updateSplitSettings);
 
 routes.get('/invoices', authMiddleware, invoiceController.list);
 routes.post('/invoices', authMiddleware, invoiceController.create);
@@ -223,6 +230,14 @@ routes.get('/visits', authMiddleware, visitController.list);
 routes.post('/visits', authMiddleware, visitController.create);
 routes.patch('/visits/:id/status', authMiddleware, visitController.updateStatus);
 routes.put('/visits/:id', authMiddleware, visitController.updateStatus);
+
+// ==========================================
+// ROTAS DO AVALIADOR DE IMÓVEIS (PTAM / ACM)
+// ==========================================
+routes.get('/valuations/comparables', authMiddleware, valuationController.findComparables);
+routes.get('/valuations', authMiddleware, valuationController.list);
+routes.post('/valuations', authMiddleware, valuationController.create);
+routes.delete('/valuations/:id', authMiddleware, valuationController.delete);
 
 // ==========================================
 // ROTAS WHATSAPP & ROBÔ IA
