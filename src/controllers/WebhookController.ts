@@ -59,7 +59,7 @@ export class WebhookController {
         }
       });
 
-      // FUNÇÃO AUXILIAR PARA ENVIAR MENSAGEM PELO WHATSAPP (Evolution API v2.2.3)
+      // FUNÇÃO AUXILIAR PARA ENVIAR MENSAGEM PELO WHATSAPP (Evolution API v2.2.3 / v2.3.7)
       const sendWhatsAppMessage = async (textMsg: string) => {
         try {
           await axios.post(
@@ -83,7 +83,7 @@ export class WebhookController {
       };
 
       // ==========================================
-      // LÓGICA DO CHATBOT DE TRIAGEM + ROLETA
+      // LÓGICA DO CHATBOT COM BUSCA DE CÓDIGO + TRIAGEM
       // ==========================================
 
       // SE É UM LEAD NOVO (Ainda não existe no CRM)
@@ -112,7 +112,7 @@ export class WebhookController {
             phone: phone,
             stage: 'Novo',
             status: 'Novo',
-            interest: 'Triagem Automática (WhatsApp)',
+            interest: 'Contato Inicial (WhatsApp)',
             notes: `Primeiro contato via WhatsApp: "${text}"`,
             brokerId: finalBrokerId,
             assignedAt: new Date(),
@@ -126,13 +126,13 @@ export class WebhookController {
             leadId: lead.id,
             actionType: 'WhatsApp',
             description: brokerAssignedName
-              ? `🤖 Lead captado no WhatsApp ("${text}") e atribuído pela Roleta para: ${brokerAssignedName}.`
-              : `🤖 Lead iniciou conversa no WhatsApp: "${text}".`
+              ? `🤖 Lead captado no WhatsApp e atribuído pela Roleta para: ${brokerAssignedName}.`
+              : `🤖 Lead iniciou conversa no WhatsApp.`
           }
         });
 
         const saudacao = config.welcomeMessage || 'Olá! Sou o assistente virtual da imobiliária.';
-        await sendWhatsAppMessage(`${saudacao}\n\nPara eu o ajudar melhor, diga-me: procura imóvel para *Comprar* ou *Alugar*?`);
+        await sendWhatsAppMessage(`${saudacao}\n\nVocê viu algum imóvel específico no nosso site? Se sim, por favor, envie o **código do imóvel**. Caso contrário, digite **'não'** para procurarmos juntos!`);
         return;
       }
 
@@ -143,8 +143,69 @@ export class WebhookController {
 
       const userText = text.toLowerCase();
 
+      // PASSO 0: Verificar se o lead está respondendo sobre o Código do Imóvel do Site
+      if (lead.searchTransaction === null || lead.searchTransaction === 'PENDING') {
+        const cleanCode = text.trim();
+        const isNegative = userText.includes('não') || userText.includes('nao') || userText.includes('na') || userText.includes('nenhum');
+
+        if (isNegative) {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: { searchTransaction: 'PENDING_CHOICE' }
+          });
+          await sendWhatsAppMessage('Sem problemas! Para eu o ajudar melhor, procura imóvel para **Comprar** ou **Alugar**?');
+          return;
+        }
+
+        // Tenta buscar o imóvel pelo código no banco de dados da imobiliária
+        const property = await prisma.property.findFirst({
+          where: {
+            realEstateId: config.realEstateId,
+            OR: [
+              { code: { equals: cleanCode, mode: 'insensitive' } },
+              { id: cleanCode }
+            ]
+          }
+        });
+
+        if (property) {
+          // Imóvel encontrado! Vincula o lead ao imóvel e já direciona para atendimento humano
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: {
+              interest: `Imóvel Cód: ${property.code || property.id} (${property.title || 'Imóvel'})`,
+              searchTransaction: property.type === 'RENT' ? 'Locação' : 'Venda',
+              searchType: property.category || property.type,
+              stage: 'Atendimento', // Vai direto para atendimento humano com o imóvel identificado!
+              notes: (lead.notes || '') + `\nCliente demonstrou interesse direto no imóvel código ${cleanCode}: ${property.title}`
+            }
+          });
+
+          await prisma.leadHistory.create({
+            data: {
+              leadId: lead.id,
+              actionType: 'WhatsApp',
+              description: `🎯 Cliente informou o código do imóvel: ${cleanCode} (${property.title || 'Imóvel'}). Lead direcionado para atendimento humano!`
+            }
+          });
+
+          await sendWhatsAppMessage(`Encontrei o imóvel! 🏠 *${property.title || 'Imóvel'}* (Cód: ${cleanCode}).\n\nJá registei o seu interesse e encaminhei para o corretor responsável, que entrará em contacto em instantes com todos os detalhes e para agendar a sua visita. Obrigado!`);
+          return;
+        } else {
+          // Se digitou algo mas não é um código válido nem disse não
+          if (lead.searchTransaction === null) {
+            await prisma.lead.update({
+              where: { id: lead.id },
+              data: { searchTransaction: 'PENDING_CHOICE' }
+            });
+            await sendWhatsAppMessage(`Não encontrei nenhum imóvel ativo com o código "${cleanCode}".\n\nDeseja procurar imóvel para **Comprar** ou **Alugar**?`);
+            return;
+          }
+        }
+      }
+
       // PERGUNTA 1: Transação (Comprar ou Alugar?)
-      if (!lead.searchTransaction) {
+      if (lead.searchTransaction === 'PENDING_CHOICE' || !lead.searchTransaction) {
         let transacao = '';
         if (userText.includes('comprar') || userText.includes('compra') || userText.includes('venda')) transacao = 'Venda';
         else if (userText.includes('alugar') || userText.includes('locação') || userText.includes('locacao') || userText.includes('aluguel')) transacao = 'Locação';
