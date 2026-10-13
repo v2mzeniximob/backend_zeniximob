@@ -36,17 +36,28 @@ app.get('/public/stores/:slug', async (req, res) => {
       return res.status(404).json({ error: 'Imobiliária não encontrada ou inativa.' });
     }
 
-    const properties = await prisma.property.findMany({
+    const allProperties = await prisma.property.findMany({
       where: { 
         realEstateId: realEstate.id,
-        isActive: true,
-        keyStatus: {
-          notIn: ['Vendido', 'Alugado', 'VENDIDO', 'ALUGADO', 'vendido', 'alugado']
-        }
+        isActive: true
       },
       orderBy: { 
         createdAt: 'desc' 
       }
+    });
+
+    // Filtro rigoroso no backend para garantir que nenhum imóvel vendido ou alugado passe
+    const properties = allProperties.filter((p: any) => {
+      const kStat = (p.keyStatus || '').toLowerCase();
+      const rStat = (p.rentStatus || '').toLowerCase();
+      const stat = (p.status || '').toLowerCase();
+
+      const isUnavailable = 
+        kStat.includes('vendido') || kStat.includes('alugado') ||
+        rStat.includes('vendido') || rStat.includes('alugado') ||
+        stat.includes('vendido') || stat.includes('alugado');
+
+      return !isUnavailable;
     });
 
     return res.json({ realEstate, properties });
@@ -75,18 +86,15 @@ app.get('/public/stores/:slug/properties/:propertyId', async (req, res) => {
       where: { 
         id: propertyId,
         realEstateId: realEstate.id,
-        isActive: true,
-        keyStatus: {
-          notIn: ['Vendido', 'Alugado', 'VENDIDO', 'ALUGADO', 'vendido', 'alugado']
-        }
+        isActive: true 
       },
       include: {
-        broker: true // Traz os dados do corretor responsável
+        broker: true
       }
     });
 
     if (!property) {
-      return res.status(404).json({ error: 'Imóvel não encontrado ou indisponível.' });
+      return res.status(404).json({ error: 'Imóvel não encontrado.' });
     }
 
     return res.json({ realEstate, property });
