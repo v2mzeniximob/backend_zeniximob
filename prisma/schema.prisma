@@ -353,7 +353,7 @@ model Property {
   type          String      // Casa, Apartamento, Terreno, etc.
   category      String      // Residencial ou Comercial
   transaction   String      // Venda ou Aluguel
-  
+  code          String?
   // Valores
   price         Float
   condoFee      Float?      @default(0) // Valor do Condomínio

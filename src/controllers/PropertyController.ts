@@ -18,7 +18,7 @@ async function getRealEstateId(req: Request): Promise<string | null> {
 
 // Campos do imóvel que qualquer visitante da vitrine pode ver.
 const PUBLIC_PROPERTY_FIELDS = {
-  id: true, title: true, type: true, category: true, transaction: true,
+  id: true, code: true, title: true, type: true, category: true, transaction: true,
   price: true, condoFee: true, iptu: true,
   area: true, bedrooms: true, bathrooms: true, garage: true, yearBuilt: true, amenities: true,
   cep: true, address: true, neighborhood: true, city: true, state: true, latitude: true, longitude: true,
@@ -40,7 +40,7 @@ export class PropertyController {
       if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
 
       const { 
-        title, type, category, transaction, price, condoFee, iptu, area, 
+        code, title, type, category, transaction, price, condoFee, iptu, area, 
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId, inspectionUrl, rentProposalUrl, saleProposalUrl, keyTermUrl, exportToPortals,
@@ -54,6 +54,7 @@ export class PropertyController {
 
       const property = await prisma.property.create({
         data: {
+          code: code || null,
           title, type, category: category || 'Residencial', transaction,
           price: Number(price), condoFee: Number(condoFee || 0), iptu: Number(iptu || 0),
           area: Number(area), bedrooms: Number(bedrooms || 0), bathrooms: Number(bathrooms || 0), 
@@ -88,7 +89,7 @@ export class PropertyController {
         },
         include: { 
           broker: { select: { id: true, name: true, phone: true } },
-          captator: { select: { id: true, name: true, phone: true } }, // Inclui o angariador
+          captator: { select: { id: true, name: true, phone: true } },
           owner: { select: { id: true, name: true, phone: true } },
           condominium: { select: { id: true, name: true } } 
         }
@@ -134,7 +135,7 @@ export class PropertyController {
       if (!realEstateId) return res.status(401).json({ error: 'Não autorizado.' });
 
       const { 
-        title, type, category, transaction, price, condoFee, iptu, area, 
+        code, title, type, category, transaction, price, condoFee, iptu, area, 
         bedrooms, bathrooms, garage, yearBuilt, amenities, cep, address, 
         neighborhood, city, state, latitude, longitude, description, imageUrls, brokerId,
         ownerId, inspectionUrl, rentStatus,
@@ -150,6 +151,7 @@ export class PropertyController {
       const property = await prisma.property.update({
         where: { id, realEstateId },
         data: {
+          code: code === "" ? null : code,
           title, type, category, transaction, 
           price: price !== undefined ? Number(price) : undefined, 
           condoFee: condoFee !== undefined ? Number(condoFee || 0) : undefined, 
@@ -171,7 +173,7 @@ export class PropertyController {
           inspectionUrl: inspectionUrl === "" ? null : inspectionUrl,
           rentProposalUrl: rentProposalUrl === "" ? null : rentProposalUrl, 
           saleProposalUrl: saleProposalUrl === "" ? null : saleProposalUrl, 
-          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                  
+          keyTermUrl: keyTermUrl === "" ? null : keyTermUrl,                
           exportToPortals: exportToPortals !== undefined ? Boolean(exportToPortals) : undefined,
           rentStatus: rentStatus || undefined,
 
