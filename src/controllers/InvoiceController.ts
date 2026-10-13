@@ -73,7 +73,7 @@ export class InvoiceController {
     }
   }
 
-  // 4. 🚀 GERAR COBRANÇA (PIX OU BOLETO) 🚀
+  // 4. GERAR COBRANÇA (PIX OU BOLETO)
   async generateCharge(req: Request, res: Response) {
     try {
       const { id } = req.params; 
