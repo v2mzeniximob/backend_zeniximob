@@ -6,11 +6,20 @@ const prisma = new PrismaClient() as any;
 
 // ==============================================================
 // CONFIGURAÇÕES DA EVOLUTION API
-// (Recomendado colocar estas variáveis no seu ficheiro .env)
 // ==============================================================
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
-const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'sua_api_key_global_aqui';
-const ZENIX_WEBHOOK_URL = process.env.APP_URL || 'https://sua-api.ngrok.app'; // O endereço do seu backend
+const EVOLUTION_API_URL = (process.env.EVOLUTION_API_URL || 'http://localhost:8080').replace(/\/$/, '');
+const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || 'ZenixMasterKey2026!';
+const ZENIX_WEBHOOK_URL = (
+  process.env.BACKEND_URL ||
+  process.env.APP_URL ||
+  'https://backend-zeniximob.onrender.com'
+).replace(/\/$/, '');
+
+const evoHeaders = {
+  apikey: EVOLUTION_API_KEY,
+  'Content-Type': 'application/json',
+  'ngrok-skip-browser-warning': 'true'
+};
 
 export class WhatsappController {
 
@@ -37,15 +46,16 @@ export class WhatsappController {
         });
       }
 
-      // Sincronização em Tempo Real com a Evolution API (Opcional, mas recomendado)
+      // Sincronização em Tempo Real com a Evolution API
       if (config.status !== 'DISCONNECTED') {
         try {
-          const evoRes = await axios.get(`${EVOLUTION_API_URL}/instance/connectionState/${config.instanceName}`, {
-            headers: { apikey: EVOLUTION_API_KEY }
-          });
-          
+          const evoRes = await axios.get(
+            `${EVOLUTION_API_URL}/instance/connectionState/${config.instanceName}`,
+            { headers: evoHeaders }
+          );
+
           const state = evoRes.data?.instance?.state || evoRes.data?.state;
-          
+
           if (state === 'open' && config.status !== 'CONNECTED') {
             config = await prisma.whatsappConfig.update({
               where: { id: config.id },
@@ -54,11 +64,11 @@ export class WhatsappController {
           } else if (state === 'close' && config.status === 'CONNECTED') {
             config = await prisma.whatsappConfig.update({
               where: { id: config.id },
-              data: { status: 'DISCONNECTED' }
+              data: { status: 'DISCONNECTED', qrCodeBase64: null }
             });
           }
         } catch (err) {
-          // Se a instância não existe na Evolution (ex: servidor reiniciou), forçamos desconexão
+          // Se a instância não existe na Evolution, força status desconectado
           config = await prisma.whatsappConfig.update({
             where: { id: config.id },
             data: { status: 'DISCONNECTED', qrCodeBase64: null }
@@ -73,7 +83,7 @@ export class WhatsappController {
     }
   }
 
-  // 2. CONECTAR / GERAR QR CODE
+  // 2. CONECTAR / GERAR QR CODE (Compatível com Evolution API v2.2.3)
   async connect(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -82,19 +92,47 @@ export class WhatsappController {
       let config = await prisma.whatsappConfig.findUnique({ where: { realEstateId } });
       if (!config) return res.status(404).json({ error: 'Configuração não encontrada.' });
 
-      // Chama a Evolution API para criar a instância e pedir o QR Code em Base64
-      const response = await axios.post(`${EVOLUTION_API_URL}/instance/create`, {
-        instanceName: config.instanceName,
-        qrcode: true,
-        integration: "WHATSAPP-BAILEYS",
-        // Configura o Webhook para onde a Evolution vai enviar as mensagens recebidas!
-        webhook: `${ZENIX_WEBHOOK_URL}/webhook/whatsapp/${config.instanceName}`,
-        webhook_events: ["MESSAGES_UPSERT"]
-      }, {
-        headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' }
-      });
+      const webhookUrl = `${ZENIX_WEBHOOK_URL}/webhook/whatsapp/${config.instanceName}`;
 
-      const qrCode = response.data?.qrcode?.base64 || response.data?.base64;
+      // Limpa qualquer sessão anterior travada com o mesmo nome antes de gerar novo QR Code
+      try {
+        await axios.delete(`${EVOLUTION_API_URL}/instance/delete/${config.instanceName}`, {
+          headers: evoHeaders
+        });
+      } catch (e) {
+        // Ignora se a instância ainda não existia
+      }
+
+      // Cria a instância na Evolution API v2.2.3 já com o Webhook configurado
+      const response = await axios.post(
+        `${EVOLUTION_API_URL}/instance/create`,
+        {
+          instanceName: config.instanceName,
+          qrcode: true,
+          integration: 'WHATSAPP-BAILEYS',
+          webhook: {
+            url: webhookUrl,
+            byEvents: false,
+            base64: false,
+            events: ['MESSAGES_UPSERT']
+          }
+        },
+        { headers: evoHeaders }
+      );
+
+      let qrCode =
+        response.data?.qrcode?.base64 ||
+        response.data?.base64 ||
+        null;
+
+      // Caso a Evolution não devolva o base64 no create, busca no endpoint connect
+      if (!qrCode) {
+        const connectRes = await axios.get(
+          `${EVOLUTION_API_URL}/instance/connect/${config.instanceName}`,
+          { headers: evoHeaders }
+        );
+        qrCode = connectRes.data?.base64 || connectRes.data?.qrcode?.base64 || null;
+      }
 
       // Atualiza a base de dados
       config = await prisma.whatsappConfig.update({
@@ -121,16 +159,20 @@ export class WhatsappController {
       const config = await prisma.whatsappConfig.findUnique({ where: { realEstateId } });
       if (!config) return res.status(404).json({ error: 'Configuração não encontrada.' });
 
-      // Tenta apagar a instância na Evolution API (Logout + Delete)
+      try {
+        await axios.delete(`${EVOLUTION_API_URL}/instance/logout/${config.instanceName}`, {
+          headers: evoHeaders
+        });
+      } catch (err) {}
+
       try {
         await axios.delete(`${EVOLUTION_API_URL}/instance/delete/${config.instanceName}`, {
-          headers: { apikey: EVOLUTION_API_KEY }
+          headers: evoHeaders
         });
       } catch (err) {
         console.warn('Instância já não existia na Evolution API ou falhou ao apagar.');
       }
 
-      // Atualiza a base de dados
       const updatedConfig = await prisma.whatsappConfig.update({
         where: { id: config.id },
         data: {
@@ -156,7 +198,7 @@ export class WhatsappController {
       const updatedConfig = await prisma.whatsappConfig.update({
         where: { realEstateId },
         data: {
-          botEnabled,
+          botEnabled: Boolean(botEnabled),
           welcomeMessage
         }
       });
