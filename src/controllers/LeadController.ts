@@ -4,8 +4,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient() as any;
 
 // ============================================================================
-// FUNÇÃO AUXILIAR GLOBAL: ESCOLHE O PRÓXIMO CORRETOR DA FILA (ROLETA CIRCULAR)
-// Pode ser chamada pelo LeadController, WebhookController ou ClientController
+// FUNÇÃO AUXILIAR 1: ESCOLHE O PRÓXIMO CORRETOR DA FILA (ROLETA CIRCULAR)
 // ============================================================================
 export async function pickNextBrokerInRoulette(realEstateId: string, excludeBrokerId?: string) {
   const brokers = await prisma.broker.findMany({
@@ -15,13 +14,13 @@ export async function pickNextBrokerInRoulette(realEstateId: string, excludeBrok
       inRoulette: true
     },
     orderBy: {
-      lastLeadAssignedAt: 'asc' // Os que nunca receberam (null) ou receberam há mais tempo vêm primeiro
+      lastLeadAssignedAt: 'asc'
     }
   });
 
   if (!brokers || brokers.length === 0) return null;
 
-  // Garante que quem tem lastLeadAssignedAt === null fique no topo absoluto da fila
+  // Garante que quem nunca recebeu lead (null) fique no topo da fila
   brokers.sort((a: any, b: any) => {
     if (!a.lastLeadAssignedAt && b.lastLeadAssignedAt) return -1;
     if (a.lastLeadAssignedAt && !b.lastLeadAssignedAt) return 1;
@@ -29,15 +28,14 @@ export async function pickNextBrokerInRoulette(realEstateId: string, excludeBrok
     return new Date(a.lastLeadAssignedAt).getTime() - new Date(b.lastLeadAssignedAt).getTime();
   });
 
-  // Se for uma Repescagem e houver mais de 1 corretor na fila, pula o corretor atrasado
   let candidates = brokers;
   if (excludeBrokerId && brokers.length > 1) {
     candidates = brokers.filter((b: any) => b.id !== excludeBrokerId);
   }
 
   const chosenBroker = candidates[0];
+  if (!chosenBroker) return null;
 
-  // Atualiza o relógio do corretor sorteado para ele ir para o final da fila
   await prisma.broker.update({
     where: { id: chosenBroker.id },
     data: { lastLeadAssignedAt: new Date() }
@@ -46,91 +44,89 @@ export async function pickNextBrokerInRoulette(realEstateId: string, excludeBrok
   return chosenBroker;
 }
 
+// ============================================================================
+// FUNÇÃO AUXILIAR 2: VERIFICA E EXECUTA A REPESCAGEM AUTOMÁTICA (30 MIN)
+// ============================================================================
+async function runRepescagemCheck(realEstateId: string) {
+  try {
+    const store = await prisma.realEstate.findUnique({
+      where: { id: realEstateId },
+      select: { rouletteEnabled: true, rouletteTimeoutMinutes: true }
+    });
+
+    if (!store || !store.rouletteEnabled) return;
+
+    const timeoutMinutes = store.rouletteTimeoutMinutes || 30;
+    const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
+
+    const expiredLeads = await prisma.lead.findMany({
+      where: {
+        realEstateId,
+        stage: 'Novo',
+        firstContactAt: null,
+        brokerId: { not: null },
+        assignedAt: { lte: cutoffTime }
+      },
+      include: {
+        broker: { select: { id: true, name: true } }
+      }
+    });
+
+    if (expiredLeads.length === 0) return;
+
+    const manager = await prisma.broker.findFirst({
+      where: { realEstateId, role: 'Gerente', isActive: true },
+      select: { name: true }
+    });
+
+    for (const lead of expiredLeads) {
+      const oldBrokerName = lead.broker?.name || 'Corretor Anterior';
+      const nextBroker = await pickNextBrokerInRoulette(realEstateId, lead.brokerId);
+
+      if (nextBroker && nextBroker.id !== lead.brokerId) {
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            brokerId: nextBroker.id,
+            assignedAt: new Date(),
+            reassignedCount: (lead.reassignedCount || 0) + 1
+          }
+        });
+
+        const managerNote = manager ? ` (Gerente ${manager.name} notificado no painel)` : '';
+
+        await prisma.leadHistory.create({
+          data: {
+            leadId: lead.id,
+            actionType: 'Sistema',
+            description: `⏰ REPESCAGEM AUTOMÁTICA: ${oldBrokerName} não iniciou o atendimento dentro do prazo de ${timeoutMinutes} min. O Lead foi transferido automaticamente para ${nextBroker.name}${managerNote}.`
+          }
+        });
+      } else {
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: { assignedAt: new Date() }
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Erro ao processar repescagem automática:', error);
+  }
+}
+
 export class LeadController {
 
-  // ============================================================================
-  // MOTOR INTERNO DE REPESCAGEM AUTOMÁTICA (SLA DE ATENDIMENTO)
-  // ============================================================================
-  private async runRepescagemCheck(realEstateId: string) {
-    try {
-      const store = await prisma.realEstate.findUnique({
-        where: { id: realEstateId },
-        select: { rouletteEnabled: true, rouletteTimeoutMinutes: true }
-      });
-
-      if (!store || !store.rouletteEnabled) return;
-
-      const timeoutMinutes = store.rouletteTimeoutMinutes || 30;
-      const cutoffTime = new Date(Date.now() - timeoutMinutes * 60 * 1000);
-
-      // Busca leads que ainda estão na coluna "Novo", sem primeiro contato, e cujo tempo estourou
-      const expiredLeads = await prisma.lead.findMany({
-        where: {
-          realEstateId,
-          stage: 'Novo',
-          firstContactAt: null,
-          brokerId: { not: null },
-          assignedAt: { lte: cutoffTime }
-        },
-        include: {
-          broker: { select: { id: true, name: true } }
-        }
-      });
-
-      if (expiredLeads.length === 0) return;
-
-      // Busca o gerente ativo da loja (para constar no alerta do histórico)
-      const manager = await prisma.broker.findFirst({
-        where: { realEstateId, role: 'Gerente', isActive: true },
-        select: { name: true }
-      });
-
-      for (const lead of expiredLeads) {
-        const oldBrokerName = lead.broker?.name || 'Corretor Anterior';
-        const nextBroker = await pickNextBrokerInRoulette(realEstateId, lead.brokerId);
-
-        if (nextBroker && nextBroker.id !== lead.brokerId) {
-          await prisma.lead.update({
-            where: { id: lead.id },
-            data: {
-              brokerId: nextBroker.id,
-              assignedAt: new Date(),
-              reassignedCount: (lead.reassignedCount || 0) + 1
-            }
-          });
-
-          const managerNote = manager ? ` (Gerente ${manager.name} notificado no painel)` : '';
-
-          await prisma.leadHistory.create({
-            data: {
-              leadId: lead.id,
-              actionType: 'Sistema',
-              description: `⏰ REPESCAGEM AUTOMÁTICA: ${oldBrokerName} não iniciou o atendimento dentro do prazo de ${timeoutMinutes} min. O Lead foi transferido automaticamente para ${nextBroker.name}${managerNote}.`
-            }
-          });
-        } else {
-          // Se só existe 1 corretor na fila, apenas renova o timer para não entrar em loop
-          await prisma.lead.update({
-            where: { id: lead.id },
-            data: { assignedAt: new Date() }
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao processar repescagem automática:', error);
-    }
-  }
-  
-  // 1. Criar um novo Lead (Manual ou Interno)
+  // 1. Criar um novo Lead (Cliente)
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      const { 
+      const {
         name, phone, email, interest, notes, propertyId, brokerId,
-        searchType, searchTransaction, searchMinPrice, searchMaxPrice, 
+        // PARÂMETROS DO RADAR (MATCHMAKING)
+        searchType, searchTransaction, searchMinPrice, searchMaxPrice,
         searchNeighborhoods, searchMinBedrooms, searchMinGarage
       } = req.body;
 
@@ -152,7 +148,6 @@ export class LeadController {
           }
         }
       } else {
-        // Se escolheu manualmente, atualiza a vez desse corretor também
         await prisma.broker.update({
           where: { id: finalBrokerId },
           data: { lastLeadAssignedAt: new Date() }
@@ -161,14 +156,18 @@ export class LeadController {
 
       const lead = await prisma.lead.create({
         data: {
-          name, phone, email, interest: interest || 'Comprador', notes,
-          stage: 'Novo',
+          name,
+          phone,
+          email: email || null,
+          interest: interest || 'Comprador',
+          notes: notes || null,
+          stage: 'Novo', // O Lead entra sempre como "Novo" no funil
           propertyId: propertyId || null,
           brokerId: finalBrokerId,
           assignedAt: new Date(),
           firstContactAt: null,
           reassignedCount: 0,
-          
+
           // DADOS DO RADAR
           searchType: searchType || null,
           searchTransaction: searchTransaction || null,
@@ -182,15 +181,16 @@ export class LeadController {
         }
       });
 
-      const historyMsg = assignedViaRouletteName
-        ? `🎲 Lead cadastrado e distribuído pela Roleta Automática para o corretor da vez: ${assignedViaRouletteName}.`
+      const historyDescription = assignedViaRouletteName
+        ? `🎲 Lead cadastrado e distribuído pela Roleta Automática para: ${assignedViaRouletteName}.`
         : 'Lead cadastrado no sistema.';
 
+      // Regista automaticamente o primeiro evento no histórico do cliente
       await prisma.leadHistory.create({
         data: {
           leadId: lead.id,
           actionType: 'Sistema',
-          description: historyMsg
+          description: historyDescription
         }
       });
 
@@ -201,15 +201,15 @@ export class LeadController {
     }
   }
 
-  // 2. Listar todos os Leads da imobiliária (Já executa a checagem de Repescagem antes de devolver!)
+  // 2. Listar todos os Leads da imobiliária
   async list(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
-      // Executa a verificação de leads vencidos (Repescagem de 30 min)
-      await this.runRepescagemCheck(realEstateId);
+      // Verifica leads com prazo expirado na coluna "Novo" antes de listar
+      await runRepescagemCheck(realEstateId);
 
       const { brokerId, stage } = req.query;
 
@@ -227,7 +227,14 @@ export class LeadController {
         orderBy: { updatedAt: 'desc' }
       });
 
-      return res.json(leads);
+      // Garante que qualquer lead vindo do site sem stage definido apareça na coluna "Novo"
+      const validStages = ['Novo', 'Atendimento', 'Visita', 'Proposta', 'Negociação', 'Fechado', 'Perdido'];
+      const formattedLeads = leads.map((lead: any) => ({
+        ...lead,
+        stage: validStages.includes(lead.stage) ? lead.stage : 'Novo'
+      }));
+
+      return res.json(formattedLeads);
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao listar leads.' });
@@ -247,9 +254,9 @@ export class LeadController {
         return res.status(404).json({ error: 'Lead não encontrado.' });
       }
 
-      const { 
+      const {
         name, phone, email, interest, stage, notes, propertyId, brokerId,
-        searchType, searchTransaction, searchMinPrice, searchMaxPrice, 
+        searchType, searchTransaction, searchMinPrice, searchMaxPrice,
         searchNeighborhoods, searchMinBedrooms, searchMinGarage
       } = req.body;
 
@@ -262,13 +269,11 @@ export class LeadController {
       if (notes !== undefined) dataToUpdate.notes = notes;
       if (propertyId !== undefined) dataToUpdate.propertyId = propertyId || null;
 
-      // Se trocou o corretor manualmente, reinicia o cronómetro para o novo corretor
       if (brokerId !== undefined && brokerId !== existingLead.brokerId) {
         dataToUpdate.brokerId = brokerId || null;
         dataToUpdate.assignedAt = new Date();
       }
 
-      // Se moveu o card de estágio (ex: de "Novo" para "Atendimento"), trava a repescagem!
       if (stage && stage !== existingLead.stage) {
         dataToUpdate.stage = stage;
         if (stage !== 'Novo' && !existingLead.firstContactAt) {
@@ -284,7 +289,6 @@ export class LeadController {
         });
       }
 
-      // Atualiza campos do Radar apenas se foram enviados no body
       if (searchType !== undefined) dataToUpdate.searchType = searchType || null;
       if (searchTransaction !== undefined) dataToUpdate.searchTransaction = searchTransaction || null;
       if (searchMinPrice !== undefined) dataToUpdate.searchMinPrice = searchMinPrice ? Number(searchMinPrice) : null;
@@ -310,7 +314,7 @@ export class LeadController {
     }
   }
 
-  // 4. Adicionar um evento ao Histórico (Trava a repescagem e move para 'Atendimento' se estava 'Novo')
+  // 4. Adicionar um evento ao Histórico
   async addHistoryEvent(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -331,7 +335,6 @@ export class LeadController {
         }
       });
 
-      // Ao registrar contato (WhatsApp, Ligação, E-mail, etc.), marca como atendido para não cair na repescagem!
       const updateData: any = { updatedAt: new Date() };
       if (!lead.firstContactAt) {
         updateData.firstContactAt = new Date();
@@ -349,13 +352,12 @@ export class LeadController {
     }
   }
 
-  // ==========================================
-  // 5. CONFIGURAÇÕES DA ROLETA E FILA DA VEZ
-  // ==========================================
+  // 5. Buscar Configurações da Roleta e Fila da Vez
   async getRouletteSettings(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
 
       const [store, queue] = await Promise.all([
         prisma.realEstate.findUnique({
@@ -369,7 +371,6 @@ export class LeadController {
         })
       ]);
 
-      // Ordena exatamente na ordem de quem vai receber o próximo Lead
       queue.sort((a: any, b: any) => {
         if (!a.lastLeadAssignedAt && b.lastLeadAssignedAt) return -1;
         if (a.lastLeadAssignedAt && !b.lastLeadAssignedAt) return 1;
@@ -383,14 +384,18 @@ export class LeadController {
         queue
       });
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao carregar configurações da roleta.' });
     }
   }
 
+  // 6. Salvar Configurações da Roleta
   async updateRouletteSettings(req: Request, res: Response) {
     try {
       const user = req.user as any;
       const realEstateId = user?.realEstateId || user?.id;
+      if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
+
       const { rouletteEnabled, rouletteTimeoutMinutes } = req.body;
 
       const updated = await prisma.realEstate.update({
@@ -403,12 +408,13 @@ export class LeadController {
 
       return res.json(updated);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao atualizar roleta.' });
     }
   }
 
   // ==========================================
-  // 6. ALGORITMO DE MATCHMAKING (RADAR)
+  // 7. ALGORITMO DE MATCHMAKING (RADAR)
   // ==========================================
   async getMatches(req: Request, res: Response) {
     try {
@@ -421,15 +427,18 @@ export class LeadController {
         return res.status(404).json({ error: 'Lead não encontrado.' });
       }
 
+      // Se o cliente não tiver um perfil de busca preenchido, não há como fazer match
       if (!lead.searchTransaction && !lead.searchType && !lead.searchMaxPrice) {
-        return res.json([]); 
+        return res.json([]);
       }
 
-      const whereClause: any = { 
-        realEstateId, 
-        isActive: true 
+      // Filtro duro: Busca apenas imóveis ativos da imobiliária
+      const whereClause: any = {
+        realEstateId,
+        isActive: true
       };
-      
+
+      // Se o cliente especificou que só quer "Aluguel" ou "Venda", filtramos na base
       if (lead.searchTransaction && lead.searchTransaction !== 'Qualquer') {
         whereClause.transaction = lead.searchTransaction;
       }
@@ -453,7 +462,7 @@ export class LeadController {
             breakdown.typology += 20;
           }
         } else {
-          score += 20;
+          score += 20; // Se não exigiu um tipo específico, ganha os pontos
           breakdown.typology += 20;
         }
 
@@ -465,6 +474,7 @@ export class LeadController {
             score += 30;
             breakdown.price += 30;
           } else if (prop.price <= max * 1.15) {
+            // Regra de Ouro: Se passar até 15% do orçamento máximo, ganha metade dos pontos (margem de negociação)
             score += 15;
             breakdown.price += 15;
           }
@@ -491,13 +501,13 @@ export class LeadController {
         } else {
           featureScore += 10;
         }
-        
+
         if (lead.searchMinGarage) {
           if (prop.garage >= lead.searchMinGarage) featureScore += 10;
         } else {
           featureScore += 10;
         }
-        
+
         score += featureScore;
         breakdown.features += featureScore;
 
@@ -508,6 +518,7 @@ export class LeadController {
         };
       });
 
+      // Filtra apenas matches relevantes (Acima de 40% de compatibilidade) e ordena do maior para o menor
       const filteredMatches = matches
         .filter((m: any) => m.score >= 40)
         .sort((a: any, b: any) => b.score - a.score);
