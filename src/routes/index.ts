@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { AuthController } from '../controllers/AuthController';
 import { PlanController } from '../controllers/PlanController';
 import { FranchiseeController } from '../controllers/FranchiseeController';
@@ -6,7 +7,7 @@ import { IntegrationController } from '../controllers/IntegrationController';
 import { RealEstateController } from '../controllers/RealEstateController';
 import { DashboardController } from '../controllers/DashboardController';
 import { PropertyController } from '../controllers/PropertyController';
-import { LeadController } from '../controllers/LeadController';
+import { LeadController, pickNextBrokerInRoulette } from '../controllers/LeadController';
 import { BrokerController } from '../controllers/BrokerController';
 import { ClientController } from '../controllers/ClientController';
 import { TenantController } from '../controllers/TenantController';
@@ -39,6 +40,8 @@ import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
 
 const routes = Router();
+const prisma = new PrismaClient() as any;
+
 const authController = new AuthController();
 const planController = new PlanController();
 const franchiseeController = new FranchiseeController();
@@ -74,7 +77,6 @@ const whatsappController = new WhatsappController();
 const webhookController = new WebhookController();
 const valuationController = new ValuationController();
 
-
 // ==========================================
 // ROTAS PÚBLICAS
 // ==========================================
@@ -88,20 +90,57 @@ routes.get('/public/xml/:slug', xmlController.generateFeed);
 routes.post('/public/leads', async (req, res) => {
   try {
     const { name, phone, email, interest, status, notes, propertyId, realEstateId, brokerId } = req.body;
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient() as any;
+
+    let finalBrokerId = brokerId || null;
+    let assignedViaRouletteName: string | null = null;
+
+    // Se o lead veio do site sem corretor específico, verifica se a Roleta da loja está ativa
+    if (!finalBrokerId && realEstateId) {
+      const store = await prisma.realEstate.findUnique({
+        where: { id: realEstateId },
+        select: { rouletteEnabled: true }
+      }).catch(() => null);
+
+      if (store?.rouletteEnabled) {
+        const picked = await pickNextBrokerInRoulette(realEstateId);
+        if (picked) {
+          finalBrokerId = picked.id;
+          assignedViaRouletteName = picked.name;
+        }
+      }
+    }
 
     const lead = await prisma.lead.create({
       data: {
-        name, phone, email, interest: interest || 'Geral',
-        status: status || 'Novo', notes,
+        name,
+        phone,
+        email,
+        interest: interest || 'Geral',
+        status: status || 'Novo',
+        stage: 'Novo',
+        notes,
         propertyId: propertyId || null,
-        brokerId: brokerId || null,
+        brokerId: finalBrokerId,
+        assignedAt: new Date(),
+        firstContactAt: null,
+        reassignedCount: 0,
         realEstateId
       }
     });
+
+    await prisma.leadHistory.create({
+      data: {
+        leadId: lead.id,
+        actionType: 'Sistema',
+        description: assignedViaRouletteName
+          ? `🌐 Lead recebido pelo Site Oficial e distribuído pela Roleta para: ${assignedViaRouletteName}.`
+          : '🌐 Lead recebido através do Site Oficial.'
+      }
+    }).catch(() => {});
+
     return res.status(201).json(lead);
   } catch (error) {
+    console.error('Erro ao registar lead público:', error);
     return res.status(500).json({ error: 'Erro ao registar mensagem do cliente.' });
   }
 });
@@ -147,12 +186,12 @@ routes.get('/condominiums', authMiddleware, condominiumController.list);
 routes.put('/condominiums/:id', authMiddleware, condominiumController.update);
 routes.patch('/condominiums/:id/status', authMiddleware, condominiumController.toggleStatus);
 
+routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
 routes.put('/properties/:id', authMiddleware, propertyController.update);
 routes.patch('/properties/:id/status', authMiddleware, propertyController.toggleStatus);
 routes.put('/properties/:id/rental', authMiddleware, propertyController.updateRentalInfo);
-routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 
 routes.get('/owners', authMiddleware, ownerController.list);
 routes.post('/owners', authMiddleware, ownerController.create);
@@ -172,8 +211,8 @@ routes.put('/key-terms/:id', authMiddleware, keyTermController.update);
 routes.delete('/key-terms/:id', authMiddleware, keyTermController.delete);
 
 routes.get('/keys', authMiddleware, keyController.list);
-routes.patch('/keys/:id/code', authMiddleware, keyController.updateKeyCode);
 routes.post('/keys/withdraw', authMiddleware, keyController.withdraw);
+routes.patch('/keys/:id/code', authMiddleware, keyController.updateKeyCode);
 routes.patch('/keys/:movementId/return', authMiddleware, keyController.returnKey);
 
 routes.post('/insurance-companies', authMiddleware, insuranceCompanyController.create);
@@ -189,16 +228,19 @@ routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 routes.post('/contracts/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadTenantContract);
 routes.post('/owners/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadOwnerContract);
 
+// ==========================================
+// ROTAS DE LEADS & ROLETA (Rotas fixas ANTES de :id)
+// ==========================================
+routes.get('/leads/roulette/settings', authMiddleware, leadController.getRouletteSettings);
+routes.put('/leads/roulette/settings', authMiddleware, leadController.updateRouletteSettings);
 routes.get('/leads', authMiddleware, leadController.list);
 routes.post('/leads', authMiddleware, leadController.create);
 routes.put('/leads/:id', authMiddleware, leadController.update);
 routes.post('/leads/:id/history', authMiddleware, leadController.addHistoryEvent);
 routes.get('/leads/:id/matches', authMiddleware, leadController.getMatches);
-routes.get('/leads/roulette/settings', authMiddleware, leadController.getRouletteSettings);
-routes.put('/leads/roulette/settings', authMiddleware, leadController.updateRouletteSettings);
 
 // ==========================================
-// NOVO: ESTEIRA DE VENDAS E LOCAÇÃO (KANBAN)
+// ESTEIRA DE VENDAS E LOCAÇÃO (KANBAN)
 // ==========================================
 routes.get('/deals/stages', authMiddleware, dealController.listStages);
 routes.post('/deals/stages', authMiddleware, dealController.createStage);
@@ -208,14 +250,17 @@ routes.patch('/deals/:id/move', authMiddleware, dealController.moveDeal);
 routes.delete('/deals/:id', authMiddleware, dealController.deleteDeal);
 routes.get('/deals/:id', authMiddleware, dealController.getDealDetails);
 
+// ==========================================
+// ROTAS DE CORRETORES & RATEIO (Rotas fixas ANTES de :id)
+// ==========================================
+routes.get('/brokers/split-settings', authMiddleware, brokerController.getSplitSettings);
+routes.put('/brokers/split-settings', authMiddleware, brokerController.updateSplitSettings);
+routes.get('/brokers/reports/commissions', authMiddleware, brokerController.getCommissionReport);
 routes.get('/brokers', authMiddleware, brokerController.list);
 routes.post('/brokers', authMiddleware, brokerController.create);
-routes.get('/brokers/reports/commissions', authMiddleware, brokerController.getCommissionReport);
 routes.put('/brokers/:id', authMiddleware, brokerController.update);
 routes.patch('/brokers/:id/status', authMiddleware, brokerController.toggleStatus);
 routes.patch('/brokers/:id/roulette', authMiddleware, brokerController.toggleRoulette);
-routes.get('/brokers/split-settings', authMiddleware, brokerController.getSplitSettings);
-routes.put('/brokers/split-settings', authMiddleware, brokerController.updateSplitSettings);
 
 routes.get('/invoices', authMiddleware, invoiceController.list);
 routes.post('/invoices', authMiddleware, invoiceController.create);
