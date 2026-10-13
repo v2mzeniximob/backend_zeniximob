@@ -21,6 +21,8 @@ const evoHeaders = {
   'ngrok-skip-browser-warning': 'true'
 };
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class WhatsappController {
 
   // 1. BUSCAR STATUS ATUAL E CONFIGURAÇÕES DO BOT
@@ -56,11 +58,33 @@ export class WhatsappController {
 
           const state = evoRes.data?.instance?.state || evoRes.data?.state;
 
-          if (state === 'open' && config.status !== 'CONNECTED') {
-            config = await prisma.whatsappConfig.update({
-              where: { id: config.id },
-              data: { status: 'CONNECTED', qrCodeBase64: null }
-            });
+          if (state === 'open') {
+            if (config.status !== 'CONNECTED' || config.qrCodeBase64) {
+              config = await prisma.whatsappConfig.update({
+                where: { id: config.id },
+                data: { status: 'CONNECTED', qrCodeBase64: null }
+              });
+            }
+          } else if (config.status === 'QR_READY') {
+            // Se está aguardando leitura mas o QR Code ainda não tinha vindo na 1ª chamada, busca agora!
+            if (!config.qrCodeBase64) {
+              const connectRes = await axios.get(
+                `${EVOLUTION_API_URL}/instance/connect/${config.instanceName}`,
+                { headers: evoHeaders }
+              ).catch(() => null);
+
+              const fetchedQr =
+                connectRes?.data?.base64 ||
+                connectRes?.data?.qrcode?.base64 ||
+                null;
+
+              if (fetchedQr) {
+                config = await prisma.whatsappConfig.update({
+                  where: { id: config.id },
+                  data: { status: 'QR_READY', qrCodeBase64: fetchedQr }
+                });
+              }
+            }
           } else if (state === 'close' && config.status === 'CONNECTED') {
             config = await prisma.whatsappConfig.update({
               where: { id: config.id },
@@ -94,16 +118,17 @@ export class WhatsappController {
 
       const webhookUrl = `${ZENIX_WEBHOOK_URL}/webhook/whatsapp/${config.instanceName}`;
 
-      // Limpa qualquer sessão anterior travada com o mesmo nome antes de gerar novo QR Code
+      // Limpa qualquer sessão anterior com o mesmo nome
       try {
         await axios.delete(`${EVOLUTION_API_URL}/instance/delete/${config.instanceName}`, {
           headers: evoHeaders
         });
+        await sleep(600);
       } catch (e) {
-        // Ignora se a instância ainda não existia
+        // Ignora se ainda não existia
       }
 
-      // Cria a instância na Evolution API v2.2.3 já com o Webhook configurado
+      // Cria a instância na Evolution API v2.2.3
       const response = await axios.post(
         `${EVOLUTION_API_URL}/instance/create`,
         {
@@ -125,13 +150,18 @@ export class WhatsappController {
         response.data?.base64 ||
         null;
 
-      // Caso a Evolution não devolva o base64 no create, busca no endpoint connect
-      if (!qrCode) {
+      // Se o Baileys ainda estiver gerando o QR Code, tenta buscar até 4 vezes (com pausa de 1.5s)
+      for (let attempt = 1; attempt <= 4 && !qrCode; attempt++) {
+        await sleep(1500);
         const connectRes = await axios.get(
           `${EVOLUTION_API_URL}/instance/connect/${config.instanceName}`,
           { headers: evoHeaders }
-        );
-        qrCode = connectRes.data?.base64 || connectRes.data?.qrcode?.base64 || null;
+        ).catch(() => null);
+
+        qrCode =
+          connectRes?.data?.base64 ||
+          connectRes?.data?.qrcode?.base64 ||
+          null;
       }
 
       // Atualiza a base de dados
