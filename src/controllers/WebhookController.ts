@@ -228,7 +228,7 @@ export class WebhookController {
             }
           });
 
-          await sendWhatsAppMessage(`Encontrei o imóvel! 🏠 *${property.title || 'Imóvel'}* (Cód: ${cleanCode}).\n\nJá registei o seu interesse e encaminhei para o corretor responsável, que entrará em contacto em instantes com todos os detalhes e para agendar a sua visita. Obrigado!`);
+          await sendWhatsAppMessage(`Encontrei o imóvel! 🏠 *${property.title || 'Imóvel'}* (Cód: ${cleanCode}).\n\nJá registrei o seu interesse e encaminhei para o corretor responsável, que entrará em contacto em instantes com todos os detalhes e para agendar a sua visita. Obrigado!`);
           return;
         } else {
           // Se digitou algo mas não é um código válido e não disse "não"
