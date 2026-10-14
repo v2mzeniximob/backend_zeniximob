@@ -3,6 +3,8 @@ import cors from 'cors';
 import process from 'process';
 import path from 'path'; 
 import { PrismaClient } from '@prisma/client';
+import cron from 'node-cron';
+import { SeasonIcalController } from './controllers/SeasonIcalController';
 import routes from './routes';
 
 const app = express();
@@ -118,4 +120,12 @@ const PORT = process.env.PORT || 3333;
 
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
+
+  // ==========================================
+  // CRON JOB: Sincronização iCal (Airbnb / Booking) a cada 15 minutos
+  // ==========================================
+  cron.schedule('*/15 * * * *', () => {
+    SeasonIcalController.syncAllProperties();
+  });
+  console.log('⏰ Cron Job de Sincronização iCal configurado (rodando a cada 15 min).');
 });

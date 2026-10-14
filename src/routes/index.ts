@@ -18,7 +18,7 @@ import { InvoiceController } from '../controllers/InvoiceController';
 import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
 import { ProposalController } from '../controllers/ProposalController'; 
-import { KeyTermController } from '../controllers/KeyTermController';   
+import { KeyTermController } from '../controllers/KeyTermController';    
 import { InsuranceCompanyController } from '../controllers/InsuranceCompanyController';
 import { AiController } from '../controllers/AiController';
 import { XmlController } from '../controllers/XmlController';
@@ -35,6 +35,7 @@ import { InspectionController } from '../controllers/InspectionController';
 import { WhatsappController } from '../controllers/WhatsappController';
 import { WebhookController } from '../controllers/WebhookController';
 import { ValuationController } from '../controllers/ValuationController';
+import { SeasonIcalController } from '../controllers/SeasonIcalController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -59,7 +60,7 @@ const invoiceController = new InvoiceController();
 const signatureController = new SignatureController();
 const visitController = new VisitController();
 const proposalController = new ProposalController(); 
-const keyTermController = new KeyTermController();   
+const keyTermController = new KeyTermController();    
 const insuranceCompanyController = new InsuranceCompanyController();
 const aiController = new AiController();
 const xmlController = new XmlController();
@@ -76,6 +77,7 @@ const inspectionController = new InspectionController();
 const whatsappController = new WhatsappController();
 const webhookController = new WebhookController();
 const valuationController = new ValuationController();
+const seasonIcalController = new SeasonIcalController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -87,6 +89,40 @@ routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 routes.get('/public/xml/:slug', xmlController.generateFeed);
 
+// Rota pública para Airbnb e Booking.com baixarem nosso iCal
+routes.get('/public/properties/:propertyId/ical/:token.ics', seasonIcalController.exportIcal);
+
+// Rota pública para Motor de Reservas Diretas (Criar Reserva de Temporada)
+routes.post('/public/season-bookings', async (req, res) => {
+  try {
+    const { propertyId, guestName, guestPhone, guestEmail, checkIn, checkOut, totalAmount, notes } = req.body;
+    
+    if (!propertyId || !checkIn || !checkOut) {
+      return res.status(400).json({ error: 'Imóvel, Check-in e Check-out são obrigatórios.' });
+    }
+
+    const booking = await prisma.seasonBooking.create({
+      data: {
+        propertyId,
+        guestName: guestName || 'Hóspede Direto',
+        guestPhone,
+        guestEmail,
+        checkIn: new Date(checkIn),
+        checkOut: new Date(checkOut),
+        source: 'DIRECT',
+        totalAmount: totalAmount ? Number(totalAmount) : null,
+        status: 'CONFIRMED',
+        notes: notes || 'Reserva Direta pelo Site'
+      }
+    });
+
+    return res.status(201).json({ message: 'Reserva realizada com sucesso!', booking });
+  } catch (error) {
+    console.error('Erro ao criar reserva direta de temporada:', error);
+    return res.status(500).json({ error: 'Erro ao processar reserva.' });
+  }
+});
+
 routes.post('/public/leads', async (req, res) => {
   try {
     const { name, phone, email, interest, status, notes, propertyId, realEstateId, brokerId } = req.body;
@@ -94,7 +130,6 @@ routes.post('/public/leads', async (req, res) => {
     let finalBrokerId = brokerId || null;
     let assignedViaRouletteName: string | null = null;
 
-    // Se o lead veio do site sem corretor específico, verifica se a Roleta da loja está ativa
     if (!finalBrokerId && realEstateId) {
       const store = await prisma.realEstate.findUnique({
         where: { id: realEstateId },
@@ -148,7 +183,6 @@ routes.post('/public/leads', async (req, res) => {
 // ==========================================
 // WEBHOOKS PÚBLICOS 
 // ==========================================
-// A Evolution API envia POSTs para esta rota quando recebe mensagens
 routes.post('/webhook/whatsapp/:instanceName', webhookController.receive);
 
 // ==========================================
@@ -157,6 +191,25 @@ routes.post('/webhook/whatsapp/:instanceName', webhookController.receive);
 routes.get('/portal/dashboard', authMiddleware, portalOnly, clientPortalController.getDashboard);
 routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
 routes.post('/portal/tickets/:id/messages', authMiddleware, portalOnly, ticketController.addMessage);
+
+// ==========================================
+// ROTAS DE ALUGUEL POR TEMPORADA (PMS & iCal)
+// ==========================================
+routes.put('/properties/:id/ical-links', authMiddleware, seasonIcalController.updateIcalLinks);
+
+routes.get('/properties/:propertyId/season-bookings', authMiddleware, async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+    const bookings = await prisma.seasonBooking.findMany({
+      where: { propertyId },
+      orderBy: { checkIn: 'desc' }
+    });
+    return res.json(bookings);
+  } catch (error) {
+    console.error('Erro ao buscar reservas de temporada:', error);
+    return res.status(500).json({ error: 'Erro ao carregar reservas.' });
+  }
+});
 
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
@@ -222,7 +275,6 @@ routes.patch('/insurance-companies/:id/status', authMiddleware, insuranceCompany
 routes.get('/contracts', authMiddleware, contractController.list);
 routes.post('/contracts', authMiddleware, contractController.create);
 routes.put('/contracts/:id', authMiddleware, contractController.update);
-//routes.post('/contracts/:id/inspections', authMiddleware, contractController.addInspection);
 routes.delete('/contracts/:id', authMiddleware, contractController.delete);
 
 routes.post('/contracts/:id/upload', authMiddleware, upload.single('file'), signatureController.uploadTenantContract);
