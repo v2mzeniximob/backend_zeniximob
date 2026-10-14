@@ -15,51 +15,37 @@ export class WebhookController {
       const { instanceName } = req.params;
       const { body } = req;
 
-      // Retorna 200 rápido para a Evolution API não dar timeout
+      // Retorna HTTP 200 imediatamente para a Evolution API não gerar timeout
       res.status(200).send('OK');
 
       // 1. IGNORAR EVENTOS IRRELEVANTES
       const eventName = (body?.event || '').toLowerCase();
       if (eventName !== 'messages.upsert') return;
 
-      const messageData = body.data;
+      const messageData = body?.data;
       if (!messageData || !messageData.message || !messageData.key) return;
 
       const remoteJid: string = messageData.key.remoteJid || '';
       const fromMe: boolean = Boolean(messageData.key.fromMe);
       const isGroup = remoteJid.includes('@g.us') || remoteJid.includes('status@broadcast');
 
-      // Ignora mensagens enviadas pelo próprio número ou vindas de grupos/status
+      // Ignora mensagens enviadas pelo próprio robô, vindas de grupos ou status do WhatsApp
       if (fromMe || isGroup) return;
 
       const phone = remoteJid.split('@')[0];
       const pushName = messageData.pushName || 'Cliente WhatsApp';
 
-      // Extrai o texto da mensagem
-      const text = (
+      // Extrai o texto da mensagem (Suporta texto puro, mensagens com imagem/vídeo legendados ou resposta a mensagens)
+      let text = (
         messageData.message.conversation ||
         messageData.message.extendedTextMessage?.text ||
+        messageData.message.imageMessage?.caption ||
+        messageData.message.videoMessage?.caption ||
+        messageData.message.documentMessage?.caption ||
         ''
       ).trim();
 
-      if (!text) return;
-
-      // 2. BUSCAR CONFIGURAÇÃO DA IMOBILIÁRIA
-      const config = await prisma.whatsappConfig.findUnique({
-        where: { instanceName }
-      });
-
-      if (!config || !config.botEnabled) return;
-
-      // 3. BUSCAR O LEAD NO CRM
-      let lead = await prisma.lead.findFirst({
-        where: {
-          realEstateId: config.realEstateId,
-          phone: phone
-        }
-      });
-
-      // FUNÇÃO AUXILIAR PARA ENVIAR MENSAGEM PELO WHATSAPP (Evolution API v2.2.3 / v2.3.7)
+      // FUNÇÃO AUXILIAR PARA ENVIAR MENSAGEM PELO WHATSAPP (Evolution API)
       const sendWhatsAppMessage = async (textMsg: string) => {
         try {
           await axios.post(
@@ -67,7 +53,7 @@ export class WebhookController {
             {
               number: remoteJid,
               text: textMsg,
-              delay: 1500
+              delay: 1200
             },
             {
               headers: {
@@ -78,9 +64,60 @@ export class WebhookController {
             }
           );
         } catch (error: any) {
-          console.error(`Erro ao enviar mensagem para ${phone}:`, error?.response?.data || error.message);
+          console.error(`[Webhook] Erro ao enviar mensagem para ${phone}:`, error?.response?.data || error.message);
         }
       };
+
+      // Se o cliente enviou áudio, figurinha ou documento sem legenda de texto
+      if (!text) {
+        console.log(`[Webhook] Mensagem sem texto (Mídia/Áudio) recebida de: ${phone}`);
+        // Avisa o cliente para interagir por texto para prosseguir a triagem
+        await sendWhatsAppMessage('Recebi o seu arquivo/áudio! 🎧\n\nPor favor, envie uma mensagem em **texto** com a sua dúvida ou com o **código do imóvel** para que o nosso robô possa ajudá-lo.');
+        return;
+      }
+
+      console.log(`[Webhook] Mensagem recebida [Instância: ${instanceName}] de ${phone} (${pushName}): "${text}"`);
+
+      // 2. BUSCAR CONFIGURAÇÃO DA IMOBILIÁRIA
+      const config = await prisma.whatsappConfig.findUnique({
+        where: { instanceName }
+      });
+
+      if (!config) {
+        console.warn(`[Webhook] Instância "${instanceName}" não está cadastrada na tabela whatsappConfig.`);
+        return;
+      }
+
+      if (!config.botEnabled) {
+        console.log(`[Webhook] O Bot está desativado no painel da imobiliária para a instância: ${instanceName}`);
+        return;
+      }
+
+      // 3. BUSCAR O LEAD NO CRM
+      let lead = await prisma.lead.findFirst({
+        where: {
+          realEstateId: config.realEstateId,
+          phone: phone
+        }
+      });
+
+      // COMANDO DE TESTE/DESENVOLVIMENTO: Se você digitar #reset ou reiniciar, volta o Lead para 'Novo'
+      if (text.toLowerCase() === '#reset' || text.toLowerCase() === 'reiniciar') {
+        if (lead) {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: {
+              stage: 'Novo',
+              searchTransaction: null,
+              searchType: null,
+              searchMaxPrice: null,
+              searchNeighborhoods: []
+            }
+          });
+          await sendWhatsAppMessage('🔄 *Triagem Reiniciada para Testes!* Pode enviar uma nova mensagem.');
+          return;
+        }
+      }
 
       // ==========================================
       // LÓGICA DO CHATBOT COM BUSCA DE CÓDIGO + TRIAGEM
@@ -136,8 +173,9 @@ export class WebhookController {
         return;
       }
 
-      // SE O LEAD JÁ EXISTE, MAS JÁ SAIU DA COLUNA "NOVO" (O corretor já está atendendo)
+      // SE O LEAD JÁ EXISTE, MAS JÁ SAIU DA COLUNA "NOVO" (Atendimento humano ativo)
       if (lead.stage !== 'Novo') {
+        console.log(`[Webhook] Lead ${phone} já está no estágio "${lead.stage}". Robô em modo silencioso para permitir atendimento humano.`);
         return;
       }
 
@@ -145,7 +183,8 @@ export class WebhookController {
 
       // PASSO 0: Verificar se o lead está respondendo sobre o Código do Imóvel do Site
       if (lead.searchTransaction === null || lead.searchTransaction === 'PENDING') {
-        const cleanCode = text.trim();
+        // Limpa caracteres especiais do código para facilitar a busca (Ex: #AP1023 -> AP1023)
+        const cleanCode = text.replace(/[#\s]/g, '').trim();
         const isNegative = userText.includes('não') || userText.includes('nao') || userText.includes('na') || userText.includes('nenhum');
 
         if (isNegative) {
@@ -153,7 +192,7 @@ export class WebhookController {
             where: { id: lead.id },
             data: { searchTransaction: 'PENDING_CHOICE' }
           });
-          await sendWhatsAppMessage('Sem problemas! Para eu o ajudar melhor, procura imóvel para **Comprar** ou **Alugar**?');
+          await sendWhatsAppMessage('Sem problemas! Para eu ajudá-lo melhor, você procura um imóvel para **Comprar** ou **Alugar**?');
           return;
         }
 
@@ -192,15 +231,13 @@ export class WebhookController {
           await sendWhatsAppMessage(`Encontrei o imóvel! 🏠 *${property.title || 'Imóvel'}* (Cód: ${cleanCode}).\n\nJá registei o seu interesse e encaminhei para o corretor responsável, que entrará em contacto em instantes com todos os detalhes e para agendar a sua visita. Obrigado!`);
           return;
         } else {
-          // Se digitou algo mas não é um código válido nem disse não
-          if (lead.searchTransaction === null) {
-            await prisma.lead.update({
-              where: { id: lead.id },
-              data: { searchTransaction: 'PENDING_CHOICE' }
-            });
-            await sendWhatsAppMessage(`Não encontrei nenhum imóvel ativo com o código "${cleanCode}".\n\nDeseja procurar imóvel para **Comprar** ou **Alugar**?`);
-            return;
-          }
+          // Se digitou algo mas não é um código válido e não disse "não"
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: { searchTransaction: 'PENDING_CHOICE' }
+          });
+          await sendWhatsAppMessage(`Não encontrei nenhum imóvel ativo com o código "${cleanCode}".\n\nDeseja procurar imóvel para **Comprar** ou **Alugar**?`);
+          return;
         }
       }
 
@@ -264,7 +301,7 @@ export class WebhookController {
           where: { id: lead.id },
           data: {
             searchNeighborhoods: bairrosArray,
-            stage: 'Atendimento' // Triagem concluída: move para Atendimento e desativa o bot para este cliente
+            stage: 'Atendimento' // Triagem concluída: move para Atendimento e passa o bastão para o humano
           }
         });
 
@@ -281,7 +318,7 @@ export class WebhookController {
       }
 
     } catch (error) {
-      console.error('Erro no Webhook do WhatsApp:', error);
+      console.error('[Webhook] Erro não tratado no Webhook do WhatsApp:', error);
     }
   }
 }
