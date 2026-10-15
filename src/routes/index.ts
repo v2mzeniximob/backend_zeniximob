@@ -37,6 +37,8 @@ import { WebhookController } from '../controllers/WebhookController';
 import { ValuationController } from '../controllers/ValuationController';
 import { SeasonIcalController } from '../controllers/SeasonIcalController';
 import { FiscalController } from '../controllers/FiscalController';
+import { MetaLeadController } from '../controllers/MetaLeadController';
+import { FinanceExpenseController } from '../controllers/FinanceExpenseController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -80,6 +82,8 @@ const webhookController = new WebhookController();
 const valuationController = new ValuationController();
 const seasonIcalController = new SeasonIcalController();
 const fiscalController = new FiscalController();
+const metaLeadController = new MetaLeadController();
+const financeExpenseController = new FinanceExpenseController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -93,6 +97,9 @@ routes.get('/public/xml/:slug', xmlController.generateFeed);
 
 // Rota pública para Airbnb e Booking.com baixarem o nosso iCal
 routes.get('/public/properties/:propertyId/ical/:token.ics', seasonIcalController.exportIcal);
+
+// Webhook para receber leads do Instagram / Facebook Lead Ads
+routes.post('/webhook/meta-leads/:realEstateId', metaLeadController.receiveMetaLead);
 
 // Rota pública para Motor de Reservas Diretas (Criar Reserva de Temporada)
 routes.post('/public/season-bookings', async (req, res) => {
@@ -228,6 +235,15 @@ routes.get('/broker-invoices', authMiddleware, fiscalController.listBrokerInvoic
 routes.post('/broker-invoices/emit', authMiddleware, fiscalController.emitBrokerInvoice);
 
 routes.post('/invoices/:id/emit-nfse', authMiddleware, fiscalController.emitAdminFeeNfse);
+
+// ==========================================
+// ROTAS DE DESPESAS DE CONTRATO & CONTAS A PAGAR (CONTA AZUL)
+// ==========================================
+routes.post('/property-expenses', authMiddleware, financeExpenseController.createPropertyExpense);
+routes.get('/property-expenses', authMiddleware, financeExpenseController.listPropertyExpenses);
+routes.post('/agency-expenses', authMiddleware, financeExpenseController.createAgencyExpense);
+routes.get('/agency-expenses', authMiddleware, financeExpenseController.listAgencyExpenses);
+routes.post('/conta-azul/emit-boleto', authMiddleware, financeExpenseController.emitContaAzulBoleto);
 
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
@@ -395,7 +411,7 @@ routes.patch('/master/admins/:id/status', authMiddleware, masterOnly, masterConf
 routes.post('/master/contracts', authMiddleware, masterOnly, masterContractController.create);
 routes.put('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.update);
 routes.get('/master/contracts', authMiddleware, masterOnly, masterContractController.list);
-routes.delete('/master/contracts/:id', authMiddleware, masterContractController.delete);
+routes.delete('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.delete);
 
 routes.get('/master/invoices', authMiddleware, masterOnly, masterInvoiceController.list);
 routes.patch('/master/invoices/:id/pay', authMiddleware, masterOnly, masterInvoiceController.markAsPaid);

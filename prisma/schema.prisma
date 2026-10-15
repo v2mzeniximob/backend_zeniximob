@@ -128,7 +128,7 @@ model RealEstate {
   // ==========================================
   focusNfeToken          String?  @db.Text // Token da API Focus NFe da Imobiliária
   focusEnv               String?  @default("homologacao") // "homologacao" ou "producao"
-  a1CertPath             String?  @db.Text // Caminho ou Base64 do arquivo .pfx (Certificado A1)
+  a1CertPath             String?  @db.Text // Caminho do arquivo .pfx (Certificado A1)
   a1CertPassword         String?  // Senha do Certificado Digital A1
   a1CertExpiresAt        DateTime? // Data de validade do Certificado A1
   taxRegime              String?  @default("Simples Nacional") // Simples Nacional, Lucro Presumido, Lucro Real
@@ -163,6 +163,10 @@ model RealEstate {
   // Relacionamentos do Módulo Fiscal
   taxRules               TaxRule[]
   brokerInvoices         BrokerInvoice[]
+
+  // Relacionamentos do Módulo de Despesas
+  agencyExpenses         AgencyExpense[]
+  contaAzulConfig        ContaAzulConfig?
 }
 
 // ==========================================
@@ -284,7 +288,7 @@ model DealHistory {
 }
 
 // ==========================================
-// CONDOMÍNIOS
+// CONDOMÍNIOS & ADMINISTRAÇÃO CONDOMINIAL
 // ==========================================
 model Condominium {
   id               String     @id @default(uuid())
@@ -319,11 +323,67 @@ model Condominium {
   realEstate       RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
   properties       Property[] // Imóveis vinculados a este condomínio
+  units            CondoUnit[]
+  expenses         CondoExpense[]
+  reservations     CondoReservation[]
+  occurrences      CondoOccurrence[]
 
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 
   @@map("condominiums")
+}
+
+model CondoUnit {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  unitNumber    String      // Ex: "Apt 101", "Casa 12"
+  block         String?     // Torre ou Bloco
+  floor         Int?        // Andar
+  fractionIdeal Float       @default(1.0) // Fração ideal para rateio
+  ownerName     String?     // Nome do proprietário da unidade
+  tenantName    String?     // Nome do inquilino da unidade
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model CondoExpense {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  description   String      // Ex: "Conta de Água da Área Comum", "Manutenção do Portão"
+  amount        Float       // Valor total da despesa
+  dueDate       DateTime    // Vencimento do rateio
+  category      String      @default("Manutenção") // Manutenção, Água, Limpeza, Fundo de Reserva
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model CondoReservation {
+  id              String      @id @default(uuid())
+  condominiumId   String
+  condominium     Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  areaName        String      // Ex: "Salão de Festas", "Churrasqueira", "Quadra"
+  reservedBy      String      // Nome do condômino/morador
+  reservationDate DateTime    // Data da reserva
+  status          String      @default("CONFIRMED") // CONFIRMED, CANCELLED
+  notes           String?     @db.Text
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model CondoOccurrence {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  title         String      // Assunto da ocorrência
+  description   String      @db.Text // Descrição detalhada
+  reportedBy    String      // Quem reportou
+  priority      String      @default("Normal") // Baixa, Normal, Urgente
+  status        String      @default("Aberto") // Aberto, Em Análise, Resolvido
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
 
 // ==========================================
@@ -526,6 +586,9 @@ model Property {
   proposals         Proposal[]
   keyTerms          KeyTerm[]
   deals             Deal[]
+
+  // Relações do Módulo de Despesas
+  propertyExpenses  PropertyExpense[]
 
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -732,6 +795,9 @@ model Contract {
   
   invoices          Invoice[]
   inspections       Inspection[]
+
+  // Relações do Módulo de Despesas
+  propertyExpenses  PropertyExpense[]
 
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
@@ -1082,4 +1148,66 @@ model SeasonBooking {
 
   @@index([propertyId])
   @@index([externalUid])
+}
+
+// ==========================================
+// DESPESAS DE CONTRATOS & IMÓVEIS
+// ==========================================
+model PropertyExpense {
+  id              String    @id @default(uuid())
+  contractId      String?
+  contract        Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  propertyId      String
+  property        Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  
+  description     String    // Ex: "IPTU Mensal", "Manutenção de Calefação", "Condomínio"
+  amount          Float     // Valor da despesa
+  dueDate         DateTime  // Data de vencimento
+  paidDate        DateTime? // Data de pagamento
+  status          String    @default("Pendente") // "Pendente", "Pago", "Atrasado"
+  
+  payerType       String    // "TENANT" (Inquilino paga na fatura) ou "OWNER" (Abate do repasse)
+  category        String    @default("Manutenção") // IPTU, Condomínio, Reparo Estrutural, Seguro
+  documentUrl     String?   @db.Text // Comprovante ou boleto anexado
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// ==========================================
+// CONTAS A PAGAR / DESPESAS OPERACIONAIS DA IMOBILIÁRIA (DRE)
+// ==========================================
+model AgencyExpense {
+  id              String     @id @default(uuid())
+  realEstateId    String
+  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  description     String     // Ex: "Aluguel da Sede", "Assinatura Portais (Zap/VivaReal)", "Energia"
+  amount          Float      // Valor da despesa
+  dueDate         DateTime   // Vencimento
+  paidDate        DateTime?  // Data do pagamento
+  status          String     @default("Pendente") // "Pendente", "Pago"
+  category        String     @default("Operacional") // Operacional, Marketing, Impostos, Pessoal
+  supplierName    String?    // Fornecedor / Credor
+  documentUrl     String?    @db.Text
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+// ==========================================
+// CONFIGURAÇÃO & INTEGRAÇÃO CONTA AZUL
+// ==========================================
+model ContaAzulConfig {
+  id               String     @id @default(uuid())
+  realEstateId     String     @unique
+  realEstate       RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  accessToken      String?    @db.Text
+  refreshToken     String?    @db.Text
+  expiresAt        DateTime?
+  isActive         Boolean    @default(false)
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 }

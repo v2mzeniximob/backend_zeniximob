@@ -13,9 +13,9 @@ export class BrokerController {
       const realEstateId = user?.realEstateId || user?.id;
 
       const { 
-        name, cpf, creci, phone, email, password, 
+        name, cpf, cnpj, creci, phone, email, password, 
         role, saleCommission, rentCommission, 
-        captureCommission, managerCommission, inRoulette 
+        captureCommission, managerCommission, inRoulette, taxRuleId 
       } = req.body;
       
       const existingBroker = await prisma.broker.findFirst({
@@ -29,6 +29,7 @@ export class BrokerController {
         data: {
           name,
           cpf,
+          cnpj: cnpj || null,
           creci,
           phone,
           email,
@@ -39,6 +40,7 @@ export class BrokerController {
           captureCommission: captureCommission !== undefined ? Number(captureCommission) : 10,
           managerCommission: managerCommission !== undefined ? Number(managerCommission) : 5,
           inRoulette: inRoulette !== undefined ? Boolean(inRoulette) : true,
+          taxRuleId: taxRuleId || null,
           realEstateId
         }
       });
@@ -58,6 +60,7 @@ export class BrokerController {
       const brokers = await prisma.broker.findMany({
         where: { realEstateId },
         include: {
+          taxRule: true,
           clients: { select: { id: true } },
           properties: { select: { id: true } },
           capturedProperties: { select: { id: true } }
@@ -75,14 +78,15 @@ export class BrokerController {
     try {
       const { id } = req.params;
       const { 
-        name, cpf, creci, phone, email, password, 
+        name, cpf, cnpj, creci, phone, email, password, 
         role, saleCommission, rentCommission, 
-        captureCommission, managerCommission, inRoulette 
+        captureCommission, managerCommission, inRoulette, taxRuleId 
       } = req.body;
 
       const dataToUpdate: any = { 
         name,
         cpf,
+        cnpj: cnpj || null,
         creci,
         phone,
         email,
@@ -91,7 +95,8 @@ export class BrokerController {
         rentCommission: rentCommission ? Number(rentCommission) : 0,
         captureCommission: captureCommission !== undefined ? Number(captureCommission) : 10,
         managerCommission: managerCommission !== undefined ? Number(managerCommission) : 5,
-        inRoulette: inRoulette !== undefined ? Boolean(inRoulette) : true
+        inRoulette: inRoulette !== undefined ? Boolean(inRoulette) : true,
+        taxRuleId: taxRuleId || null
       };
 
       if (password) {
@@ -100,7 +105,8 @@ export class BrokerController {
 
       const broker = await prisma.broker.update({
         where: { id },
-        data: dataToUpdate
+        data: dataToUpdate,
+        include: { taxRule: true }
       });
       return res.json(broker);
     } catch (error) {
@@ -250,7 +256,6 @@ export class BrokerController {
         const captatorBroker = c.property?.captator || c.property?.broker || null;
 
         // 2. Define a % de Comissão Bruta Total do negócio (Honorários Totais)
-        // Se o contrato tiver adminFeePercent preenchido usa ele; senão usa a % do corretor ou padrão de mercado (6% Venda / 100% 1º Aluguel)
         const fallbackPercent = c.type === 'Venda' 
           ? (sellerBroker?.saleCommission || 6) 
           : (sellerBroker?.rentCommission || 100);
@@ -266,10 +271,9 @@ export class BrokerController {
         const captatorAmount = captatorBroker ? (grossCommissionValue * splitRules.captator) / 100 : 0;
         const managerAmount = managerBroker ? (grossCommissionValue * splitRules.manager) / 100 : 0;
         
-        // A imobiliária fica com a fatia dela + eventuais fatias sem corretor vinculado
         const agencyAmount = grossCommissionValue - (sellerAmount + captatorAmount + managerAmount);
 
-        // 4. Se o filtro for por um corretor específico, soma quanto ELE ganhou neste contrato (pode ter sido Vendedor + Captador, ou Gerente)
+        // 4. Se o filtro for por um corretor específico, soma quanto ELE ganhou neste contrato
         let filteredBrokerShare = 0;
         let filteredBrokerRoles: string[] = [];
 
@@ -296,10 +300,9 @@ export class BrokerController {
           clientName: c.tenant?.name || 'Cliente Excluído',
           operationValue: c.rentValue,
           commissionPercent: grossCommissionPercent,
-          commissionValue: grossCommissionValue, // Comissão Bruta Total
+          commissionValue: grossCommissionValue,
           status: c.status,
 
-          // Detalhamento do Split
           sellerName: sellerBroker?.name || 'Direto Loja',
           sellerId: sellerBroker?.id || null,
           sellerPercent: sellerBroker ? splitRules.seller : 0,
@@ -317,13 +320,11 @@ export class BrokerController {
 
           agencyAmount,
 
-          // Dados específicos quando filtrado por 1 profissional
           filteredBrokerShare,
           filteredBrokerRoleText: filteredBrokerRoles.join(' + ')
         };
       });
 
-      // Se filtrou por um corretor específico, retorna apenas os negócios onde ele teve participação
       const finalReport = (brokerId && brokerId !== 'Todos')
         ? fullReport.filter((item: any) => item.filteredBrokerShare > 0)
         : fullReport;
