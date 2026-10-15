@@ -36,6 +36,7 @@ import { WhatsappController } from '../controllers/WhatsappController';
 import { WebhookController } from '../controllers/WebhookController';
 import { ValuationController } from '../controllers/ValuationController';
 import { SeasonIcalController } from '../controllers/SeasonIcalController';
+import { FiscalController } from '../controllers/FiscalController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -78,6 +79,7 @@ const whatsappController = new WhatsappController();
 const webhookController = new WebhookController();
 const valuationController = new ValuationController();
 const seasonIcalController = new SeasonIcalController();
+const fiscalController = new FiscalController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -89,7 +91,7 @@ routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 routes.get('/public/xml/:slug', xmlController.generateFeed);
 
-// Rota pública para Airbnb e Booking.com baixarem nosso iCal
+// Rota pública para Airbnb e Booking.com baixarem o nosso iCal
 routes.get('/public/properties/:propertyId/ical/:token.ics', seasonIcalController.exportIcal);
 
 // Rota pública para Motor de Reservas Diretas (Criar Reserva de Temporada)
@@ -199,17 +201,33 @@ routes.put('/properties/:id/ical-links', authMiddleware, seasonIcalController.up
 
 routes.get('/properties/:propertyId/season-bookings', authMiddleware, async (req, res) => {
   try {
-    const { propertyId } = req.params;
+    const propertyId = String(req.params.propertyId);
     const bookings = await prisma.seasonBooking.findMany({
       where: { propertyId },
       orderBy: { checkIn: 'desc' }
     });
     return res.json(bookings);
   } catch (error) {
-    console.error('Erro ao buscar reservas de temporada:', error);
+    console.error('Erro ao procurar reservas de temporada:', error);
     return res.status(500).json({ error: 'Erro ao carregar reservas.' });
   }
 });
+
+// ==========================================
+// ROTAS DO MÓDULO FISCAL & FOCUS NFE
+// ==========================================
+routes.put('/my-store/fiscal-config', authMiddleware, fiscalController.updateFiscalConfig);
+routes.post('/my-store/certificate', authMiddleware, upload.single('certificate'), fiscalController.uploadCertificate);
+
+routes.get('/tax-rules', authMiddleware, fiscalController.listTaxRules);
+routes.post('/tax-rules', authMiddleware, fiscalController.createTaxRule);
+routes.delete('/tax-rules/:id', authMiddleware, fiscalController.deleteTaxRule);
+
+routes.patch('/brokers/:id/tax-rule', authMiddleware, fiscalController.linkBrokerTaxRule);
+routes.get('/broker-invoices', authMiddleware, fiscalController.listBrokerInvoices);
+routes.post('/broker-invoices/emit', authMiddleware, fiscalController.emitBrokerInvoice);
+
+routes.post('/invoices/:id/emit-nfse', authMiddleware, fiscalController.emitAdminFeeNfse);
 
 // ==========================================
 // ROTAS PROTEGIDAS (Utilitários)
@@ -377,7 +395,7 @@ routes.patch('/master/admins/:id/status', authMiddleware, masterOnly, masterConf
 routes.post('/master/contracts', authMiddleware, masterOnly, masterContractController.create);
 routes.put('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.update);
 routes.get('/master/contracts', authMiddleware, masterOnly, masterContractController.list);
-routes.delete('/master/contracts/:id', authMiddleware, masterOnly, masterContractController.delete);
+routes.delete('/master/contracts/:id', authMiddleware, masterContractController.delete);
 
 routes.get('/master/invoices', authMiddleware, masterOnly, masterInvoiceController.list);
 routes.patch('/master/invoices/:id/pay', authMiddleware, masterOnly, masterInvoiceController.markAsPaid);

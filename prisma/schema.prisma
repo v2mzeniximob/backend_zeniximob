@@ -42,14 +42,14 @@ model Plan {
 // FRANQUEADOS
 // ==========================================
 model Franchisee {
-  id                String       @id @default(uuid())
-  cnpj              String       @unique
-  corporateName     String       // Razão Social
-  tradeName         String       // Nome Fantasia
-  stateRegistration String?      // Inscrição Estadual
-  cityRegistration  String?      // Inscrição Municipal
+  id                String           @id @default(uuid())
+  cnpj              String           @unique
+  corporateName     String           // Razão Social
+  tradeName         String           // Nome Fantasia
+  stateRegistration String?          // Inscrição Estadual
+  cityRegistration  String?          // Inscrição Municipal
   cep               String
-  address           String       // Endereço Completo
+  address           String           // Endereço Completo
   phone             String
   
   // Dados do Responsável
@@ -59,71 +59,81 @@ model Franchisee {
   respPhone         String
   
   // Acesso à plataforma
-  email             String       @unique
+  email             String           @unique
   password          String
-  contractUrl       String?      // Link do PDF do contrato no Storage (S3/Cloudinary)
-  isActive          Boolean      @default(true)
+  contractUrl       String?          // Link do PDF do contrato no Storage (S3/Cloudinary)
+  isActive          Boolean          @default(true)
 
-  realEstates       RealEstate[] // Lojas vinculadas a este franqueado
+  realEstates       RealEstate[]     // Lojas vinculadas a este franqueado
 
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
-  masterContracts  MasterContract[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  masterContracts   MasterContract[]
 }
 
 // ==========================================
 // IMOBILIÁRIAS (LOJAS)
 // ==========================================
 model RealEstate {
-  id                String       @id @default(uuid())
-  cnpj              String       @unique
-  corporateName     String
-  tradeName         String
-  slug              String       @unique 
-  stateRegistration String
-  cityRegistration  String
-  cep               String
-  address           String
-  phone             String
-  respName          String
-  respCpf           String
-  respPhone         String
-  respAddress       String
-  email             String       @unique
-  password          String
-  contractUrl       String?
-  isActive          Boolean      @default(true)
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id                     String   @id @default(uuid())
+  cnpj                   String   @unique
+  corporateName          String
+  tradeName              String
+  slug                   String   @unique 
+  stateRegistration      String
+  cityRegistration       String
+  cep                    String
+  address                String
+  phone                  String
+  respName               String
+  respCpf                String
+  respPhone              String
+  respAddress            String
+  email                  String   @unique
+  password               String
+  contractUrl            String?
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  logoUrl           String?    // Logótipo da imobiliária
-  heroImageUrl      String?    // Imagem de fundo gigante para a barra de pesquisa
-  aboutText         String?    // Texto para a página "Sobre nós"
-  footerText        String?    // Texto curto para o rodapé
-  instagramUrl      String?    // Link do Instagram
-  facebookUrl       String?    // Link do Facebook
-  whatsappDisplay   String?    // WhatsApp público para o site
-  saleProposalTemplate    String?  @db.Text
-  rentProposalTemplate    String?  @db.Text
-  keyTermTemplate         String?  @db.Text
-  financingTemplate       String?  @db.Text // Molde do Checklist de Financiamento
+  logoUrl                String?  // Logótipo da imobiliária
+  heroImageUrl           String?  // Imagem de fundo gigante para a barra de pesquisa
+  aboutText              String?  // Texto para a página "Sobre nós"
+  footerText             String?  // Texto curto para o rodapé
+  instagramUrl           String?  // Link do Instagram
+  facebookUrl            String?  // Link do Facebook
+  whatsappDisplay        String?  // WhatsApp público para o site
+  saleProposalTemplate   String?  @db.Text
+  rentProposalTemplate   String?  @db.Text
+  keyTermTemplate        String?  @db.Text
+  financingTemplate      String?  @db.Text // Molde do Checklist de Financiamento
 
-  planId            String
-  plan              Plan         @relation(fields: [planId], references: [id])
+  planId                 String
+  plan                   Plan     @relation(fields: [planId], references: [id])
   
-  franchiseeId      String?
-  franchisee        Franchisee?  @relation(fields: [franchiseeId], references: [id])
+  franchiseeId           String?
+  franchisee             Franchisee? @relation(fields: [franchiseeId], references: [id])
 
-  ownerContractTemplate   String? @db.Text // Molde do contrato de Gestão (Proprietário)
-  tenantContractTemplate  String? @db.Text // Molde do contrato de Locação (Inquilino)
-  saleContractTemplate    String?  @db.Text // Molde do contrato de Compra e Venda
+  ownerContractTemplate  String?  @db.Text // Molde do contrato de Gestão (Proprietário)
+  tenantContractTemplate String?  @db.Text // Molde do contrato de Locação (Inquilino)
+  saleContractTemplate   String?  @db.Text // Molde do contrato de Compra e Venda
 
-  mpAccessToken   String? @db.Text // Token de Acesso Privado
-  mpPublicKey     String? @db.Text // Chave Pública
-  subscriptionStatus  String   @default("Ativo") // Ativo, Inadimplente, Bloqueado
-  paymentGatewayId    String?  // ID do cliente no Asaas/Stripe
+  mpAccessToken          String?  @db.Text // Token de Acesso Privado
+  mpPublicKey            String?  @db.Text // Chave Pública
+  subscriptionStatus     String   @default("Ativo") // Ativo, Inadimplente, Bloqueado
+  paymentGatewayId       String?  // ID do cliente no Asaas/Stripe
 
-  whatsappConfig  WhatsappConfig?
+  // ==========================================
+  // CONFIGURAÇÕES FISCAIS (FOCUS NFE & CERTIFICADO A1)
+  // ==========================================
+  focusNfeToken          String?  @db.Text // Token da API Focus NFe da Imobiliária
+  focusEnv               String?  @default("homologacao") // "homologacao" ou "producao"
+  a1CertPath             String?  @db.Text // Caminho ou Base64 do arquivo .pfx (Certificado A1)
+  a1CertPassword         String?  // Senha do Certificado Digital A1
+  a1CertExpiresAt        DateTime? // Data de validade do Certificado A1
+  taxRegime              String?  @default("Simples Nacional") // Simples Nacional, Lucro Presumido, Lucro Real
+
+  whatsappConfig         WhatsappConfig?
 
   rouletteEnabled        Boolean  @default(false)
   rouletteTimeoutMinutes Int      @default(30) // Tempo em minutos para repescagem
@@ -134,117 +144,184 @@ model RealEstate {
 
   commissions            Commission[]
   valuations             PropertyValuation[]
-  properties        Property[]
-  leads             Lead[]
-  brokers           Broker[]
-  clients           Client[]   
-  owners            Owner[]      
-  proposals         Proposal[]   
-  keyTerms          KeyTerm[]    
-  insuranceCompanies InsuranceCompany[] 
-  keyMovements      KeyMovement[]
-  masterContracts  MasterContract[]
-  condominiums      Condominium[] 
+  properties             Property[]
+  leads                  Lead[]
+  brokers                Broker[]
+  clients                Client[]   
+  owners                 Owner[]      
+  proposals              Proposal[]   
+  keyTerms               KeyTerm[]    
+  insuranceCompanies     InsuranceCompany[] 
+  keyMovements           KeyMovement[]
+  masterContracts        MasterContract[]
+  condominiums           Condominium[] 
 
-  // NOVO: Relacionamentos do Kanban
-  pipelineStages    PipelineStage[]
-  deals             Deal[]
+  // Relacionamentos do Kanban
+  pipelineStages         PipelineStage[]
+  deals                  Deal[]
+
+  // Relacionamentos do Módulo Fiscal
+  taxRules               TaxRule[]
+  brokerInvoices         BrokerInvoice[]
+}
+
+// ==========================================
+// MÓDULO FISCAL: REGRAS E NOTAS DE REPASSE
+// ==========================================
+model TaxRule {
+  id              String     @id @default(uuid())
+  realEstateId    String
+  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+
+  name            String     // Ex: "Taxa de Administração de Aluguel", "Corretagem de Venda", "Repasse Corretor"
+  operationType   String     @default("AMBOS") // "LOCACAO_ADMIN", "VENDA_CORRETAGEM", "REPASSE_CORRETOR", "AMBOS"
+  serviceCode     String     // Código de serviço municipal (LC 116 - ex: "10.05")
+  cnaeCode        String?    // CNAE correspondente (ex: "6821801", "6821802")
+
+  issRate         Decimal    @default(2.00) @db.Decimal(5, 2) // % ISS
+  pisRate         Decimal    @default(0.65) @db.Decimal(5, 2) // % PIS
+  cofinsRate      Decimal    @default(3.00) @db.Decimal(5, 2) // % COFINS
+  csllRate        Decimal    @default(1.00) @db.Decimal(5, 2) // % CSLL
+  irRate          Decimal    @default(1.50) @db.Decimal(5, 2) // % IRRF
+  inssRate        Decimal    @default(0.00) @db.Decimal(5, 2) // % INSS
+  retainIss       Boolean    @default(false) // Retenção de ISS na fonte
+
+  // Reforma Tributária (Lei Complementar nº 214/2025 - Vigência 01/12/2026)
+  applyIbsCbs     Boolean    @default(false)
+  ibsRate         Decimal?   @default(0.00) @db.Decimal(5, 2) // % IBS
+  cbsRate         Decimal?   @default(0.00) @db.Decimal(5, 2) // % CBS
+
+  isActive        Boolean    @default(true)
+
+  brokers         Broker[]
+  brokerInvoices  BrokerInvoice[]
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model BrokerInvoice {
+  id               String     @id @default(uuid())
+  realEstateId     String
+  realEstate       RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+
+  brokerId         String
+  broker           Broker     @relation(fields: [brokerId], references: [id], onDelete: Cascade)
+
+  taxRuleId        String?
+  taxRule          TaxRule?   @relation(fields: [taxRuleId], references: [id], onDelete: SetNull)
+
+  commissionId     String?    // Vínculo opcional com o registro de comissão gerada no rateio
+  amount           Decimal    @db.Decimal(10, 2) // Valor do repasse/comissão
+  description      String?    @db.Text           // Discriminação do serviço na NFS-e
+
+  status           String     @default("PENDING") // "PENDING", "PROCESSING", "ISSUED", "CANCELLED", "ERROR"
+  focusRef         String?    @unique             // Referência única enviada à Focus NFe
+  nfseNumber       String?                        // Número da NFS-e gerada na prefeitura
+  verificationCode String?                        // Código de verificação da NFS-e
+  pdfUrl           String?    @db.Text            // URL do PDF da Nota Fiscal
+  xmlUrl           String?    @db.Text            // URL do XML da Nota Fiscal
+  errorMessage     String?    @db.Text            // Mensagem de rejeição/erro caso ocorra
+  issuedAt         DateTime?
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 }
 
 // ==========================================
 // ESTEIRA DE VENDAS E LOCAÇÃO (KANBAN)
 // ==========================================
 model PipelineStage {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   name         String
   orderIndex   Int
-  colorCode    String   @default("#94A3B8")
+  colorCode    String     @default("#94A3B8")
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
   deals        Deal[]
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 model Deal {
-  id              String   @id @default(uuid())
-  title           String   // Ex: "Compra - Apto Tatuapé"
-  transactionType String   // "Venda" ou "Locação"
-  status          String   @default("IN_PROGRESS") // IN_PROGRESS, WON, LOST
+  id              String        @id @default(uuid())
+  title           String        // Ex: "Compra - Apto Tatuapé"
+  transactionType String        // "Venda" ou "Locação"
+  status          String        @default("IN_PROGRESS") // IN_PROGRESS, WON, LOST
   agreedPrice     Float?
   
   stageId         String
   stage           PipelineStage @relation(fields: [stageId], references: [id])
   
   leadId          String
-  lead            Lead      @relation(fields: [leadId], references: [id])
+  lead            Lead          @relation(fields: [leadId], references: [id])
   
   propertyId      String
-  property        Property  @relation(fields: [propertyId], references: [id])
+  property        Property      @relation(fields: [propertyId], references: [id])
   
   brokerId        String
-  broker          Broker    @relation(fields: [brokerId], references: [id])
+  broker          Broker        @relation(fields: [brokerId], references: [id])
 
   realEstateId    String
-  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstate      RealEstate    @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
 
   history         DealHistory[]
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 }
 
 model DealHistory {
-  id          String   @id @default(uuid())
-  dealId      String
-  deal        Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  authorName  String?  // Nome de quem escreveu
-  note        String   @db.Text // Texto da observação
-  createdAt   DateTime @default(now())
+  id         String   @id @default(uuid())
+  dealId     String
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  authorName String?  // Nome de quem escreveu
+  note       String   @db.Text // Texto da observação
+  createdAt  DateTime @default(now())
 }
 
 // ==========================================
 // CONDOMÍNIOS
 // ==========================================
 model Condominium {
-  id                String     @id @default(uuid())
-  cnpj              String?
-  name              String     // Razão Social / Nome do condomínio
+  id               String     @id @default(uuid())
+  cnpj             String?
+  name             String     // Razão Social / Nome do condomínio
   
   // Endereço
-  cep               String?
-  address           String?    // Logradouro, número, complemento
-  neighborhood      String?
-  city              String?
-  state             String?
+  cep              String?
+  address          String?    // Logradouro, número, complemento
+  neighborhood     String?
+  city             String?
+  state            String?
   
-  type              String?    // Horizontal (casas) ou Vertical (prédios)
+  type             String?    // Horizontal (casas) ou Vertical (prédios)
   
   // Administração
-  adminName         String?    // Nome da administradora
-  managerName       String?    // Síndico atual
-  email             String?    // E-mail de contato
-  phone             String?    // Telefone de contato
+  adminName        String?    // Nome da administradora
+  managerName      String?    // Síndico atual
+  email            String?    // E-mail de contato
+  phone            String?    // Telefone de contato
   
   // Detalhes Técnicos e Vagas
-  towerOrBlock      String?    // Torre, bloco ou quadra
-  privateArea       Float?     // Fração ideal / Área privativa (m²)
-  hasGarage         Boolean    @default(false)
-  hasCoveredGarage  Boolean    @default(false)
+  towerOrBlock     String?    // Torre, bloco ou quadra
+  privateArea      Float?     // Fração ideal / Área privativa (m²)
+  hasGarage        Boolean    @default(false)
+  hasCoveredGarage Boolean    @default(false)
   
-  isActive          Boolean    @default(true)
+  isActive         Boolean    @default(true)
   
   // Relacionamentos
-  realEstateId      String
-  realEstate        RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstateId     String
+  realEstate       RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  properties        Property[] // Imóveis vinculados a este condomínio
+  properties       Property[] // Imóveis vinculados a este condomínio
 
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   @@map("condominiums")
 }
@@ -253,49 +330,55 @@ model Condominium {
 // SEGURADORAS (Seguro Fiança)
 // ==========================================
 model InsuranceCompany {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   name         String
   cnpj         String?
   contactInfo  String?
-  isActive     Boolean  @default(true)
+  isActive     Boolean    @default(true)
   
   realEstateId String
   realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
   clients      Client[]
   
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 }
 
 // ==========================================
 // CORRETORES (Equipa da Loja)
 // ==========================================
 model Broker {
-  id               String     @id @default(uuid())
-  name             String
-  cpf              String     @unique
-  creci            String
-  phone            String
-  email            String     @unique
-  password         String
-  isActive         Boolean    @default(true)
-  profileImageUrl  String?    @db.Text
-  creciDocumentUrl String?    @db.Text
+  id                 String     @id @default(uuid())
+  name               String
+  cpf                String     @unique
+  cnpj               String?    // Caso o corretor atue como PJ / MEI para emissão/recebimento de NFS-e
+  creci              String
+  phone              String
+  email              String     @unique
+  password           String
+  isActive           Boolean    @default(true)
+  profileImageUrl    String?    @db.Text
+  creciDocumentUrl   String?    @db.Text
 
-  saleCommission   Float?     @default(0) // Porcentagem de comissão em Vendas
-  rentCommission   Float?     @default(0) // Porcentagem de comissão em Locação
+  saleCommission     Float?     @default(0) // Porcentagem de comissão em Vendas
+  rentCommission     Float?     @default(0) // Porcentagem de comissão em Locação
   
-  realEstateId String
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstateId       String
+  realEstate         RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
 
-  role               String    @default("Corretor") // "Corretor", "Captador", "Gerente"
-  captureCommission  Float?    @default(10) // % quando ele é o Captador do imóvel
-  managerCommission  Float?    @default(5)  // % de Gerência sobre negócios da equipe
+  role               String     @default("Corretor") // "Corretor", "Captador", "Gerente"
+  captureCommission  Float?     @default(10) // % quando ele é o Captador do imóvel
+  managerCommission  Float?     @default(5)  // % de Gerência sobre negócios da equipe
   
+  // Vínculo com Regra Fiscal para emissão de nota de repasse
+  taxRuleId          String?
+  taxRule            TaxRule?   @relation(fields: [taxRuleId], references: [id], onDelete: SetNull)
+  brokerInvoices     BrokerInvoice[]
+
   // Controle da Roleta de Leads
-  inRoulette         Boolean   @default(true)
-  lastLeadAssignedAt DateTime? // Controla quem é o próximo da fila circular
+  inRoulette         Boolean    @default(true)
+  lastLeadAssignedAt DateTime?  // Controla quem é o próximo da fila circular
 
   commissions        Commission[]
   
@@ -303,19 +386,19 @@ model Broker {
   properties         Property[] @relation("PropertyBroker")
   capturedProperties Property[] @relation("PropertyCaptator") // Imóveis que ele angariou
 
-  leads        Lead[]
-  visits       Visit[]    
-  clients      Client[]   
+  leads              Lead[]
+  visits             Visit[]    
+  clients            Client[]   
 
-  proposals Proposal[]
-  keyTerms  KeyTerm[]
-  keyMovements KeyMovement[]
+  proposals          Proposal[]
+  keyTerms           KeyTerm[]
+  keyMovements       KeyMovement[]
 
-  // NOVO: Relacionamento com Negócios (Kanban)
-  deals        Deal[]
+  // Relacionamento com Negócios (Kanban)
+  deals              Deal[]
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
 }
 
 // ==========================================
@@ -325,6 +408,8 @@ model Owner {
   id                    String     @id @default(uuid())
   name                  String
   cpfOrCnpj             String
+  personType            String     @default("PF") // "PF" ou "PJ" (PJ emite nota sobre valor integral do aluguel)
+  ibsCbsContributor     Boolean    @default(false) // PF contribuinte IBS/CBS (> 3 imóveis locados e receita > R$ 240 mil/ano - LC 214/2025)
   email                 String?
   phone                 String?
   bankData              String?    @db.Text // Dados bancários para repasse financeiro
@@ -348,24 +433,24 @@ model Owner {
 // IMÓVEIS
 // ==========================================
 model Property {
-  id            String      @id @default(uuid())
-  title         String
-  type          String      // Casa, Apartamento, Terreno, etc.
-  category      String      // Residencial ou Comercial
-  transaction   String      // Venda ou Aluguel
-  code          String?
+  id                String          @id @default(uuid())
+  title             String
+  type              String          // Casa, Apartamento, Terreno, etc.
+  category          String          // Residencial ou Comercial
+  transaction       String          // Venda ou Aluguel
+  code              String?
   // Valores
-  price         Float
-  condoFee      Float?      @default(0) // Valor do Condomínio
-  iptu          Float?      @default(0) // Valor do IPTU Mensal/Anual
+  price             Float
+  condoFee          Float?          @default(0) // Valor do Condomínio
+  iptu              Float?          @default(0) // Valor do IPTU Mensal/Anual
   
   // Detalhes Físicos
-  area          Float
-  bedrooms      Int         @default(0)
-  bathrooms     Int         @default(0)
-  garage        Int         @default(0)
-  yearBuilt     Int?        // Ano de construção
-  amenities     String[]    // Array com as características
+  area              Float
+  bedrooms          Int             @default(0)
+  bathrooms         Int             @default(0)
+  garage            Int             @default(0)
+  yearBuilt         Int?            // Ano de construção
+  amenities         String[]        // Array com as características
   
   // Localização Detalhada
   cep               String
@@ -375,129 +460,129 @@ model Property {
   state             String?      
   latitude          Float?      
   longitude         Float?
-  iptuRegistration  String?     // Inscrição Imobiliária (IPTU)
+  iptuRegistration  String?         // Inscrição Imobiliária (IPTU)
   
   // Mídia e Status
   description       String?
   imageUrls         String[]    
-  videoUrl          String?      // Link do YouTube/Vimeo
-  tour360Url        String?      // Link do Tour Virtual (Matterport, etc)
-  isActive          Boolean      @default(true)
-  exportToPortals   Boolean      @default(false) // Flag para enviar para Zap/VivaReal
-  tickets           Ticket[]     // Relacionamento
+  videoUrl          String?         // Link do YouTube/Vimeo
+  tour360Url        String?         // Link do Tour Virtual (Matterport, etc)
+  isActive          Boolean         @default(true)
+  exportToPortals   Boolean         @default(false) // Flag para enviar para Zap/VivaReal
+  tickets           Ticket[]        // Relacionamento
   
-  // Condições de Negociação (NOVO)
-  acceptsFinancing  Boolean      @default(false)
-  acceptsExchange   Boolean      @default(false)
-  exchangeDetails   String?      @db.Text
+  // Condições de Negociação
+  acceptsFinancing  Boolean         @default(false)
+  acceptsExchange   Boolean         @default(false)
+  exchangeDetails   String?         @db.Text
   
-  // Captação (NOVO)
-  exclusive         Boolean      @default(false)
+  // Captação
+  exclusive         Boolean         @default(false)
   exclusiveUntil    DateTime?
 
   // Relacionamentos
-  realEstateId  String
-  realEstate    RealEstate  @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstateId      String
+  realEstate        RealEstate      @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  brokerId      String?
-  broker        Broker?     @relation("PropertyBroker", fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerId          String?
+  broker            Broker?         @relation("PropertyBroker", fields: [brokerId], references: [id], onDelete: SetNull)
 
-  // NOVO: Corretor que Angariou (Captador)
-  captatorId    String?
-  captator      Broker?     @relation("PropertyCaptator", fields: [captatorId], references: [id], onDelete: SetNull)
+  // Corretor que Angariou (Captador)
+  captatorId        String?
+  captator          Broker?         @relation("PropertyCaptator", fields: [captatorId], references: [id], onDelete: SetNull)
 
-  ownerId       String?     
-  owner         Owner?      @relation(fields: [ownerId], references: [id])
+  ownerId           String?     
+  owner             Owner?          @relation(fields: [ownerId], references: [id])
 
-  condominiumId String?
-  condominium   Condominium? @relation(fields: [condominiumId], references: [id], onDelete: SetNull)
+  condominiumId     String?
+  condominium       Condominium?    @relation(fields: [condominiumId], references: [id], onDelete: SetNull)
 
-  rentStatus      String?   @default("Vago") // "Vago", "Alugado", "Vendido"
-  inspectionUrl   String?   // Upload do Documento de Vistoria
-  contractUrl     String?   // Upload do Contrato de Aluguel
-  rentProposalUrl String?   // Link da Proposta de Aluguel anexada no imóvel
-  saleProposalUrl String?   // Link da Proposta de Venda anexada no imóvel
-  keyTermUrl      String?   // Link do Termo de Chaves anexado no imóvel
-  isHighlighted   Boolean   @default(false)
+  rentStatus        String?         @default("Vago") // "Vago", "Alugado", "Vendido"
+  inspectionUrl     String?         // Upload do Documento de Vistoria
+  contractUrl       String?         // Upload do Contrato de Aluguel
+  rentProposalUrl   String?         // Link da Proposta de Aluguel anexada no imóvel
+  saleProposalUrl   String?         // Link da Proposta de Venda anexada no imóvel
+  keyTermUrl        String?         // Link do Termo de Chaves anexado no imóvel
+  isHighlighted     Boolean         @default(false)
 
-  tenantId        String?
-  tenant          Client?   @relation(fields: [tenantId], references: [id])
+  tenantId          String?
+  tenant            Client?         @relation(fields: [tenantId], references: [id])
 
-  keyCode      String?   // Ex: "Gaveta 14", "A-12"
-  keyStatus    String    @default("Disponível") // "Disponível", "Retirada", "Indisponível"
-  qrCodeHash   String?   @unique // Hash de segurança único para imprimir no QR Code da chave
+  keyCode           String?         // Ex: "Gaveta 14", "A-12"
+  keyStatus         String          @default("Disponível") // "Disponível", "Retirada", "Indisponível"
+  qrCodeHash        String?         @unique // Hash de segurança único para imprimir no QR Code da chave
   
-  icalExportToken  String?  @default(uuid()) // Token único para a URL pública iCal deste imóvel
-  airbnbIcalUrl    String?  @db.Text        // Link iCal gerado no Airbnb
-  bookingIcalUrl   String?  @db.Text        // Link iCal gerado no Booking.com
-  vrboIcalUrl      String?  @db.Text        // Link iCal gerado no VRBO/outros
-  lastIcalSyncAt   DateTime?
+  icalExportToken   String?         @default(uuid()) // Token único para a URL pública iCal deste imóvel
+  airbnbIcalUrl     String?         @db.Text         // Link iCal gerado no Airbnb
+  bookingIcalUrl    String?         @db.Text         // Link iCal gerado no Booking.com
+  vrboIcalUrl       String?         @db.Text         // Link iCal gerado no VRBO/outros
+  lastIcalSyncAt    DateTime?
   
-  seasonBookings   SeasonBooking[]
-  keyMovements KeyMovement[]
-  leads           Lead[]
-  visits          Visit[]     
-  contracts       Contract[]  
-  proposals Proposal[]
-  keyTerms  KeyTerm[]
-  deals           Deal[]
+  seasonBookings    SeasonBooking[]
+  keyMovements      KeyMovement[]
+  leads             Lead[]
+  visits            Visit[]     
+  contracts         Contract[]  
+  proposals         Proposal[]
+  keyTerms          KeyTerm[]
+  deals             Deal[]
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 }
 
 // ==========================================
 // CLIENTES (CRM UNIFICADO - Antigo Inquilinos)
 // ==========================================
 model Client {
-  id                String      @id @default(uuid())
+  id                           String            @id @default(uuid())
   
   // Controle de Tipo
-  clientType        String      @default("PF") // "PF" ou "PJ"
+  clientType                   String            @default("PF") // "PF" ou "PJ"
   
   // Dados Principais (Comuns)
-  name              String      // Nome (PF) ou Nome Fantasia (PJ)
-  corporateName     String?     // Razão Social (PJ)
-  document          String      @unique // CPF ou CNPJ
-  rg                String?     // RG (PF)
-  stateRegistration String?     // Inscrição Estadual (PJ)
-  cityRegistration  String?     // Inscrição Municipal (PJ)
+  name                         String            // Nome (PF) ou Nome Fantasia (PJ)
+  corporateName                String?           // Razão Social (PJ)
+  document                     String            @unique // CPF ou CNPJ
+  rg                           String?           // RG (PF)
+  stateRegistration            String?           // Inscrição Estadual (PJ)
+  cityRegistration             String?           // Inscrição Municipal (PJ)
   
   // Endereço do Cliente
-  cep               String?
-  street            String?
-  neighborhood      String?
-  city              String?
-  state             String?
+  cep                          String?
+  street                       String?
+  neighborhood                 String?
+  city                         String?
+  state                        String?
   
   // Contatos
-  phone             String
-  email             String?
-  password          String?  // Senha para acessar o Portal do Inquilino
-  tickets           Ticket[] // Relacionamento com os chamados de manutenção
+  phone                        String
+  email                        String?
+  password                     String?           // Senha para acessar o Portal do Inquilino
+  tickets                      Ticket[]          // Relacionamento com os chamados de manutenção
   
   // Dados do Cônjuge (PF)
-  maritalStatus     String?
-  spouseName        String?
-  spouseCpf         String?
-  spouseRg          String?
+  maritalStatus                String?
+  spouseName                   String?
+  spouseCpf                    String?
+  spouseRg                     String?
   
   // Dados do Responsável (PJ)
-  respName          String?
-  respCpf           String?
-  respRg            String?
-  respCep           String?
-  respStreet        String?
-  respNeighborhood  String?
-  respCity          String?
-  respState         String?
-  respPhone         String?
-  respEmail         String?
+  respName                     String?
+  respCpf                      String?
+  respRg                       String?
+  respCep                      String?
+  respStreet                   String?
+  respNeighborhood             String?
+  respCity                     String?
+  respState                    String?
+  respPhone                    String?
+  respEmail                    String?
 
   // ==================================================
   // GARANTIAS LOCATÍCIAS E DADOS ROBUSTOS DO FIADOR
   // ==================================================
-  guaranteeType                String?     // "Avalista", "Fiador", "Seguro Fiança"
+  guaranteeType                String?           // "Avalista", "Fiador", "Seguro Fiança"
   insuranceCompanyId           String?
   insuranceCompany             InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
   
@@ -509,87 +594,86 @@ model Client {
   guarantorEmail               String?
   guarantorAddress             String?
   guarantorIncome              Float?
-  guarantorDocUrl              String? // Documentos pessoais do Fiador/Avalista
-  guarantorPropertyRegistryUrl String? // Registro de Imóveis do Fiador/Avalista
+  guarantorDocUrl              String?           // Documentos pessoais do Fiador/Avalista
+  guarantorPropertyRegistryUrl String?           // Registro de Imóveis do Fiador/Avalista
 
   // ==================================================
   // CHECKLIST DE FINANCIAMENTO
   // ==================================================
-  educationLevel       String?     // Select: Ensino Médio, Superior, etc.
-  financingDriveLink   String?     @db.Text // Link da pasta do Drive com Holerite, FGTS, IRPF, Residencia, Certidão.
+  educationLevel               String?           // Select: Ensino Médio, Superior, etc.
+  financingDriveLink           String?           @db.Text // Link da pasta do Drive com Holerite, FGTS, IRPF, Residencia, Certidão.
   
   // Tags/Roles na plataforma (Definido no momento do cadastro ou edição)
-  isTenant          Boolean     @default(false)
-  isBuyer           Boolean     @default(false)
-  isActive          Boolean     @default(true)
+  isTenant                     Boolean           @default(false)
+  isBuyer                      Boolean           @default(false)
+  isActive                     Boolean           @default(true)
 
   // Arquivos
-  documentUrl       String?
-  spouseDocUrl      String?
+  documentUrl                  String?
+  spouseDocUrl                 String?
 
   // Relações
-  realEstateId      String
-  realEstate        RealEstate  @relation(fields: [realEstateId], references: [id])
+  realEstateId                 String
+  realEstate                   RealEstate        @relation(fields: [realEstateId], references: [id])
   
-  brokerId          String?     // Corretor que trouxe/atende o cliente
-  broker            Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerId                     String?           // Corretor que trouxe/atende o cliente
+  broker                       Broker?           @relation(fields: [brokerId], references: [id], onDelete: SetNull)
   
-  properties        Property[]  // Imóveis onde este cliente é inquilino
-  contracts         Contract[]  // Contratos vinculados a este cliente
+  properties                   Property[]        // Imóveis onde este cliente é inquilino
+  contracts                    Contract[]        // Contratos vinculados a este cliente
 
-  proposals Proposal[]
-  keyTerms  KeyTerm[]
+  proposals                    Proposal[]
+  keyTerms                     KeyTerm[]
   
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
 
   @@map("clients")
 }
-
 
 // ==========================================
 // LEADS E PERFIL DE BUSCA (CRM MATCHMAKING)
 // ==========================================
 model Lead {
-  id          String      @id @default(uuid())
-  name        String
-  phone       String
-  email       String?
-  interest    String      // Ex: "Comprador", "Inquilino", "Venda", etc.
-  status      String      @default("Novo") // Novo, Em Atendimento, Em Proposta, Fechado, Perdido
-  notes       String?
+  id                  String        @id @default(uuid())
+  name                String
+  phone               String
+  email               String?
+  interest            String        // Ex: "Comprador", "Inquilino", "Venda", etc.
+  status              String        @default("Novo") // Novo, Em Atendimento, Em Proposta, Fechado, Perdido
+  notes               String?
   
-  stage       String      @default("Novo") 
+  stage               String        @default("Novo") 
   
-  propertyId  String?
-  property    Property?   @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  propertyId          String?
+  property            Property?     @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   
-  realEstateId String
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstateId        String
+  realEstate          RealEstate    @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  brokerId    String?
-  broker      Broker?     @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+  brokerId            String?
+  broker              Broker?       @relation(fields: [brokerId], references: [id], onDelete: SetNull)
 
-  searchType          String?   // "Casa", "Apartamento", "Comercial", "Qualquer"
-  searchTransaction   String?   // "Locação", "Venda", "Qualquer"
-  searchMinPrice      Float?    // Valor mínimo que deseja pagar
-  searchMaxPrice      Float?    // Valor máximo que deseja pagar
-  searchNeighborhoods String[]  // Array com os bairros desejados
-  searchMinBedrooms   Int?      // Número mínimo de quartos
-  searchMinGarage     Int?      // Número mínimo de vagas
+  searchType          String?       // "Casa", "Apartamento", "Comercial", "Qualquer"
+  searchTransaction   String?       // "Locação", "Venda", "Qualquer"
+  searchMinPrice      Float?        // Valor mínimo que deseja pagar
+  searchMaxPrice      Float?        // Valor máximo que deseja pagar
+  searchNeighborhoods String[]      // Array com os bairros desejados
+  searchMinBedrooms   Int?          // Número mínimo de quartos
+  searchMinGarage     Int?          // Número mínimo de vagas
 
   // Controle de Repescagem Automática (SLA de Atendimento)
-  assignedAt         DateTime? @default(now()) // Hora exata em que o corretor recebeu o lead
-  firstContactAt     DateTime? // Preenchido quando o corretor interage (trava a repescagem)
-  reassignedCount    Int       @default(0)     // Quantas vezes o lead mudou de corretor por atraso
+  assignedAt          DateTime?     @default(now()) // Hora exata em que o corretor recebeu o lead
+  firstContactAt      DateTime?     // Preenchido quando o corretor interage (trava a repescagem)
+  reassignedCount     Int           @default(0)     // Quantas vezes o lead mudou de corretor por atraso
 
-  history     LeadHistory[] 
+  history             LeadHistory[] 
   
-  // NOVO: Relacionamento com Negócios (Kanban)
-  deals       Deal[]
+  // Relacionamento com Negócios (Kanban)
+  deals               Deal[]
 
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }
 
 // HISTÓRICO DE ATENDIMENTO DO LEAD
@@ -606,17 +690,17 @@ model LeadHistory {
 // CONTROLE DE VISITAS
 // ==========================================
 model Visit {
-  id          String   @id @default(uuid())
-  date        DateTime
-  status      String   @default("Agendada") // Agendada, Realizada, Cancelada
-  feedback    String?  @db.Text
+  id         String   @id @default(uuid())
+  date       DateTime
+  status     String   @default("Agendada") // Agendada, Realizada, Cancelada
+  feedback   String?  @db.Text
   
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id])
-  brokerId    String
-  broker      Broker   @relation(fields: [brokerId], references: [id])
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id])
+  brokerId   String
+  broker     Broker   @relation(fields: [brokerId], references: [id])
   
-  createdAt   DateTime @default(now())
+  createdAt  DateTime @default(now())
 }
 
 // ==========================================
@@ -634,7 +718,7 @@ model Contract {
   adminFeePercent   Float      
   readjustmentIndex String?     
   
-  // NOVOS CAMPOS PARA O CAUÇÃO
+  // CAMPOS PARA O CAUÇÃO
   depositValue      Float?       @default(0) // Valor do Caução
   depositDate       DateTime?    // Data de vencimento do boleto de caução
   
@@ -672,66 +756,73 @@ model Inspection {
 // FINANCEIRO / FATURAS
 // ==========================================
 model Invoice {
-  id             String   @id @default(uuid())
-  dueDate        DateTime
-  paidDate       DateTime?
-  status         String   @default("Pendente") // Pendente, Pago, Vencido
+  id              String    @id @default(uuid())
+  dueDate         DateTime
+  paidDate        DateTime?
+  status          String    @default("Pendente") // Pendente, Pago, Vencido
   
   // Título Dinâmico (ex: "Aluguel Mensal", "Caução")
-  description    String?  
+  description     String?  
   
   // Valores da Cobrança do Inquilino
-  totalAmount    Float
+  totalAmount     Float
   
   // DETALHAMENTO DO REPASSE PARA O PROPRIETÁRIO
-  realEstateFee  Float    // Parte da Imobiliária (Comissão/Taxa Admin calculada da % do contrato)
-  ownerAmount    Float    // Repasse Base ao Proprietário (Aluguel - Taxa)
+  realEstateFee   Float     // Parte da Imobiliária (Comissão/Taxa Admin sobre a qual a imobiliária emite NFS-e)
+  ownerAmount     Float     // Repasse Base ao Proprietário (Aluguel - Taxa)
   
-  iptuValue      Float?   @default(0)
-  iptuDocUrl     String?  @db.Text
+  iptuValue       Float?    @default(0)
+  iptuDocUrl      String?   @db.Text
   
-  condoValue     Float?   @default(0)
-  condoDocUrl    String?  @db.Text
+  condoValue      Float?    @default(0)
+  condoDocUrl     String?   @db.Text
   
-  waterValue     Float?   @default(0)
-  waterDocUrl    String?  @db.Text
+  waterValue      Float?    @default(0)
+  waterDocUrl     String?   @db.Text
   
-  fineValue      Float?   @default(0) // Multas (atraso, quebra)
-  fineDocUrl     String?  @db.Text
+  fineValue       Float?    @default(0) // Multas (atraso, quebra)
+  fineDocUrl      String?   @db.Text
   
   // Status específico para o repasse ao proprietário
-  transferStatus String   @default("Aguardando") // Aguardando, Repassado
-  transferDate   DateTime? 
+  transferStatus  String    @default("Aguardando") // Aguardando, Repassado
+  transferDate    DateTime? 
   
-  // Gateway de Pagamento
-  barcode        String?
-  pixQrCodeUrl   String?  @db.Text
-  
-  contractId     String
-  contract       Contract @relation(fields: [contractId], references: [id])
+  // Controle Fiscal (NFS-e emitida sobre a Taxa de Administração - realEstateFee)
+  nfseStatus      String?   // "PENDING", "ISSUED", "ERROR"
+  nfseFocusRef    String?
+  nfsePdfUrl      String?   @db.Text
+  nfseXmlUrl      String?   @db.Text
 
-  mpPaymentId      String?  // ID do pagamento no Mercado Pago
-  pixQrCode        String?  @db.Text // O código Copia e Cola do PIX
-  pixQrCodeBase64  String?  @db.Text // A imagem do QR Code em Base64
-  ticketUrl        String?  @db.Text // Link para o PDF do boleto/comprovante
+  // Gateway de Pagamento
+  barcode         String?
+  pixQrCodeUrl    String?   @db.Text
   
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  contractId      String
+  contract        Contract  @relation(fields: [contractId], references: [id])
+
+  mpPaymentId     String?   // ID do pagamento no Mercado Pago
+  pixQrCode       String?   @db.Text // O código Copia e Cola do PIX
+  pixQrCodeBase64 String?   @db.Text // A imagem do QR Code em Base64
+  ticketUrl       String?   @db.Text // Link para o PDF do boleto/comprovante
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
+
 // ==========================================
 // PROPOSTAS
 // ==========================================
 model Proposal {
-  id           String   @id @default(uuid())
-  type         String   // "Venda" ou "Locação"
-  status       String   @default("Pendente") // Pendente, Aceita, Recusada
+  id           String     @id @default(uuid())
+  type         String     // "Venda" ou "Locação"
+  status       String     @default("Pendente") // Pendente, Aceita, Recusada
   documentUrl  String?
   propertyId   String
   clientId     String
   brokerId     String?
   realEstateId String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   property     Property   @relation(fields: [propertyId], references: [id])
   client       Client     @relation(fields: [clientId], references: [id])
@@ -743,23 +834,23 @@ model Proposal {
 // MÓDULO DE MANUTENÇÕES E OBRAS (TICKETING)
 // ==========================================
 model Ticket {
-  id          String   @id @default(uuid())
+  id          String          @id @default(uuid())
   title       String
-  description String   @db.Text
-  status      String   @default("Aberto") // Aberto, Em Orçamento, Em Andamento, Concluído
-  priority    String   @default("Média")  // Baixa, Média, Alta
-  imageUrl    String?  @db.Text           // Inquilino pode anexar foto do problema
+  description String          @db.Text
+  status      String          @default("Aberto") // Aberto, Em Orçamento, Em Andamento, Concluído
+  priority    String          @default("Média")  // Baixa, Média, Alta
+  imageUrl    String?         @db.Text           // Inquilino pode anexar foto do problema
   
   propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id])
+  property    Property        @relation(fields: [propertyId], references: [id])
   
   clientId    String?  
-  client      Client?  @relation(fields: [clientId], references: [id]) // Inquilino que abriu
+  client      Client?         @relation(fields: [clientId], references: [id]) // Inquilino que abriu
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  messages  TicketMessage[]
+  messages    TicketMessage[]
 
   @@map("tickets")
 }
@@ -774,48 +865,48 @@ model TicketMessage {
 }
 
 model KeyTerm {
-  id           String   @id @default(uuid())
-  type         String   // "Entrega - Locação", "Entrega - Venda", "Devolução"
-  status       String   @default("Pendente") // Pendente, Assinado
+  id           String       @id @default(uuid())
+  type         String       // "Entrega - Locação", "Entrega - Venda", "Devolução"
+  status       String       @default("Pendente") // Pendente, Assinado
   documentUrl  String?
   propertyId   String
   clientId     String
   brokerId     String?
   realEstateId String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  property     Property @relation(fields: [propertyId], references: [id])
-  client       Client   @relation(fields: [clientId], references: [id])
-  broker       Broker?  @relation(fields: [brokerId], references: [id])
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+  property     Property     @relation(fields: [propertyId], references: [id])
+  client       Client       @relation(fields: [clientId], references: [id])
+  broker       Broker?      @relation(fields: [brokerId], references: [id])
+  realEstate   RealEstate   @relation(fields: [realEstateId], references: [id])
 
   // LIGAÇÃO: Um Termo pode gerar um registro físico de saída/entrada de chave
   keyMovement  KeyMovement?
 }
 
 model KeyMovement {
-  id                  String    @id @default(uuid())
+  id                  String     @id @default(uuid())
   propertyId          String
   clientName          String?   
-  reason              String?   // Ex: "Visita", "Vistoria", "Manutenção"
-  withdrawnAt         DateTime  @default(now())
+  reason              String?    // Ex: "Visita", "Vistoria", "Manutenção"
+  withdrawnAt         DateTime   @default(now())
   
-  // NOVO: SLA de devolução e Assinatura Digital
-  expectedReturnAt    DateTime? // Prazo limite acordado para devolução (ex: devolver em 4h)
+  // SLA de devolução e Assinatura Digital
+  expectedReturnAt    DateTime?  // Prazo limite acordado para devolução (ex: devolver em 4h)
   returnedAt          DateTime?
-  digitalSignatureUrl String?   @db.Text // Assinatura feita no ecrã (Canvas)
+  digitalSignatureUrl String?    @db.Text // Assinatura feita no ecrã (Canvas)
   notes               String?
 
-  keyTermId    String?   @unique
-  keyTerm      KeyTerm?  @relation(fields: [keyTermId], references: [id])
+  keyTermId           String?    @unique
+  keyTerm             KeyTerm?   @relation(fields: [keyTermId], references: [id])
 
-  property     Property   @relation(fields: [propertyId], references: [id])
-  brokerId     String?
-  broker       Broker?    @relation(fields: [brokerId], references: [id])
+  property            Property   @relation(fields: [propertyId], references: [id])
+  brokerId            String?
+  broker              Broker?    @relation(fields: [brokerId], references: [id])
   
-  realEstateId String
-  realEstate   RealEstate @relation(fields: [realEstateId], references: [id])
+  realEstateId        String
+  realEstate          RealEstate @relation(fields: [realEstateId], references: [id])
 }
 
 // ==========================================
@@ -835,63 +926,63 @@ model MasterConfig {
 // CONTRATOS DO MASTER (SaaS)
 // ==========================================
 model MasterContract {
-  id             String   @id @default(uuid())
-  type           String   // "MASTER_FRANQUEADO", "MASTER_IMOBILIARIA", "FRANQUEADO_IMOBILIARIA"
-  status         String   @default("Ativo")
-  startDate      DateTime
-  endDate        DateTime?
-  value          Float
-  documentUrl    String?  @db.Text
+  id           String          @id @default(uuid())
+  type         String          // "MASTER_FRANQUEADO", "MASTER_IMOBILIARIA", "FRANQUEADO_IMOBILIARIA"
+  status       String          @default("Ativo")
+  startDate    DateTime
+  endDate      DateTime?
+  value        Float
+  documentUrl  String?         @db.Text
 
-  franchiseeId   String?
-  franchisee     Franchisee? @relation(fields: [franchiseeId], references: [id])
+  franchiseeId String?
+  franchisee   Franchisee?     @relation(fields: [franchiseeId], references: [id])
   
-  realEstateId   String?
-  realEstate     RealEstate? @relation(fields: [realEstateId], references: [id])
+  realEstateId String?
+  realEstate   RealEstate?     @relation(fields: [realEstateId], references: [id])
 
-  invoices       MasterInvoice[]
+  invoices     MasterInvoice[]
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
 }
 
 // ==========================================
 // FATURAS DO MASTER (Cobrança SaaS)
 // ==========================================
 model MasterInvoice {
-  id               String   @id @default(uuid())
+  id               String         @id @default(uuid())
   dueDate          DateTime
   paidDate         DateTime?
   amount           Float
-  status           String   @default("Pendente") // Pendente, Pago, Vencido
+  status           String         @default("Pendente") // Pendente, Pago, Vencido
   description      String?
 
   mpPaymentId      String?
-  pixQrCode        String?  @db.Text
-  pixQrCodeBase64  String?  @db.Text
-  ticketUrl        String?  @db.Text
+  pixQrCode        String?        @db.Text
+  pixQrCodeBase64  String?        @db.Text
+  ticketUrl        String?        @db.Text
 
   masterContractId String
   masterContract   MasterContract @relation(fields: [masterContractId], references: [id], onDelete: Cascade)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 }
 
 model WhatsappConfig {
-  id              String     @id @default(uuid())
-  realEstateId    String     @unique
-  realEstate      RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  id             String     @id @default(uuid())
+  realEstateId   String     @unique
+  realEstate     RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  instanceName    String     @unique // Nome único da instância na Evolution API (ex: zenix_imob_123)
-  status          String     @default("DISCONNECTED") // DISCONNECTED, QR_READY, CONNECTED
-  qrCodeBase64    String?    @db.Text // Guarda o QR code temporário
+  instanceName   String     @unique // Nome único da instância na Evolution API (ex: zenix_imob_123)
+  status         String     @default("DISCONNECTED") // DISCONNECTED, QR_READY, CONNECTED
+  qrCodeBase64   String?    @db.Text // Guarda o QR code temporário
   
-  botEnabled      Boolean    @default(false) // Se o robô de triagem está ligado
-  welcomeMessage  String?    @db.Text // Mensagem de saudação do bot
+  botEnabled     Boolean    @default(false) // Se o robô de triagem está ligado
+  welcomeMessage String?    @db.Text // Mensagem de saudação do bot
   
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 // ==========================================
@@ -919,6 +1010,12 @@ model Commission {
   paidAt          DateTime?
   notes           String?
 
+  // Controle de NFS-e sobre a comissão (intermediação da imobiliária ou repasse)
+  nfseStatus      String?    // "PENDING", "ISSUED", "ERROR"
+  nfseFocusRef    String?
+  nfsePdfUrl      String?    @db.Text
+  nfseXmlUrl      String?    @db.Text
+
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 }
@@ -927,59 +1024,61 @@ model Commission {
 // AVALIADOR DE IMÓVEIS (LAUDO PTAM / ACM)
 // ==========================================
 model PropertyValuation {
-  id                  String     @id @default(uuid())
-  realEstateId        String
-  realEstate          RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  id                String     @id @default(uuid())
+  realEstateId      String
+  realEstate        RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  ownerName           String
-  ownerPhone          String?
-  propertyTitle       String
-  address             String
-  neighborhood        String
-  city                String
-  type                String     // Casa, Apartamento, Comercial, Terreno
-  transaction         String     // Venda ou Aluguel
+  ownerName         String
+  ownerPhone        String?
+  propertyTitle     String
+  address           String
+  neighborhood      String
+  city              String
+  type              String     // Casa, Apartamento, Comercial, Terreno
+  transaction       String     // Venda ou Aluguel
   
-  area                Float
-  bedrooms            Int        @default(0)
-  bathrooms           Int        @default(0)
-  garage              Int        @default(0)
-  conservationState   String     @default("Padrão") // "Novo/Reformado", "Padrão", "Precisa de Reforma"
+  area              Float
+  bedrooms          Int        @default(0)
+  bathrooms         Int        @default(0)
+  garage            Int        @default(0)
+  conservationState String     @default("Padrão") // "Novo/Reformado", "Padrão", "Precisa de Reforma"
   
-  avgSqmPrice         Float      // Preço médio do m² calculado
-  estimatedPrice      Float      // Valor justo estimado
-  minPrice            Float      // Faixa mínima (Liquidez Rápida)
-  maxPrice            Float      // Faixa máxima (Teto de Mercado)
+  avgSqmPrice       Float      // Preço médio do m² calculado
+  estimatedPrice    Float      // Valor justo estimado
+  minPrice          Float      // Faixa mínima (Liquidez Rápida)
+  maxPrice          Float      // Faixa máxima (Teto de Mercado)
   
-  comparablesJson     Json       // Guarda a lista de imóveis comparáveis usados no laudo
-  brokerName          String?
-  brokerCreci         String?
-  notes               String?    @db.Text
+  comparablesJson   Json       // Guarda a lista de imóveis comparáveis usados no laudo
+  brokerName        String?
+  brokerCreci       String?
+  notes             String?    @db.Text
 
-  createdAt           DateTime   @default(now())
+  createdAt         DateTime   @default(now())
 }
 
-
+// ==========================================
+// RESERVAS DE ALUGUEL POR TEMPORADA (PMS / ICAL)
+// ==========================================
 model SeasonBooking {
-  id             String    @id @default(uuid())
-  propertyId     String
-  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   
-  guestName      String?   @default("Hóspede Temporada")
-  guestPhone     String?
-  guestEmail     String?
+  guestName   String?  @default("Hóspede Temporada")
+  guestPhone  String?
+  guestEmail  String?
   
-  checkIn        DateTime
-  checkOut       DateTime
+  checkIn     DateTime
+  checkOut    DateTime
   
-  source         String    @default("DIRECT") // "AIRBNB", "BOOKING", "VRBO", "DIRECT", "MANUAL"
-  externalUid    String?   // UID único vindo do arquivo iCal da OTA (para evitar duplicatas)
-  totalAmount    Decimal?  @db.Decimal(10, 2)
-  status         String    @default("CONFIRMED") // "CONFIRMED", "CANCELLED", "PENDING"
-  notes          String?   @db.Text
+  source      String   @default("DIRECT") // "AIRBNB", "BOOKING", "VRBO", "DIRECT", "MANUAL"
+  externalUid String?  // UID único vindo do arquivo iCal da OTA (para evitar duplicatas)
+  totalAmount Decimal? @db.Decimal(10, 2)
+  status      String   @default("CONFIRMED") // "CONFIRMED", "CANCELLED", "PENDING"
+  notes       String?  @db.Text
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([propertyId])
   @@index([externalUid])
