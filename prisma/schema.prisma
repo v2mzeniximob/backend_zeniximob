@@ -123,9 +123,8 @@ model RealEstate {
   subscriptionStatus     String   @default("Ativo") // Ativo, Inadimplente, Bloqueado
   paymentGatewayId       String?  // ID do cliente no Asaas/Stripe
 
-  // ==========================================
   // CONFIGURAÇÕES FISCAIS (FOCUS NFE & CERTIFICADO A1)
-  // ==========================================
+
   focusNfeToken          String?  @db.Text // Token da API Focus NFe da Imobiliária
   focusEnv               String?  @default("homologacao") // "homologacao" ou "producao"
   a1CertPath             String?  @db.Text // Caminho do arquivo .pfx (Certificado A1)
@@ -167,6 +166,10 @@ model RealEstate {
   // Relacionamentos do Módulo de Despesas
   agencyExpenses         AgencyExpense[]
   contaAzulConfig        ContaAzulConfig?
+
+  spes                   DeveloperSpe[]
+  landBanks              LandBank[]
+  developmentProjects    DevelopmentProject[]
 }
 
 // ==========================================
@@ -642,9 +645,7 @@ model Client {
   respPhone                    String?
   respEmail                    String?
 
-  // ==================================================
   // GARANTIAS LOCATÍCIAS E DADOS ROBUSTOS DO FIADOR
-  // ==================================================
   guaranteeType                String?           // "Avalista", "Fiador", "Seguro Fiança"
   insuranceCompanyId           String?
   insuranceCompany             InsuranceCompany? @relation(fields: [insuranceCompanyId], references: [id])
@@ -660,9 +661,7 @@ model Client {
   guarantorDocUrl              String?           // Documentos pessoais do Fiador/Avalista
   guarantorPropertyRegistryUrl String?           // Registro de Imóveis do Fiador/Avalista
 
-  // ==================================================
   // CHECKLIST DE FINANCIAMENTO
-  // ==================================================
   educationLevel               String?           // Select: Ensino Médio, Superior, etc.
   financingDriveLink           String?           @db.Text // Link da pasta do Drive com Holerite, FGTS, IRPF, Residencia, Certidão.
   
@@ -1210,4 +1209,289 @@ model ContaAzulConfig {
 
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+}
+
+// ==========================================
+// MÓDULO INCORPORADORA: 1. SPEs & LAND BANK (VIABILIDADE)
+// ==========================================
+model DeveloperSpe {
+  id              String               @id @default(uuid())
+  realEstateId    String
+  realEstate      RealEstate           @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+
+  cnpj            String               @unique
+  corporateName   String               // Razão Social da SPE
+  tradeName       String               // Nome do Empreendimento / SPE
+  taxRegime       String               @default("RET - Patrimônio de Afetação") // RET (4%), Lucro Presumido, etc.
+  bankName        String?
+  bankAgency      String?
+  bankAccount     String?
+  pixKey          String?
+  isActive        Boolean              @default(true)
+
+  landBanks       LandBank[]
+  projects        DevelopmentProject[]
+
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+}
+
+model LandBank {
+  id                        String               @id @default(uuid())
+  realEstateId              String
+  realEstate                RealEstate           @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  
+  speId                     String?
+  spe                       DeveloperSpe?        @relation(fields: [speId], references: [id], onDelete: SetNull)
+
+  title                     String               // Identificação da Área / Terreno
+  cep                       String?
+  address                   String
+  neighborhood              String
+  city                      String
+  state                     String
+  
+  // Potencial Construtivo e Custos de Aquisição
+  areaSqm                   Float                // Área do terreno (m²)
+  utilizationCoefficient    Float                @default(1.0) // Coeficiente de Aproveitamento (CA)
+  buildableAreaSqm          Float                // Área total construível (m²)
+  acquisitionCost           Float                // Custo de aquisição (R$)
+  swapPercent               Float                @default(0)   // % de Permuta Física/Financeira com o terreneiro
+  
+  // Estudo de Viabilidade Econômica (VGV, Impostos, Fluxo e Inadimplência)
+  estimatedVgv              Float                // Valor Geral de Vendas projetado (R$)
+  estimatedConstructionCost Float                // Custo total de obra estimado (R$)
+  taxEstimatePercent        Float                @default(4.0) // Alíquota projetada (ex: RET 4%)
+  defaultRiskPercent        Float                @default(3.5) // Previsão de inadimplência (%)
+  projectedMarginPercent    Float                // Margem líquida projetada (%)
+  cashFlowProjectionJson    Json?                // Simulação de fluxo de caixa mês a mês
+  
+  documentsJson             Json?                // Links de Matrícula, Sondagem, Topografia, Viabilidade Legal
+  status                    String               @default("EM_ESTUDO") // "EM_ESTUDO", "APROVADO", "CONVERTIDO_EM_OBRA", "DESCARTADO"
+  notes                     String?              @db.Text
+
+  projects                  DevelopmentProject[]
+
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+}
+
+// ==========================================
+// MÓDULO INCORPORADORA: 2. EMPREENDIMENTO, ENGENHARIA & VITRINE
+// ==========================================
+model DevelopmentProject {
+  id                      String                    @id @default(uuid())
+  realEstateId            String
+  realEstate              RealEstate                @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+
+  speId                   String?
+  spe                     DeveloperSpe?             @relation(fields: [speId], references: [id], onDelete: SetNull)
+
+  landBankId              String?
+  landBank                LandBank?                 @relation(fields: [landBankId], references: [id], onDelete: SetNull)
+
+  name                    String                    // Nome Comercial do Empreendimento
+  slug                    String                    @unique // Slug para a Landing Page personalizada no site
+  status                  String                    @default("LANCAMENTO") // "PRE_LANCAMENTO", "LANCAMENTO", "EM_OBRAS", "PRONTO"
+  description             String?                   @db.Text
+  address                 String
+  neighborhood            String
+  city                    String
+  state                   String
+  deliveryForecast        DateTime?                 // Previsão de Entrega das Chaves
+  totalUnits              Int                       @default(1)
+  vgvTotal                Float                     @default(0)
+  accumulatedInccPercent  Float                     @default(0) // Índice INCC acumulado aplicado na carteira
+
+  // Avanço Físico-Financeiro das Etapas (%)
+  foundationPct           Float                     @default(0) // Fundação
+  structurePct            Float                     @default(0) // Supraestrutura
+  masonryPct              Float                     @default(0) // Alvenaria e Vedação
+  installationsPct        Float                     @default(0) // Instalações Elétricas/Hidráulicas
+  facadePct               Float                     @default(0) // Fachada / Design Exterior
+  finishingPct            Float                     @default(0) // Acabamentos e Interiores
+  overallProgressPct      Float                     @default(0) // Progresso Geral Ponderado
+
+  // CRM Visual, Tours 360º, Renderizações e Memorial Descritivo Visual
+  tour360ExteriorUrl      String?                   @db.Text // Passeio 360° da Fachada e Áreas Comuns
+  tour360DecoratedUrl     String?                   @db.Text // Passeio 360° do Apartamento Decorado
+  facadeRendersUrls       String[]                  // Imagens 3D de alta resolução da Fachada
+  interiorRendersUrls     String[]                  // Imagens 3D dos Interiores / Áreas Comuns
+  floorPlansUrls          String[]                  // Plantas Baixas Humanizadas
+  visualMemorialJson      Json?                     // Memorial descritivo visual (Pisos, Louças, Fachada, Esquadrias)
+
+  // Personalização da Página Pública no Site da Imobiliária
+  showOnPublicSite        Boolean                   @default(true)
+  customHeadline          String?                   // Chamada principal da Landing Page
+  heroVideoUrl            String?                   @db.Text // Vídeo promocional de fundo
+  primaryThemeColor       String                    @default("#0f172a")
+  accentThemeColor        String                    @default("#2563eb")
+  highlightsJson          Json?                     // Diferenciais do projeto (ex: Rooftop, Coworking, Vaga Verde)
+
+  // Relacionamentos de Engenharia, BIM e Customização
+  budgetItems             ConstructionBudgetItem[]
+  measurements            ContractorMeasurement[]
+  supplyOrders            SupplyPurchaseOrder[]
+  workDiaries             WorkDiary[]
+  bimFiles                BimProjectFile[]
+  customizationOptions    CustomizationKitOption[]
+  customizationOrders     UnitCustomizationOrder[]
+
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+}
+
+// Orçamento de Obra, Curva ABC e Cronograma Físico-Financeiro
+model ConstructionBudgetItem {
+  id                 String             @id @default(uuid())
+  projectId          String
+  project            DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  code               String?            // Código SINAPI / TCPO ou interno
+  stageName          String             // Ex: "Fundação", "Estrutura", "Fachada", "Interiores"
+  itemDescription    String             // Ex: "Concreto Usinado FCK 30MPa", "Porcelanato 90x90"
+  category           String             @default("Material") // "Material", "Mão de Obra", "Equipamento", "Serviço Terceirizado"
+  unit               String             @default("un") // m², m³, kg, ton, vb, un
+  quantity           Float
+  unitCost           Float
+  totalPlannedCost   Float              // quantity * unitCost
+  abcClass           String             @default("C") // Classificação automática "A" (80% custo), "B" (15%), "C" (5%)
+
+  plannedStartDate   DateTime?
+  plannedEndDate     DateTime?
+  executedPercent    Float              @default(0) // % executado em campo
+  actualCostSpent    Float              @default(0) // Custo real desembolsado
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+// Medições e Controle de Empreiteiros / Terceiros
+model ContractorMeasurement {
+  id                 String             @id @default(uuid())
+  projectId          String
+  project            DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  contractorName     String             // Nome da Empreiteira
+  contractorCnpj     String?
+  serviceDescription String             // Ex: "Medição #04 - Reboco Externo Torre A"
+  periodReference    String             // Ex: "Outubro/2026"
+  grossAmount        Float              // Valor bruto medido
+  retentionPercent   Float              @default(5.0) // % de retenção contratual (caução de garantia)
+  retentionAmount    Float              // Valor retido na fonte
+  netAmount          Float              // Valor líquido a pagar ao empreiteiro
+  status             String             @default("PENDENTE") // "PENDENTE", "APROVADA", "PAGA_INTEGRADA_DRE"
+  invoiceUrl         String?            @db.Text // Nota fiscal da medição
+
+  measuredAt         DateTime           @default(now())
+  createdAt          DateTime           @default(now())
+}
+
+// Suprimentos, Cotações, Ordens de Compra e Estoque de Canteiro
+model SupplyPurchaseOrder {
+  id                 String             @id @default(uuid())
+  projectId          String
+  project            DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  materialName       String             // Ex: "Aço CA-50 10mm", "Cimento CP-II"
+  unit               String             @default("un")
+  quantityOrdered    Float
+  quantityInStock    Float              @default(0) // Saldo atual no estoque do canteiro
+  supplierName       String
+  supplierCnpj       String?
+  quotesJson         Json?              // Cotações comparativas (Fornecedor 1, 2 e 3)
+  totalAmount        Float
+  status             String             @default("COTACAO") // "COTACAO", "ORDEM_EMITIDA", "ENTREGUE_NO_CANTEIRO"
+  expectedDelivery   DateTime?
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+// Diário de Obra (RDO)
+model WorkDiary {
+  id                 String             @id @default(uuid())
+  projectId          String
+  project            DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  date               DateTime           @default(now())
+  weatherMorning     String             @default("Sol") // "Sol", "Nublado", "Chuva", "Impraticável"
+  weatherAfternoon   String             @default("Sol")
+  workforceCount     Int                @default(0)     // Total de operários no canteiro
+  workforceRolesJson Json?              // Detalhamento (Pedreiros, Serventes, Eletricistas, Engenheiros)
+  activitiesExecuted String             @db.Text        // Relatório técnico do dia
+  occurrences        String?            @db.Text        // Acidentes, atrasos de entrega, paralisações
+  photosUrls         String[]                           // Fotos do avanço diário
+  engineerName       String?
+
+  createdAt          DateTime           @default(now())
+}
+
+// ==========================================
+// MÓDULO INCORPORADORA: 3. BIM, DESIGN EXTERIOR/INTERIOR & PERSONALIZAÇÃO
+// ==========================================
+
+// Repositório BIM, Plantas e Compatibilização de Projetos
+model BimProjectFile {
+  id                 String             @id @default(uuid())
+  projectId          String
+  project            DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  discipline         String             // "Fachada / Exterior", "Design de Interiores", "Arquitetura", "Estrutural", "Hidrossanitário", "Elétrica / Iluminação", "Gesso"
+  fileName           String             // Ex: "Fachada_Executivo_TorreA.ifc"
+  fileFormat         String             // "IFC", "RVT", "SKP", "PROMOB", "DWG", "PDF"
+  fileUrl            String             @db.Text
+  version            String             @default("R00") // Controle de Revisão: R00, R01, R02...
+  isLatestRevision   Boolean            @default(true)
+
+  // Compatibilização (Clash Detection)
+  clashStatus        String             @default("COMPATIBILIZADO") // "EM_ANALISE", "CONFLITO_DETECTADO", "COMPATIBILIZADO"
+  clashDescription   String?            @db.Text // Ex: "Ponto de sanca de gesso conflita com prumada hidráulica no Apt Tipo"
+  responsibleDesigner String?
+
+  createdAt          DateTime           @default(now())
+}
+
+// Catálogo de Opções de Personalização de Unidades (Kit Acabamentos)
+model CustomizationKitOption {
+  id                 String             @id @default(uuid())
+  projectId          String
+  project            DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  category           String             // "Pisos e Porcelanatos", "Bancadas e Marmoraria", "Louças e Metais", "Iluminação e Forro", "Automação", "Planta Flexível"
+  title              String             // Ex: "Upgrade Piso Vinílico Amadeirado + Rodapé Poliestireno 15cm"
+  specification      String             @db.Text // Detalhamento técnico da marca/modelo
+  imageUrl           String?            @db.Text // Foto do material/ambiente renderizado
+  additionalPrice    Float              // Valor adicional cobrado no aditivo (R$)
+  maxStageAllowedPct Float              @default(50) // Limite de % da obra até onde o cliente pode pedir a alteração
+  isActive           Boolean            @default(true)
+
+  createdAt          DateTime           @default(now())
+}
+
+// Pedido de Personalização do Cliente -> Aditivo Contratual + Ordem de Serviço (OS) para o Canteiro
+model UnitCustomizationOrder {
+  id                    String             @id @default(uuid())
+  projectId             String
+  project               DevelopmentProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  unitNumber            String             // Ex: "Apt 1204 - Torre Única"
+  buyerName             String
+  buyerDocument         String?
+  contractId            String?            // Vínculo opcional com o contrato do cliente no módulo de Contratos
+
+  selectedItemsJson     Json               // Array de kits/acabamentos escolhidos pelo comprador
+  totalAdditionalAmount Float              // Soma automática dos upgrades escolhidos (Valor do Aditivo)
+  
+  // Status Comercial / Aditivo Financeiro
+  addendumStatus        String             @default("SIMULACAO") // "SIMULACAO", "AGUARDANDO_ASSINATURA", "ADITIVO_ASSINADO"
+  addendumDocumentUrl   String?            @db.Text
+
+  // Ordem de Serviço (OS) para Engenharia / Canteiro de Obras
+  engineeringOsCode     String?            // Código da OS gerada para o mestre de obras/engenheiro
+  engineeringOsStatus   String             @default("AGUARDANDO_ADITIVO") // "AGUARDANDO_ADITIVO", "OS_EMITIDA_CANTEIRO", "EM_EXECUCAO", "CONCLUIDO_VISTORIADO"
+  engineeringInstructions String?          @db.Text // Instruções exatas do que instalar na unidade
+
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 }

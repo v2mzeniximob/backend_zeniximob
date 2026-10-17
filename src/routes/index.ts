@@ -39,6 +39,7 @@ import { SeasonIcalController } from '../controllers/SeasonIcalController';
 import { FiscalController } from '../controllers/FiscalController';
 import { MetaLeadController } from '../controllers/MetaLeadController';
 import { FinanceExpenseController } from '../controllers/FinanceExpenseController';
+import { IncorporadoraController } from '../controllers/IncorporadoraController';
 
 import { upload } from '../middlewares/upload';
 import { ClientPortalController } from '../controllers/ClientPortalController';
@@ -84,6 +85,7 @@ const seasonIcalController = new SeasonIcalController();
 const fiscalController = new FiscalController();
 const metaLeadController = new MetaLeadController();
 const financeExpenseController = new FinanceExpenseController();
+const incorporadoraController = new IncorporadoraController();
 
 // ==========================================
 // ROTAS PÚBLICAS
@@ -94,6 +96,7 @@ routes.post('/portal/login', clientPortalController.login);
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 routes.get('/public/xml/:slug', xmlController.generateFeed);
+routes.get('/public/stores/:slug/incorporadora', incorporadoraController.getPublicDeveloperShowcase);
 
 // Rota pública para Airbnb e Booking.com baixarem o nosso iCal
 routes.get('/public/properties/:propertyId/ical/:token.ics', seasonIcalController.exportIcal);
@@ -394,6 +397,29 @@ routes.post('/tickets/:id/messages', authMiddleware, ticketController.addMessage
 
 routes.get('/dimob/summary', authMiddleware, dimobController.getSummary);
 routes.get('/dimob/export', authMiddleware, dimobController.exportTxt);
+
+// ==========================================
+// ROTAS PROTEGIDAS: MÓDULO INCORPORADORA
+// ==========================================
+routes.get('/incorporadora/spes', authMiddleware, incorporadoraController.listSpes);
+routes.post('/incorporadora/spes', authMiddleware, incorporadoraController.createSpe);
+
+routes.get('/incorporadora/land-bank', authMiddleware, incorporadoraController.listLandBank);
+routes.post('/incorporadora/land-bank', authMiddleware, incorporadoraController.createLandBankWithFeasibility);
+
+routes.get('/incorporadora/projects', authMiddleware, incorporadoraController.listProjects);
+routes.post('/incorporadora/projects', authMiddleware, incorporadoraController.createProject);
+routes.put('/incorporadora/projects/:id', authMiddleware, incorporadoraController.updateProjectProgressAndSite);
+
+routes.post('/incorporadora/projects/:projectId/budget-items', authMiddleware, incorporadoraController.addBudgetItemAndRecalculateAbc);
+routes.post('/incorporadora/projects/:projectId/measurements', authMiddleware, incorporadoraController.createMeasurement);
+routes.post('/incorporadora/projects/:projectId/supply-orders', authMiddleware, incorporadoraController.createSupplyOrder);
+routes.post('/incorporadora/projects/:projectId/work-diaries', authMiddleware, incorporadoraController.createWorkDiary);
+
+routes.post('/incorporadora/projects/:projectId/bim-files', authMiddleware, incorporadoraController.addBimFile);
+routes.post('/incorporadora/projects/:projectId/customization-options', authMiddleware, incorporadoraController.createCustomizationOption);
+routes.post('/incorporadora/projects/:projectId/customization-orders', authMiddleware, incorporadoraController.createUnitCustomizationOrder);
+routes.post('/incorporadora/projects/:projectId/apply-incc', authMiddleware, incorporadoraController.applyInccReadjustment);
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
