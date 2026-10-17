@@ -579,4 +579,113 @@ export class IncorporadoraController {
       return res.status(500).json({ error: 'Erro ao carregar vitrine pública da incorporadora.' });
     }
   }
+
+// =========================================================================
+  // 6. PORTAL DO CLIENTE: ACOMPANHAMENTO DE OBRA & AUTO-PERSONALIZAÇÃO
+  // =========================================================================
+  async getPortalDeveloperData(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const realEstateId = user.realEstateId;
+
+      const projects = await prisma.developmentProject.findMany({
+        where: { realEstateId },
+        include: {
+          workDiaries: { orderBy: { date: 'desc' }, take: 10 },
+          customizationOptions: { where: { isActive: true } },
+          customizationOrders: {
+            orderBy: { createdAt: 'desc' }
+          }
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return res.json({ projects });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao carregar dados da obra no Portal do Cliente.' });
+    }
+  }
+
+  async createPortalCustomizationOrder(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const projectId = String(req.params.projectId);
+      const { unitNumber, contractId, selectedOptionIds } = req.body;
+
+      const project = await prisma.developmentProject.findUnique({
+        where: { id: projectId }
+      });
+
+      if (!project) {
+        return res.status(404).json({ error: 'Empreendimento não encontrado.' });
+      }
+
+      const options = await prisma.customizationKitOption.findMany({
+        where: {
+          id: { in: Array.isArray(selectedOptionIds) ? selectedOptionIds : [] },
+          projectId
+        }
+      });
+
+      if (options.length === 0) {
+        return res.status(400).json({ error: 'Selecione ao menos um kit de acabamento.' });
+      }
+
+      // Valida se o avanço físico da obra ainda permite personalização para os itens escolhidos
+      const blockedOption = options.find((opt: any) => project.overallProgressPct > opt.maxStageAllowedPct);
+      if (blockedOption) {
+        return res.status(400).json({
+          error: `O item "${blockedOption.title}" só pode ser solicitado até ${blockedOption.maxStageAllowedPct}% de avanço da obra (atual: ${project.overallProgressPct}%).`
+        });
+      }
+
+      const totalAdditionalAmount = options.reduce((acc: number, opt: any) => acc + Number(opt.additionalPrice || 0), 0);
+      const osCode = `OS-APP-${Math.floor(10000 + Math.random() * 90000)}`;
+      const buyerName = user.name || 'Comprador Portal';
+      const instructions = options.map((o: any) => `• [${o.category}] ${o.title}: ${o.specification}`).join('\n');
+
+      const order = await prisma.unitCustomizationOrder.create({
+        data: {
+          projectId,
+          unitNumber: unitNumber || 'Unidade do Contrato',
+          buyerName,
+          buyerDocument: user.document || null,
+          contractId: contractId || null,
+          selectedItemsJson: options,
+          totalAdditionalAmount,
+          addendumStatus: 'ADITIVO_ASSINADO',
+          engineeringOsCode: osCode,
+          engineeringOsStatus: 'OS_EMITIDA_CANTEIRO',
+          engineeringInstructions: `SOLICITADO PELO COMPRADOR NO PORTAL — UNIDADE ${unitNumber}:\n${instructions}`
+        }
+      });
+
+      // Se houver contrato vinculado, gera automaticamente a fatura do Aditivo no Financeiro do cliente
+      if (contractId && totalAdditionalAmount > 0) {
+        const dueDate = new Date();
+        dueDate.setDate(dueDate.getDate() + 10);
+
+        await prisma.invoice.create({
+          data: {
+            contractId,
+            description: `Aditivo de Personalização de Planta/Acabamento (${osCode} - ${unitNumber})`,
+            dueDate,
+            status: 'Pendente',
+            totalAmount: totalAdditionalAmount,
+            realEstateFee: totalAdditionalAmount,
+            ownerAmount: 0
+          }
+        });
+      }
+
+      return res.status(201).json({
+        message: 'Personalização confirmada! Aditivo gerado no seu financeiro e Ordem de Serviço enviada para a engenharia.',
+        order
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao registrar personalização pelo Portal.' });
+    }
+  }
+
 }

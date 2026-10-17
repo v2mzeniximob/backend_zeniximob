@@ -204,6 +204,10 @@ routes.get('/portal/dashboard', authMiddleware, portalOnly, clientPortalControll
 routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
 routes.post('/portal/tickets/:id/messages', authMiddleware, portalOnly, ticketController.addMessage);
 
+//rotas da Incorporadora no Portal do Cliente
+routes.get('/portal/incorporadora', authMiddleware, portalOnly, incorporadoraController.getPortalDeveloperData);
+routes.post('/portal/incorporadora/:projectId/custom-order', authMiddleware, portalOnly, incorporadoraController.createPortalCustomizationOrder);
+
 // ==========================================
 // ROTAS DE ALUGUEL POR TEMPORADA (PMS & iCal)
 // ==========================================
