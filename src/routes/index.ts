@@ -425,6 +425,9 @@ routes.post('/incorporadora/projects/:projectId/customization-options', authMidd
 routes.post('/incorporadora/projects/:projectId/customization-orders', authMiddleware, incorporadoraController.createUnitCustomizationOrder);
 routes.post('/incorporadora/projects/:projectId/apply-incc', authMiddleware, incorporadoraController.applyInccReadjustment);
 
+routes.post('/incorporadora/simulate-financing', authMiddleware, incorporadoraController.simulateFinancingAndSalesTable);
+
+
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================

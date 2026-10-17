@@ -688,4 +688,93 @@ export class IncorporadoraController {
     }
   }
 
+  // =========================================================================
+  // 7. SIMULADOR DE CRÉDITO IMOBILIÁRIO & TABELA DE VENDAS (CAIXA / MCMV)
+  // =========================================================================
+  async simulateFinancingAndSalesTable(req: Request, res: Response) {
+    try {
+      const { propertyValue, monthlyIncome, buyerAge, fgtsAmount, programType } = req.body;
+
+      const val = Number(propertyValue || 0);
+      const income = Number(monthlyIncome || 0);
+      const fgts = Number(fgtsAmount || 0);
+      const age = Number(buyerAge || 30);
+      const program = programType || 'MCMV'; // 'MCMV' ou 'SBPE'
+
+      // Parâmetros de Simulação
+      let maxFinancingPercent = 0.80; // Até 80% do valor do imóvel
+      let interestRateAnnual = 0.105; // 10.5% a.a. média
+      let estimatedSubsidy = 0;
+
+      if (program === 'MCMV') {
+        maxFinancingPercent = 0.85;
+        interestRateAnnual = 0.0816; // Taxa Minha Casa Minha Vida (faixas 1, 2 e 3)
+        // Cálculo simplificado de subsídio com base na renda familiar e idade
+        if (income <= 3000) {
+          estimatedSubsidy = Math.max(0, 55000 - (income * 5));
+        } else if (income <= 5000) {
+          estimatedSubsidy = Math.max(0, 30000 - ((income - 3000) * 3));
+        }
+      } else {
+        // SBPE / FGTS (Taxa de mercado)
+        interestRateAnnual = 0.109;
+        maxFinancingPercent = 0.80;
+      }
+
+      const maxFinancingAllowed = val * maxFinancingPercent;
+      // Capacidade de pagamento (comprometimento de 30% da renda familiar)
+      const maxMonthlyPaymentCapacity = income * 0.30;
+      const termMonths = Math.min(420, (80 - age) * 12); // Prazo máximo 35 anos (420 meses) ou limite de idade
+
+      // Simulação SAC (Primeira prestação)
+      const amortization = maxFinancingAllowed / termMonths;
+      const firstInterestMonth = maxFinancingAllowed * (interestRateAnnual / 12);
+      const estimatedFirstInstallment = amortization + firstInterestMonth;
+
+      // Ajuste caso a primeira parcela ultrapasse 30% da renda
+      let finalFinancingAmount = maxFinancingAllowed;
+      if (estimatedFirstInstallment > maxMonthlyPaymentCapacity) {
+        // Reduz o valor financiado para caber no comprometimento de renda
+        finalFinancingAmount = maxMonthlyPaymentCapacity / ((1 / termMonths) + (interestRateAnnual / 12));
+      }
+
+      const downPaymentTotal = Math.max(0, val - finalFinancingAmount - fgts - estimatedSubsidy);
+      
+      // Tabela de Vendas Padrão (Fluxo de Obra)
+      // Entrada dividida em: Ato (30%), 30 dias (30%), Mensais durante a obra (30% divididos em 30 meses) e Balões/Semestrais (10%)
+      const ato = downPaymentTotal * 0.30;
+      const em30Dias = downPaymentTotal * 0.30;
+      const parcelasObraTotal = downPaymentTotal * 0.30;
+      const parcelasMensaisObra = parcelasObraTotal / 30; // 30 meses de obra com correção INCC
+      const baloesSemestrais = (downPaymentTotal * 0.10) / 5; // 5 balões semestrais
+
+      return res.json({
+        simulation: {
+          propertyValue: val,
+          monthlyIncome: income,
+          programType: program,
+          maxFinancingAmount: Number(finalFinancingAmount.toFixed(2)),
+          estimatedSubsidy: Number(estimatedSubsidy.toFixed(2)),
+          fgtsUsed: fgts,
+          downPaymentTotal: Number(downPaymentTotal.toFixed(2)),
+          maxTermMonths: termMonths,
+          estimatedFirstInstallment: Number(Math.min(estimatedFirstInstallment, maxMonthlyPaymentCapacity).toFixed(2)),
+          interestRateAnnual: Number((interestRateAnnual * 100).toFixed(2))
+        },
+        salesTableFlow: {
+          ato: Number(ato.toFixed(2)),
+          em30Dias: Number(em30Dias.toFixed(2)),
+          mensaisObraCount: 30,
+          mensaisObraValue: Number(parcelasMensaisObra.toFixed(2)),
+          baloesSemestralCount: 5,
+          baloesSemestralValue: Number(baloesSemestrais.toFixed(2)),
+          saldoChavesFinanciamento: Number(finalFinancingAmount.toFixed(2))
+        }
+      });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao executar simulação de crédito imobiliário.' });
+    }
+  }
+
 }
