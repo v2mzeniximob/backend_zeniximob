@@ -198,17 +198,20 @@ export class IncorporadoraController {
     }
   }
 
-  async updateProjectProgressAndSite(req: Request, res: Response) {
+async updateProjectProgressAndSite(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
       const d = req.body;
 
-      const foundation = Number(d.foundationPct ?? 0);
-      const structure = Number(d.structurePct ?? 0);
-      const masonry = Number(d.masonryPct ?? 0);
-      const installations = Number(d.installationsPct ?? 0);
-      const facade = Number(d.facadePct ?? 0);
-      const finishing = Number(d.finishingPct ?? 0);
+      const current = await prisma.developmentProject.findUnique({ where: { id } });
+      if (!current) return res.status(404).json({ error: 'Empreendimento não encontrado.' });
+
+      const foundation = d.foundationPct !== undefined ? Number(d.foundationPct) : current.foundationPct;
+      const structure = d.structurePct !== undefined ? Number(d.structurePct) : current.structurePct;
+      const masonry = d.masonryPct !== undefined ? Number(d.masonryPct) : current.masonryPct;
+      const installations = d.installationsPct !== undefined ? Number(d.installationsPct) : current.installationsPct;
+      const facade = d.facadePct !== undefined ? Number(d.facadePct) : current.facadePct;
+      const finishing = d.finishingPct !== undefined ? Number(d.finishingPct) : current.finishingPct;
 
       const overallProgressPct = Number(
         ((foundation + structure + masonry + installations + facade + finishing) / 6).toFixed(1)
@@ -217,7 +220,27 @@ export class IncorporadoraController {
       const updated = await prisma.developmentProject.update({
         where: { id },
         data: {
-          ...d,
+          name: d.name !== undefined ? d.name : current.name,
+          status: d.status !== undefined ? d.status : current.status,
+          speId: d.speId !== undefined ? (d.speId || null) : current.speId,
+          landBankId: d.landBankId !== undefined ? (d.landBankId || null) : current.landBankId,
+          totalUnits: d.totalUnits !== undefined ? Number(d.totalUnits) : current.totalUnits,
+          vgvTotal: d.vgvTotal !== undefined ? Number(d.vgvTotal) : current.vgvTotal,
+          address: d.address !== undefined ? d.address : current.address,
+          neighborhood: d.neighborhood !== undefined ? d.neighborhood : current.neighborhood,
+          city: d.city !== undefined ? d.city : current.city,
+          state: d.state !== undefined ? d.state : current.state,
+          deliveryForecast: d.deliveryForecast !== undefined ? (d.deliveryForecast ? new Date(d.deliveryForecast) : null) : current.deliveryForecast,
+          showOnPublicSite: d.showOnPublicSite !== undefined ? Boolean(d.showOnPublicSite) : current.showOnPublicSite,
+          customHeadline: d.customHeadline !== undefined ? d.customHeadline : current.customHeadline,
+          description: d.description !== undefined ? d.description : current.description,
+          heroVideoUrl: d.heroVideoUrl !== undefined ? d.heroVideoUrl : current.heroVideoUrl,
+          tour360ExteriorUrl: d.tour360ExteriorUrl !== undefined ? d.tour360ExteriorUrl : current.tour360ExteriorUrl,
+          tour360DecoratedUrl: d.tour360DecoratedUrl !== undefined ? d.tour360DecoratedUrl : current.tour360DecoratedUrl,
+          facadeRendersUrls: d.facadeRendersUrls !== undefined ? d.facadeRendersUrls : current.facadeRendersUrls,
+          interiorRendersUrls: d.interiorRendersUrls !== undefined ? d.interiorRendersUrls : current.interiorRendersUrls,
+          floorPlansUrls: d.floorPlansUrls !== undefined ? d.floorPlansUrls : current.floorPlansUrls,
+          visualMemorialJson: d.visualMemorialJson !== undefined ? d.visualMemorialJson : current.visualMemorialJson,
           foundationPct: foundation,
           structurePct: structure,
           masonryPct: masonry,
@@ -230,7 +253,7 @@ export class IncorporadoraController {
 
       return res.json(updated);
     } catch (error) {
-      return res.status(500).json({ error: 'Erro ao atualizar cronograma e vitrine do empreendimento.' });
+      return res.status(500).json({ error: 'Erro ao atualizar empreendimento.' });
     }
   }
 
@@ -777,4 +800,90 @@ export class IncorporadoraController {
     }
   }
 
+  // Atualizar dados ou status (isActive) da SPE
+  async updateSpe(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { cnpj, corporateName, tradeName, taxRegime, bankName, bankAgency, bankAccount, pixKey, isActive } = req.body;
+
+      const dataToUpdate: any = {};
+      if (cnpj !== undefined) dataToUpdate.cnpj = String(cnpj).replace(/\D/g, '');
+      if (corporateName !== undefined) dataToUpdate.corporateName = corporateName;
+      if (tradeName !== undefined) dataToUpdate.tradeName = tradeName;
+      if (taxRegime !== undefined) dataToUpdate.taxRegime = taxRegime;
+      if (bankName !== undefined) dataToUpdate.bankName = bankName;
+      if (bankAgency !== undefined) dataToUpdate.bankAgency = bankAgency;
+      if (bankAccount !== undefined) dataToUpdate.bankAccount = bankAccount;
+      if (pixKey !== undefined) dataToUpdate.pixKey = pixKey;
+      if (isActive !== undefined) dataToUpdate.isActive = Boolean(isActive);
+
+      const updated = await prisma.developerSpe.update({
+        where: { id },
+        data: dataToUpdate
+      });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(400).json({ error: 'Erro ao atualizar SPE.' });
+    }
+  }
+
+  // Atualizar Terreno (Land Bank) e recalcular viabilidade automaticamente
+  async updateLandBank(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const data = req.body;
+
+      // Se for apenas alteração rápida de status (Habilitar / Desativar)
+      if (Object.keys(data).length === 1 && data.status) {
+        const updatedStatus = await prisma.landBank.update({
+          where: { id },
+          data: { status: data.status }
+        });
+        return res.json(updatedStatus);
+      }
+
+      const areaSqm = Number(data.areaSqm || 0);
+      const ca = Number(data.utilizationCoefficient || 1);
+      const buildableAreaSqm = areaSqm * ca;
+
+      const vgv = Number(data.estimatedVgv || 0);
+      const acquisition = Number(data.acquisitionCost || 0);
+      const construction = Number(data.estimatedConstructionCost || 0);
+      const taxPct = Number(data.taxEstimatePercent ?? 4.0);
+      const defaultRiskPct = Number(data.defaultRiskPercent ?? 3.5);
+
+      const taxesValue = vgv * (taxPct / 100);
+      const defaultProvision = vgv * (defaultRiskPct / 100);
+      const netProfit = vgv - acquisition - construction - taxesValue - defaultProvision;
+      const projectedMarginPercent = vgv > 0 ? Number(((netProfit / vgv) * 100).toFixed(2)) : 0;
+
+      const updated = await prisma.landBank.update({
+        where: { id },
+        data: {
+          speId: data.speId || null,
+          title: data.title,
+          address: data.address,
+          neighborhood: data.neighborhood,
+          city: data.city,
+          state: data.state,
+          areaSqm,
+          utilizationCoefficient: ca,
+          buildableAreaSqm,
+          acquisitionCost: acquisition,
+          swapPercent: Number(data.swapPercent || 0),
+          estimatedVgv: vgv,
+          estimatedConstructionCost: construction,
+          taxEstimatePercent: taxPct,
+          defaultRiskPercent: defaultRiskPct,
+          projectedMarginPercent,
+          status: data.status || 'EM_ESTUDO',
+          notes: data.notes
+        }
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar terreno no Land Bank.' });
+    }
+  }
 }

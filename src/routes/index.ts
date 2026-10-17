@@ -427,6 +427,12 @@ routes.post('/incorporadora/projects/:projectId/apply-incc', authMiddleware, inc
 
 routes.post('/incorporadora/simulate-financing', authMiddleware, incorporadoraController.simulateFinancingAndSalesTable);
 
+routes.put('/incorporadora/spes/:id', authMiddleware, incorporadoraController.updateSpe);
+routes.patch('/incorporadora/spes/:id/status', authMiddleware, incorporadoraController.updateSpe);
+
+routes.put('/incorporadora/land-bank/:id', authMiddleware, incorporadoraController.updateLandBank);
+routes.patch('/incorporadora/land-bank/:id/status', authMiddleware, incorporadoraController.updateLandBank);
+
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
