@@ -96,7 +96,12 @@ routes.post('/portal/login', clientPortalController.login);
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 routes.get('/public/xml/:slug', xmlController.generateFeed);
+
+// Rotas Públicas da Incorporadora (Vitrine e Simulador de Financiamento no Site e Painel)
 routes.get('/public/stores/:slug/incorporadora', incorporadoraController.getPublicDeveloperShowcase);
+routes.get('/public/stores/:slug/incorporadoras', incorporadoraController.getPublicDeveloperShowcase);
+routes.post('/incorporadora/simulate-financing', incorporadoraController.simulateFinancingAndSalesTable);
+routes.post('/incorporadoras/simulate-financing', incorporadoraController.simulateFinancingAndSalesTable);
 
 // Rota pública para Airbnb e Booking.com baixarem o nosso iCal
 routes.get('/public/properties/:propertyId/ical/:token.ics', seasonIcalController.exportIcal);
@@ -204,9 +209,11 @@ routes.get('/portal/dashboard', authMiddleware, portalOnly, clientPortalControll
 routes.post('/portal/tickets', authMiddleware, portalOnly, ticketController.create);
 routes.post('/portal/tickets/:id/messages', authMiddleware, portalOnly, ticketController.addMessage);
 
-//rotas da Incorporadora no Portal do Cliente
+// Rotas da Incorporadora no Portal do Cliente
 routes.get('/portal/incorporadora', authMiddleware, portalOnly, incorporadoraController.getPortalDeveloperData);
+routes.get('/portal/incorporadoras', authMiddleware, portalOnly, incorporadoraController.getPortalDeveloperData);
 routes.post('/portal/incorporadora/:projectId/custom-order', authMiddleware, portalOnly, incorporadoraController.createPortalCustomizationOrder);
+routes.post('/portal/incorporadoras/:projectId/custom-order', authMiddleware, portalOnly, incorporadoraController.createPortalCustomizationOrder);
 
 // ==========================================
 // ROTAS DE ALUGUEL POR TEMPORADA (PMS & iCal)
@@ -403,36 +410,61 @@ routes.get('/dimob/summary', authMiddleware, dimobController.getSummary);
 routes.get('/dimob/export', authMiddleware, dimobController.exportTxt);
 
 // ==========================================
-// ROTAS PROTEGIDAS: MÓDULO INCORPORADORA
+// ROTAS PROTEGIDAS: MÓDULO INCORPORADORA (Suporte /incorporadora e /incorporadoras)
 // ==========================================
-routes.get('/incorporadora/spes', authMiddleware, incorporadoraController.listSpes);
-routes.post('/incorporadora/spes', authMiddleware, incorporadoraController.createSpe);
+const incorpPrefixes = ['/incorporadora', '/incorporadoras'];
 
-routes.get('/incorporadora/land-bank', authMiddleware, incorporadoraController.listLandBank);
-routes.post('/incorporadora/land-bank', authMiddleware, incorporadoraController.createLandBankWithFeasibility);
+for (const prefix of incorpPrefixes) {
+  // 1. SPEs
+  routes.get(`${prefix}/spes`, authMiddleware, incorporadoraController.listSpes);
+  routes.post(`${prefix}/spes`, authMiddleware, incorporadoraController.createSpe);
+  routes.put(`${prefix}/spes/:id`, authMiddleware, incorporadoraController.updateSpe);
+  routes.patch(`${prefix}/spes/:id/status`, authMiddleware, incorporadoraController.updateSpe);
 
-routes.get('/incorporadora/projects', authMiddleware, incorporadoraController.listProjects);
-routes.post('/incorporadora/projects', authMiddleware, incorporadoraController.createProject);
-routes.put('/incorporadora/projects/:id', authMiddleware, incorporadoraController.updateProjectProgressAndSite);
+  // 2. Land Bank (Banco de Terrenos)
+  routes.get(`${prefix}/land-bank`, authMiddleware, incorporadoraController.listLandBank);
+  routes.post(`${prefix}/land-bank`, authMiddleware, incorporadoraController.createLandBankWithFeasibility);
+  routes.put(`${prefix}/land-bank/:id`, authMiddleware, incorporadoraController.updateLandBank);
+  routes.patch(`${prefix}/land-bank/:id/status`, authMiddleware, incorporadoraController.updateLandBank);
 
-routes.post('/incorporadora/projects/:projectId/budget-items', authMiddleware, incorporadoraController.addBudgetItemAndRecalculateAbc);
-routes.post('/incorporadora/projects/:projectId/measurements', authMiddleware, incorporadoraController.createMeasurement);
-routes.post('/incorporadora/projects/:projectId/supply-orders', authMiddleware, incorporadoraController.createSupplyOrder);
-routes.post('/incorporadora/projects/:projectId/work-diaries', authMiddleware, incorporadoraController.createWorkDiary);
+  // 3. Empreendimentos / Obras
+  routes.get(`${prefix}/projects`, authMiddleware, incorporadoraController.listProjects);
+  routes.post(`${prefix}/projects`, authMiddleware, incorporadoraController.createProject);
+  routes.put(`${prefix}/projects/:id`, authMiddleware, incorporadoraController.updateProjectProgressAndSite);
 
-routes.post('/incorporadora/projects/:projectId/bim-files', authMiddleware, incorporadoraController.addBimFile);
-routes.post('/incorporadora/projects/:projectId/customization-options', authMiddleware, incorporadoraController.createCustomizationOption);
-routes.post('/incorporadora/projects/:projectId/customization-orders', authMiddleware, incorporadoraController.createUnitCustomizationOrder);
-routes.post('/incorporadora/projects/:projectId/apply-incc', authMiddleware, incorporadoraController.applyInccReadjustment);
+  // 4. Orçamento & Curva ABC
+  routes.post(`${prefix}/projects/:projectId/budget-items`, authMiddleware, incorporadoraController.addBudgetItemAndRecalculateAbc);
+  routes.put(`${prefix}/budget-items/:itemId`, authMiddleware, incorporadoraController.updateBudgetItem);
+  routes.delete(`${prefix}/budget-items/:itemId`, authMiddleware, incorporadoraController.deleteBudgetItem);
 
-routes.post('/incorporadora/simulate-financing', authMiddleware, incorporadoraController.simulateFinancingAndSalesTable);
+  // 5. Medições de Empreiteiros
+  routes.post(`${prefix}/projects/:projectId/measurements`, authMiddleware, incorporadoraController.createMeasurement);
+  routes.put(`${prefix}/measurements/:measurementId`, authMiddleware, incorporadoraController.updateMeasurement);
+  routes.delete(`${prefix}/measurements/:measurementId`, authMiddleware, incorporadoraController.deleteMeasurement);
 
-routes.put('/incorporadora/spes/:id', authMiddleware, incorporadoraController.updateSpe);
-routes.patch('/incorporadora/spes/:id/status', authMiddleware, incorporadoraController.updateSpe);
+  // 6. Suprimentos & Compras
+  routes.post(`${prefix}/projects/:projectId/supply-orders`, authMiddleware, incorporadoraController.createSupplyOrder);
+  routes.put(`${prefix}/supply-orders/:supplyId`, authMiddleware, incorporadoraController.updateSupplyOrder);
+  routes.delete(`${prefix}/supply-orders/:supplyId`, authMiddleware, incorporadoraController.deleteSupplyOrder);
 
-routes.put('/incorporadora/land-bank/:id', authMiddleware, incorporadoraController.updateLandBank);
-routes.patch('/incorporadora/land-bank/:id/status', authMiddleware, incorporadoraController.updateLandBank);
+  // 7. Diário de Obra (RDO)
+  routes.post(`${prefix}/projects/:projectId/work-diaries`, authMiddleware, incorporadoraController.createWorkDiary);
+  routes.put(`${prefix}/work-diaries/:diaryId`, authMiddleware, incorporadoraController.updateWorkDiary);
+  routes.delete(`${prefix}/work-diaries/:diaryId`, authMiddleware, incorporadoraController.deleteWorkDiary);
 
+  // 8. Arquivos BIM & Plantas
+  routes.post(`${prefix}/projects/:projectId/bim-files`, authMiddleware, incorporadoraController.addBimFile);
+  routes.put(`${prefix}/bim-files/:bimId`, authMiddleware, incorporadoraController.updateBimFile);
+  routes.delete(`${prefix}/bim-files/:bimId`, authMiddleware, incorporadoraController.deleteBimFile);
+
+  // 9. Kits de Personalização & Ordens de Customização
+  routes.post(`${prefix}/projects/:projectId/customization-options`, authMiddleware, incorporadoraController.createCustomizationOption);
+  routes.put(`${prefix}/customization-options/:optionId`, authMiddleware, incorporadoraController.updateCustomizationOption);
+  routes.delete(`${prefix}/customization-options/:optionId`, authMiddleware, incorporadoraController.deleteCustomizationOption);
+
+  routes.post(`${prefix}/projects/:projectId/customization-orders`, authMiddleware, incorporadoraController.createUnitCustomizationOrder);
+  routes.post(`${prefix}/projects/:projectId/apply-incc`, authMiddleware, incorporadoraController.applyInccReadjustment);
+}
 
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)

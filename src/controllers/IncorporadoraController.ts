@@ -3,6 +3,28 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient() as any;
 
+// Função auxiliar para recalcular automaticamente a Curva ABC (Classes A, B e C) do projeto
+async function recalculateProjectAbc(projectId: string) {
+  const allItems = await prisma.constructionBudgetItem.findMany({
+    where: { projectId },
+    orderBy: { totalPlannedCost: 'desc' }
+  });
+
+  const grandTotal = allItems.reduce((acc: number, item: any) => acc + Number(item.totalPlannedCost || 0), 0);
+  let cumulative = 0;
+
+  for (const item of allItems) {
+    cumulative += Number(item.totalPlannedCost || 0);
+    const pct = grandTotal > 0 ? (cumulative / grandTotal) * 100 : 100;
+    const abcClass = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
+
+    await prisma.constructionBudgetItem.update({
+      where: { id: item.id },
+      data: { abcClass }
+    });
+  }
+}
+
 export class IncorporadoraController {
 
   // =========================================================================
@@ -33,7 +55,7 @@ export class IncorporadoraController {
           cnpj: String(cnpj).replace(/\D/g, ''),
           corporateName,
           tradeName,
-          taxRegime: taxRegime || 'RET - Patrimônio de Afetação',
+          taxRegime: taxRegime || 'RET - Patrimônio de Afetação (4%)',
           bankName,
           bankAgency,
           bankAccount,
@@ -43,6 +65,32 @@ export class IncorporadoraController {
       return res.status(201).json(spe);
     } catch (error: any) {
       return res.status(400).json({ error: 'Erro ao cadastrar SPE. Verifique se o CNPJ já existe.' });
+    }
+  }
+
+  async updateSpe(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { cnpj, corporateName, tradeName, taxRegime, bankName, bankAgency, bankAccount, pixKey, isActive } = req.body;
+
+      const dataToUpdate: any = {};
+      if (cnpj !== undefined) dataToUpdate.cnpj = String(cnpj).replace(/\D/g, '');
+      if (corporateName !== undefined) dataToUpdate.corporateName = corporateName;
+      if (tradeName !== undefined) dataToUpdate.tradeName = tradeName;
+      if (taxRegime !== undefined) dataToUpdate.taxRegime = taxRegime;
+      if (bankName !== undefined) dataToUpdate.bankName = bankName;
+      if (bankAgency !== undefined) dataToUpdate.bankAgency = bankAgency;
+      if (bankAccount !== undefined) dataToUpdate.bankAccount = bankAccount;
+      if (pixKey !== undefined) dataToUpdate.pixKey = pixKey;
+      if (isActive !== undefined) dataToUpdate.isActive = Boolean(isActive);
+
+      const updated = await prisma.developerSpe.update({
+        where: { id },
+        data: dataToUpdate
+      });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(400).json({ error: 'Erro ao atualizar SPE.' });
     }
   }
 
@@ -121,6 +169,65 @@ export class IncorporadoraController {
     }
   }
 
+  async updateLandBank(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const data = req.body;
+
+      // Se for apenas alteração rápida de status (Habilitar / Desativar)
+      if (Object.keys(data).length === 1 && data.status) {
+        const updatedStatus = await prisma.landBank.update({
+          where: { id },
+          data: { status: data.status }
+        });
+        return res.json(updatedStatus);
+      }
+
+      const areaSqm = Number(data.areaSqm || 0);
+      const ca = Number(data.utilizationCoefficient || 1);
+      const buildableAreaSqm = areaSqm * ca;
+
+      const vgv = Number(data.estimatedVgv || 0);
+      const acquisition = Number(data.acquisitionCost || 0);
+      const construction = Number(data.estimatedConstructionCost || 0);
+      const taxPct = Number(data.taxEstimatePercent ?? 4.0);
+      const defaultRiskPct = Number(data.defaultRiskPercent ?? 3.5);
+
+      const taxesValue = vgv * (taxPct / 100);
+      const defaultProvision = vgv * (defaultRiskPct / 100);
+      const netProfit = vgv - acquisition - construction - taxesValue - defaultProvision;
+      const projectedMarginPercent = vgv > 0 ? Number(((netProfit / vgv) * 100).toFixed(2)) : 0;
+
+      const updated = await prisma.landBank.update({
+        where: { id },
+        data: {
+          speId: data.speId || null,
+          title: data.title,
+          address: data.address,
+          neighborhood: data.neighborhood,
+          city: data.city,
+          state: data.state,
+          areaSqm,
+          utilizationCoefficient: ca,
+          buildableAreaSqm,
+          acquisitionCost: acquisition,
+          swapPercent: Number(data.swapPercent || 0),
+          estimatedVgv: vgv,
+          estimatedConstructionCost: construction,
+          taxEstimatePercent: taxPct,
+          defaultRiskPercent: defaultRiskPct,
+          projectedMarginPercent,
+          status: data.status || 'EM_ESTUDO',
+          notes: data.notes
+        }
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar terreno no Land Bank.' });
+    }
+  }
+
   // =========================================================================
   // 2. GESTÃO DE EMPREENDIMENTOS, ENGENHARIA, CURVA ABC E DIÁRIO DE OBRA
   // =========================================================================
@@ -137,7 +244,7 @@ export class IncorporadoraController {
           supplyOrders: { orderBy: { createdAt: 'desc' } },
           workDiaries: { orderBy: { date: 'desc' } },
           bimFiles: { orderBy: { createdAt: 'desc' } },
-          customizationOptions: true,
+          customizationOptions: { orderBy: { createdAt: 'desc' } },
           customizationOrders: { orderBy: { createdAt: 'desc' } }
         },
         orderBy: { createdAt: 'desc' }
@@ -198,7 +305,7 @@ export class IncorporadoraController {
     }
   }
 
-async updateProjectProgressAndSite(req: Request, res: Response) {
+  async updateProjectProgressAndSite(req: Request, res: Response) {
     try {
       const id = String(req.params.id);
       const d = req.body;
@@ -257,7 +364,9 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
-  // Adição de Item de Orçamento + Recálculo Automático da Curva ABC
+  // =========================================================================
+  // ORÇAMENTO DE OBRA & CURVA ABC (CRIAR, EDITAR E EXCLUIR)
+  // =========================================================================
   async addBudgetItemAndRecalculateAbc(req: Request, res: Response) {
     try {
       const projectId = String(req.params.projectId);
@@ -283,25 +392,7 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
         }
       });
 
-      // Recalcula a Curva ABC de todo o orçamento da obra (A = até 80%, B = 80% a 95%, C = 95% a 100%)
-      const allItems = await prisma.constructionBudgetItem.findMany({
-        where: { projectId },
-        orderBy: { totalPlannedCost: 'desc' }
-      });
-
-      const grandTotal = allItems.reduce((acc: number, item: any) => acc + item.totalPlannedCost, 0);
-      let cumulative = 0;
-
-      for (const item of allItems) {
-        cumulative += item.totalPlannedCost;
-        const pct = grandTotal > 0 ? (cumulative / grandTotal) * 100 : 100;
-        const abcClass = pct <= 80 ? 'A' : pct <= 95 ? 'B' : 'C';
-
-        await prisma.constructionBudgetItem.update({
-          where: { id: item.id },
-          data: { abcClass }
-        });
-      }
+      await recalculateProjectAbc(projectId);
 
       return res.status(201).json({ message: 'Insumo adicionado e Curva ABC recalculada!' });
     } catch (error) {
@@ -309,7 +400,59 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
-  // Medição de Empreiteiros com Retenção Contratual + Lançamento no DRE
+  async updateBudgetItem(req: Request, res: Response) {
+    try {
+      const id = String(req.params.itemId);
+      const { code, stageName, itemDescription, category, unit, quantity, unitCost, executedPercent, actualCostSpent } = req.body;
+
+      const existing = await prisma.constructionBudgetItem.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ error: 'Item de orçamento não encontrado.' });
+
+      const qty = quantity !== undefined ? Number(quantity) : existing.quantity;
+      const cost = unitCost !== undefined ? Number(unitCost) : existing.unitCost;
+      const totalPlannedCost = qty * cost;
+
+      const updated = await prisma.constructionBudgetItem.update({
+        where: { id },
+        data: {
+          code: code !== undefined ? code : existing.code,
+          stageName: stageName !== undefined ? stageName : existing.stageName,
+          itemDescription: itemDescription !== undefined ? itemDescription : existing.itemDescription,
+          category: category !== undefined ? category : existing.category,
+          unit: unit !== undefined ? unit : existing.unit,
+          quantity: qty,
+          unitCost: cost,
+          totalPlannedCost,
+          executedPercent: executedPercent !== undefined ? Number(executedPercent) : existing.executedPercent,
+          actualCostSpent: actualCostSpent !== undefined ? Number(actualCostSpent) : existing.actualCostSpent
+        }
+      });
+
+      await recalculateProjectAbc(existing.projectId);
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar item da Curva ABC.' });
+    }
+  }
+
+  async deleteBudgetItem(req: Request, res: Response) {
+    try {
+      const id = String(req.params.itemId);
+      const existing = await prisma.constructionBudgetItem.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ error: 'Item não encontrado.' });
+
+      await prisma.constructionBudgetItem.delete({ where: { id } });
+      await recalculateProjectAbc(existing.projectId);
+
+      return res.json({ message: 'Item excluído e Curva ABC recalculada.' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao excluir item do orçamento.' });
+    }
+  }
+
+  // =========================================================================
+  // MEDIÇÕES DE EMPREITEIROS (CRIAR, EDITAR E EXCLUIR)
+  // =========================================================================
   async createMeasurement(req: Request, res: Response) {
     try {
       const realEstateId = (req as any).user.realEstateId;
@@ -357,20 +500,70 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
-  // Suprimentos, Compras e Controle de Estoque no Canteiro
+  async updateMeasurement(req: Request, res: Response) {
+    try {
+      const id = String(req.params.measurementId);
+      const { contractorName, contractorCnpj, serviceDescription, periodReference, grossAmount, retentionPercent, status } = req.body;
+
+      const existing = await prisma.contractorMeasurement.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ error: 'Medição não encontrada.' });
+
+      const gross = grossAmount !== undefined ? Number(grossAmount) : existing.grossAmount;
+      const retPct = retentionPercent !== undefined ? Number(retentionPercent) : existing.retentionPercent;
+      const retentionAmount = Number((gross * (retPct / 100)).toFixed(2));
+      const netAmount = Number((gross - retentionAmount).toFixed(2));
+
+      const updated = await prisma.contractorMeasurement.update({
+        where: { id },
+        data: {
+          contractorName: contractorName !== undefined ? contractorName : existing.contractorName,
+          contractorCnpj: contractorCnpj !== undefined ? contractorCnpj : existing.contractorCnpj,
+          serviceDescription: serviceDescription !== undefined ? serviceDescription : existing.serviceDescription,
+          periodReference: periodReference !== undefined ? periodReference : existing.periodReference,
+          grossAmount: gross,
+          retentionPercent: retPct,
+          retentionAmount,
+          netAmount,
+          status: status !== undefined ? status : existing.status
+        }
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar medição.' });
+    }
+  }
+
+  async deleteMeasurement(req: Request, res: Response) {
+    try {
+      const id = String(req.params.measurementId);
+      await prisma.contractorMeasurement.delete({ where: { id } });
+      return res.json({ message: 'Medição excluída com sucesso.' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao excluir medição.' });
+    }
+  }
+
+  // =========================================================================
+  // SUPRIMENTOS, COMPRAS E ESTOQUE NO CANTEIRO (CRIAR, EDITAR E EXCLUIR)
+  // =========================================================================
   async createSupplyOrder(req: Request, res: Response) {
     try {
       const projectId = String(req.params.projectId);
-      const { materialName, unit, quantityOrdered, supplierName, totalAmount, quotesJson, status } = req.body;
+      const { materialName, unit, quantityOrdered, quantityInStock, supplierName, totalAmount, quotesJson, status } = req.body;
 
       const qty = Number(quantityOrdered || 0);
+      const stock = quantityInStock !== undefined && quantityInStock !== ''
+        ? Number(quantityInStock)
+        : (status === 'ENTREGUE_NO_CANTEIRO' ? qty : 0);
+
       const order = await prisma.supplyPurchaseOrder.create({
         data: {
           projectId,
           materialName,
           unit: unit || 'un',
           quantityOrdered: qty,
-          quantityInStock: status === 'ENTREGUE_NO_CANTEIRO' ? qty : 0,
+          quantityInStock: stock,
           supplierName,
           totalAmount: Number(totalAmount || 0),
           quotesJson: quotesJson || [],
@@ -383,7 +576,51 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
-  // Diário de Obra (RDO)
+  async updateSupplyOrder(req: Request, res: Response) {
+    try {
+      const id = String(req.params.supplyId);
+      const { materialName, unit, quantityOrdered, quantityInStock, supplierName, totalAmount, status } = req.body;
+
+      const existing = await prisma.supplyPurchaseOrder.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ error: 'Ordem de compra não encontrada.' });
+
+      const qtyOrdered = quantityOrdered !== undefined ? Number(quantityOrdered) : existing.quantityOrdered;
+      const qtyStock = quantityInStock !== undefined && quantityInStock !== ''
+        ? Number(quantityInStock)
+        : existing.quantityInStock;
+
+      const updated = await prisma.supplyPurchaseOrder.update({
+        where: { id },
+        data: {
+          materialName: materialName !== undefined ? materialName : existing.materialName,
+          unit: unit !== undefined ? unit : existing.unit,
+          quantityOrdered: qtyOrdered,
+          quantityInStock: qtyStock,
+          supplierName: supplierName !== undefined ? supplierName : existing.supplierName,
+          totalAmount: totalAmount !== undefined ? Number(totalAmount) : existing.totalAmount,
+          status: status !== undefined ? status : existing.status
+        }
+      });
+
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar ordem de suprimento.' });
+    }
+  }
+
+  async deleteSupplyOrder(req: Request, res: Response) {
+    try {
+      const id = String(req.params.supplyId);
+      await prisma.supplyPurchaseOrder.delete({ where: { id } });
+      return res.json({ message: 'Ordem de compra excluída com sucesso.' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao excluir ordem de compra.' });
+    }
+  }
+
+  // =========================================================================
+  // DIÁRIO DE OBRA - RDO (CRIAR, EDITAR E EXCLUIR)
+  // =========================================================================
   async createWorkDiary(req: Request, res: Response) {
     try {
       const projectId = String(req.params.projectId);
@@ -407,8 +644,41 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
+  async updateWorkDiary(req: Request, res: Response) {
+    try {
+      const id = String(req.params.diaryId);
+      const { weatherMorning, weatherAfternoon, workforceCount, activitiesExecuted, occurrences, photosUrls, engineerName } = req.body;
+
+      const updated = await prisma.workDiary.update({
+        where: { id },
+        data: {
+          weatherMorning,
+          weatherAfternoon,
+          workforceCount: Number(workforceCount || 0),
+          activitiesExecuted,
+          occurrences,
+          photosUrls: Array.isArray(photosUrls) ? photosUrls : undefined,
+          engineerName
+        }
+      });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar Diário de Obra.' });
+    }
+  }
+
+  async deleteWorkDiary(req: Request, res: Response) {
+    try {
+      const id = String(req.params.diaryId);
+      await prisma.workDiary.delete({ where: { id } });
+      return res.json({ message: 'Diário de Obra excluído.' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao excluir Diário de Obra.' });
+    }
+  }
+
   // =========================================================================
-  // 3. BIM, DESIGN DE FACHADA/INTERIORES & PERSONALIZAÇÃO DE UNIDADES (KIT OPÇÕES)
+  // 3. BIM, DESIGN DE FACHADA/INTERIORES & PERSONALIZAÇÃO (CRIAR, EDITAR, EXCLUIR)
   // =========================================================================
   async addBimFile(req: Request, res: Response) {
     try {
@@ -434,6 +704,40 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
+  async updateBimFile(req: Request, res: Response) {
+    try {
+      const id = String(req.params.bimId);
+      const { discipline, fileName, fileFormat, fileUrl, version, clashStatus, clashDescription, responsibleDesigner } = req.body;
+
+      const updated = await prisma.bimProjectFile.update({
+        where: { id },
+        data: {
+          discipline,
+          fileName,
+          fileFormat,
+          fileUrl,
+          version,
+          clashStatus,
+          clashDescription,
+          responsibleDesigner
+        }
+      });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar arquivo BIM.' });
+    }
+  }
+
+  async deleteBimFile(req: Request, res: Response) {
+    try {
+      const id = String(req.params.bimId);
+      await prisma.bimProjectFile.delete({ where: { id } });
+      return res.json({ message: 'Arquivo BIM excluído.' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao excluir arquivo BIM.' });
+    }
+  }
+
   async createCustomizationOption(req: Request, res: Response) {
     try {
       const projectId = String(req.params.projectId);
@@ -453,6 +757,39 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
       return res.status(201).json(kit);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao cadastrar Kit de Personalização.' });
+    }
+  }
+
+  async updateCustomizationOption(req: Request, res: Response) {
+    try {
+      const id = String(req.params.optionId);
+      const { category, title, specification, imageUrl, additionalPrice, maxStageAllowedPct, isActive } = req.body;
+
+      const updated = await prisma.customizationKitOption.update({
+        where: { id },
+        data: {
+          category,
+          title,
+          specification,
+          imageUrl,
+          additionalPrice: additionalPrice !== undefined ? Number(additionalPrice) : undefined,
+          maxStageAllowedPct: maxStageAllowedPct !== undefined ? Number(maxStageAllowedPct) : undefined,
+          isActive: isActive !== undefined ? Boolean(isActive) : undefined
+        }
+      });
+      return res.json(updated);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar Kit de Personalização.' });
+    }
+  }
+
+  async deleteCustomizationOption(req: Request, res: Response) {
+    try {
+      const id = String(req.params.optionId);
+      await prisma.customizationKitOption.delete({ where: { id } });
+      return res.json({ message: 'Kit excluído.' });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao excluir Kit.' });
     }
   }
 
@@ -603,7 +940,7 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     }
   }
 
-// =========================================================================
+  // =========================================================================
   // 6. PORTAL DO CLIENTE: ACOMPANHAMENTO DE OBRA & AUTO-PERSONALIZAÇÃO
   // =========================================================================
   async getPortalDeveloperData(req: Request, res: Response) {
@@ -797,93 +1134,6 @@ async updateProjectProgressAndSite(req: Request, res: Response) {
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao executar simulação de crédito imobiliário.' });
-    }
-  }
-
-  // Atualizar dados ou status (isActive) da SPE
-  async updateSpe(req: Request, res: Response) {
-    try {
-      const id = String(req.params.id);
-      const { cnpj, corporateName, tradeName, taxRegime, bankName, bankAgency, bankAccount, pixKey, isActive } = req.body;
-
-      const dataToUpdate: any = {};
-      if (cnpj !== undefined) dataToUpdate.cnpj = String(cnpj).replace(/\D/g, '');
-      if (corporateName !== undefined) dataToUpdate.corporateName = corporateName;
-      if (tradeName !== undefined) dataToUpdate.tradeName = tradeName;
-      if (taxRegime !== undefined) dataToUpdate.taxRegime = taxRegime;
-      if (bankName !== undefined) dataToUpdate.bankName = bankName;
-      if (bankAgency !== undefined) dataToUpdate.bankAgency = bankAgency;
-      if (bankAccount !== undefined) dataToUpdate.bankAccount = bankAccount;
-      if (pixKey !== undefined) dataToUpdate.pixKey = pixKey;
-      if (isActive !== undefined) dataToUpdate.isActive = Boolean(isActive);
-
-      const updated = await prisma.developerSpe.update({
-        where: { id },
-        data: dataToUpdate
-      });
-      return res.json(updated);
-    } catch (error) {
-      return res.status(400).json({ error: 'Erro ao atualizar SPE.' });
-    }
-  }
-
-  // Atualizar Terreno (Land Bank) e recalcular viabilidade automaticamente
-  async updateLandBank(req: Request, res: Response) {
-    try {
-      const id = String(req.params.id);
-      const data = req.body;
-
-      // Se for apenas alteração rápida de status (Habilitar / Desativar)
-      if (Object.keys(data).length === 1 && data.status) {
-        const updatedStatus = await prisma.landBank.update({
-          where: { id },
-          data: { status: data.status }
-        });
-        return res.json(updatedStatus);
-      }
-
-      const areaSqm = Number(data.areaSqm || 0);
-      const ca = Number(data.utilizationCoefficient || 1);
-      const buildableAreaSqm = areaSqm * ca;
-
-      const vgv = Number(data.estimatedVgv || 0);
-      const acquisition = Number(data.acquisitionCost || 0);
-      const construction = Number(data.estimatedConstructionCost || 0);
-      const taxPct = Number(data.taxEstimatePercent ?? 4.0);
-      const defaultRiskPct = Number(data.defaultRiskPercent ?? 3.5);
-
-      const taxesValue = vgv * (taxPct / 100);
-      const defaultProvision = vgv * (defaultRiskPct / 100);
-      const netProfit = vgv - acquisition - construction - taxesValue - defaultProvision;
-      const projectedMarginPercent = vgv > 0 ? Number(((netProfit / vgv) * 100).toFixed(2)) : 0;
-
-      const updated = await prisma.landBank.update({
-        where: { id },
-        data: {
-          speId: data.speId || null,
-          title: data.title,
-          address: data.address,
-          neighborhood: data.neighborhood,
-          city: data.city,
-          state: data.state,
-          areaSqm,
-          utilizationCoefficient: ca,
-          buildableAreaSqm,
-          acquisitionCost: acquisition,
-          swapPercent: Number(data.swapPercent || 0),
-          estimatedVgv: vgv,
-          estimatedConstructionCost: construction,
-          taxEstimatePercent: taxPct,
-          defaultRiskPercent: defaultRiskPct,
-          projectedMarginPercent,
-          status: data.status || 'EM_ESTUDO',
-          notes: data.notes
-        }
-      });
-
-      return res.json(updated);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao atualizar terreno no Land Bank.' });
     }
   }
 }
