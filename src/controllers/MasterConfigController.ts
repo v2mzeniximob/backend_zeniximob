@@ -1,12 +1,11 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 
-// O "as any" evita bloqueios do TypeScript
 const prisma = new PrismaClient() as any;
 
 export class MasterConfigController {
   
-  // Busca a configuração única do Master
+  // Busca a configuração única do Master (Mercado Pago, Templates e Landing Page JSON)
   async get(req: Request, res: Response) {
     try {
       let config = await prisma.masterConfig.findFirst();
@@ -14,7 +13,6 @@ export class MasterConfigController {
         config = await prisma.masterConfig.create({ data: {} });
       }
       
-      // MASCARAR DADOS SENSÍVEIS (Não enviar os tokens reais para o frontend)
       const safeConfig = {
         ...config,
         mpAccessToken: config.mpAccessToken ? 'CONFIGURADO' : '',
@@ -27,20 +25,19 @@ export class MasterConfigController {
     }
   }
 
-  // Atualiza as configurações gerais (Mercado Pago e Templates)
+  // Atualiza as configurações (Mercado Pago, Templates e landingPageJson)
   async update(req: Request, res: Response) {
     try {
-      const { mpAccessToken, mpPublicKey, templateMasterFranchisee, templateMasterRealEstate, templateFranchiseeRealEstate } = req.body;
+      const { mpAccessToken, mpPublicKey, templateMasterFranchisee, templateMasterRealEstate, templateFranchiseeRealEstate, landingPageJson } = req.body;
       
       let config = await prisma.masterConfig.findFirst();
       
-      const dataToUpdate: any = { 
-        templateMasterFranchisee, 
-        templateMasterRealEstate, 
-        templateFranchiseeRealEstate 
-      };
+      const dataToUpdate: any = {};
+      if (templateMasterFranchisee !== undefined) dataToUpdate.templateMasterFranchisee = templateMasterFranchisee;
+      if (templateMasterRealEstate !== undefined) dataToUpdate.templateMasterRealEstate = templateMasterRealEstate;
+      if (templateFranchiseeRealEstate !== undefined) dataToUpdate.templateFranchiseeRealEstate = templateFranchiseeRealEstate;
+      if (landingPageJson !== undefined) dataToUpdate.landingPageJson = landingPageJson;
 
-      // Só atualiza os tokens no banco se o usuário enviou um novo valor diferente da máscara "CONFIGURADO"
       if (mpAccessToken && mpAccessToken !== 'CONFIGURADO') {
         dataToUpdate.mpAccessToken = mpAccessToken;
       }
@@ -59,7 +56,6 @@ export class MasterConfigController {
         });
       }
 
-      // Mascara novamente para a resposta
       const safeConfig = {
         ...config,
         mpAccessToken: config.mpAccessToken ? 'CONFIGURADO' : '',
@@ -72,12 +68,8 @@ export class MasterConfigController {
     }
   }
 
-  // ==========================================
-  // GESTÃO DE LANDING PAGE (CMS MASTER)
-  // ==========================================
-  
-  // Busca a configuração da Landing Page para a Home pública
-  async getLandingPage(req: Request, res: Response) {
+  // Rota pública que entrega a configuração da Landing Page e os planos ativos para o site público
+  async getLandingPagePublic(req: Request, res: Response) {
     try {
       let config = await prisma.masterConfig.findFirst();
       const plans = await prisma.plan.findMany({ 
@@ -94,7 +86,7 @@ export class MasterConfigController {
     }
   }
 
-  // Salva as alterações feitas pelo Master no Editor da Landing Page
+  // Rota Master específica para atualizar o JSON da Landing Page
   async updateLandingPage(req: Request, res: Response) {
     try {
       const { config } = req.body;
@@ -122,7 +114,6 @@ export class MasterConfigController {
   // ==========================================
   async listAdmins(req: Request, res: Response) {
     try {
-      // O "select" garante que a senha nunca seja pesquisada ou enviada
       const admins = await prisma.masterAdmin.findMany({
         select: { id: true, name: true, email: true, isActive: true, createdAt: true }
       });
@@ -139,7 +130,6 @@ export class MasterConfigController {
         data: { name, email, password } 
       });
       
-      // Retira a senha do retorno ao criar
       const { password: _, ...safeAdmin } = admin;
       return res.status(201).json(safeAdmin);
     } catch (error) {
@@ -147,9 +137,33 @@ export class MasterConfigController {
     }
   }
 
+  // Atualizar dados de um admin Master (Nome, E-mail e Opcionalmente Nova Senha)
+  async updateAdmin(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { name, email, password } = req.body;
+
+      const dataToUpdate: any = {};
+      if (name !== undefined) dataToUpdate.name = name;
+      if (email !== undefined) dataToUpdate.email = email;
+      if (password && password.trim() !== '') {
+        dataToUpdate.password = password; // Se sua aplicação usa hash de senha, lembre-se de aplicar o hash aqui
+      }
+
+      const admin = await prisma.masterAdmin.update({
+        where: { id },
+        data: dataToUpdate
+      });
+
+      const { password: _, ...safeAdmin } = admin;
+      return res.json(safeAdmin);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao atualizar administrador.' });
+    }
+  }
+
   async toggleAdminStatus(req: Request, res: Response) {
     try {
-      // Forçamos o TypeScript a entender que isto é uma string
       const id = req.params.id as string;
       const { isActive } = req.body;
       
@@ -158,10 +172,8 @@ export class MasterConfigController {
         data: { isActive: Boolean(isActive) }
       });
 
-      // Retirar campos sensíveis (senha) antes de enviar a resposta
       const { password, ...safeAdmin } = admin;
       return res.json(safeAdmin);
-      
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao alterar status.' });
     }

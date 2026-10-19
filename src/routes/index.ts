@@ -94,7 +94,7 @@ routes.post('/login', authController.login);
 routes.post('/portal/login', clientPortalController.login);
 
 // Rotas públicas da Landing Page
-routes.get('/public/landing-page', masterConfigController.getLandingPage);
+routes.get('/public/landing-page', masterConfigController.getLandingPagePublic);
 
 // Rota restrita ao Master para salvar o editor visual da Home
 routes.put('/master/landing-page', authMiddleware, masterOnly, masterConfigController.updateLandingPage);
@@ -475,6 +475,9 @@ for (const prefix of incorpPrefixes) {
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
+
+routes.put('/master/admins/:id', authMiddleware, masterOnly, masterConfigController.updateAdmin);
+
 routes.get('/master/dashboard/metrics', authMiddleware, masterOnly, dashboardController.getMasterStats);
 routes.post('/real-estates/:id/upload', authMiddleware, masterOnly, upload.single('file'), signatureController.uploadRealEstateContract);
 
