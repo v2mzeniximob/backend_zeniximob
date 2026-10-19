@@ -204,6 +204,28 @@ routes.post('/public/leads', async (req, res) => {
 });
 
 // ==========================================
+// ROTAS PÚBLICAS: LISTAR CORRETORES DE UMA IMOBILIÁRIA (Para Vitrine Pública e Roleta de Leads)
+// ==========================================
+routes.get('/public/stores/:slug/brokers', async (req, res) => {
+  try {
+    const slug = String(req.params.slug);
+    const store = await prisma.realEstate.findUnique({
+      where: { slug },
+      include: {
+        brokers: {
+          where: { isActive: true },
+          orderBy: { name: 'asc' }
+        }
+      }
+    });
+    if (!store) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
+    return res.json({ realEstate: store, brokers: store.brokers || [] });
+  } catch (error) {
+    return res.status(500).json({ error: 'Erro ao listar corretores.' });
+  }
+});
+
+// ==========================================
 // WEBHOOKS PÚBLICOS 
 // ==========================================
 routes.post('/webhook/whatsapp/:instanceName', webhookController.receive);
