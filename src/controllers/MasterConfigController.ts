@@ -27,7 +27,7 @@ export class MasterConfigController {
     }
   }
 
-  // Atualiza as configurações
+  // Atualiza as configurações gerais (Mercado Pago e Templates)
   async update(req: Request, res: Response) {
     try {
       const { mpAccessToken, mpPublicKey, templateMasterFranchisee, templateMasterRealEstate, templateFranchiseeRealEstate } = req.body;
@@ -69,6 +69,51 @@ export class MasterConfigController {
       return res.json(safeConfig);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao salvar configurações.' });
+    }
+  }
+
+  // ==========================================
+  // GESTÃO DE LANDING PAGE (CMS MASTER)
+  // ==========================================
+  
+  // Busca a configuração da Landing Page para a Home pública
+  async getLandingPage(req: Request, res: Response) {
+    try {
+      let config = await prisma.masterConfig.findFirst();
+      const plans = await prisma.plan.findMany({ 
+        where: { isActive: true }, 
+        orderBy: { price: 'asc' } 
+      }).catch(() => []);
+
+      return res.json({
+        config: config?.landingPageJson || null,
+        plans: plans || []
+      });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao carregar dados da Landing Page.' });
+    }
+  }
+
+  // Salva as alterações feitas pelo Master no Editor da Landing Page
+  async updateLandingPage(req: Request, res: Response) {
+    try {
+      const { config } = req.body;
+      let masterConfig = await prisma.masterConfig.findFirst();
+
+      if (masterConfig) {
+        masterConfig = await prisma.masterConfig.update({
+          where: { id: masterConfig.id },
+          data: { landingPageJson: config }
+        });
+      } else {
+        masterConfig = await prisma.masterConfig.create({
+          data: { landingPageJson: config }
+        });
+      }
+
+      return res.json({ message: 'Landing Page atualizada com sucesso!', config: masterConfig.landingPageJson });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao salvar a Landing Page.' });
     }
   }
 

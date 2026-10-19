@@ -93,6 +93,12 @@ const incorporadoraController = new IncorporadoraController();
 routes.post('/login', authController.login);
 routes.post('/portal/login', clientPortalController.login);
 
+// Rotas públicas da Landing Page
+routes.get('/public/landing-page', masterConfigController.getLandingPage);
+
+// Rota restrita ao Master para salvar o editor visual da Home
+routes.put('/master/landing-page', authMiddleware, masterOnly, masterConfigController.updateLandingPage);
+
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
 routes.get('/public/xml/:slug', xmlController.generateFeed);

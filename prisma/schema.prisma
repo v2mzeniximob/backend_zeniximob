@@ -984,6 +984,7 @@ model MasterConfig {
   templateMasterFranchisee     String?  @db.Text
   templateMasterRealEstate     String?  @db.Text
   templateFranchiseeRealEstate String?  @db.Text
+  landingPageJson              Json?    
   updatedAt                    DateTime @updatedAt
 }
 
