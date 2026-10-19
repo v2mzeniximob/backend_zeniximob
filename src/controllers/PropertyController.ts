@@ -219,32 +219,45 @@ export class PropertyController {
     }
   }
 
-  async listPublicByStore(req: Request, res: Response) {
+async listPublicByStore(req: Request, res: Response) {
     try {
-      const { slug } = req.params;
-      
+      const slug = String(req.params.slug);
+
       const realEstate = await prisma.realEstate.findUnique({
-        where: { slug: slug as string, isActive: true }
+        where: { slug },
+        include: {
+          brokers: {
+            where: { isActive: true },
+            orderBy: { name: 'asc' }
+          }
+        }
       });
 
-      if (!realEstate) return res.status(404).json({ error: 'Imobiliária não encontrada.' });
+      if (!realEstate || !realEstate.isActive) {
+        return res.status(404).json({ error: 'Imobiliária não encontrada ou inativa.' });
+      }
 
-      const [properties, brokers] = await Promise.all([
-        prisma.property.findMany({ 
-          where: { realEstateId: realEstate.id, isActive: true }, 
-          select: PUBLIC_PROPERTY_FIELDS,
-          orderBy: { createdAt: 'desc' }
-        }),
-        prisma.broker.findMany({ 
-          where: { realEstateId: realEstate.id, isActive: true }, 
-          select: { id: true, name: true, creci: true, phone: true, profileImageUrl: true } 
-        })
-      ]);
+      const properties = await prisma.property.findMany({
+        where: {
+          realEstateId: realEstate.id,
+          isActive: true,
+          rentStatus: 'Vago'
+        },
+        include: {
+          condominium: true,
+          broker: true
+        },
+        orderBy: { createdAt: 'desc' }
+      });
 
-      return res.json({ realEstate, properties, brokers });
+      return res.json({
+        realEstate,
+        properties,
+        brokers: realEstate.brokers || []
+      });
     } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao carregar vitrine.' });
+      console.error('Erro ao carregar vitrine pública:', error);
+      return res.status(500).json({ error: 'Erro ao carregar dados da imobiliária.' });
     }
   }
 
