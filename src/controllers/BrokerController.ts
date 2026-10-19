@@ -6,7 +6,7 @@ const prisma = new PrismaClient() as any;
 
 export class BrokerController {
   
-  // 1. CRIAR CORRETOR / GERENTE / CAPTADOR
+  // 1. CRIAR CORRETOR / GERENTE / CAPTADOR (Com suporte a profileImageUrl)
   async create(req: Request, res: Response) {
     try {
       const user = req.user as any;
@@ -15,7 +15,8 @@ export class BrokerController {
       const { 
         name, cpf, cnpj, creci, phone, email, password, 
         role, saleCommission, rentCommission, 
-        captureCommission, managerCommission, inRoulette, taxRuleId 
+        captureCommission, managerCommission, inRoulette, taxRuleId,
+        profileImageUrl, avatarUrl 
       } = req.body;
       
       const existingBroker = await prisma.broker.findFirst({
@@ -41,6 +42,7 @@ export class BrokerController {
           managerCommission: managerCommission !== undefined ? Number(managerCommission) : 5,
           inRoulette: inRoulette !== undefined ? Boolean(inRoulette) : true,
           taxRuleId: taxRuleId || null,
+          profileImageUrl: profileImageUrl || avatarUrl || null, // <--- SALVA A FOTO NO CAMPO CORRETO DO PRISMA
           realEstateId
         }
       });
@@ -73,14 +75,15 @@ export class BrokerController {
     }
   }
 
-  // 3. ATUALIZAR CORRETOR
+  // 3. ATUALIZAR CORRETOR (Com suporte a profileImageUrl)
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
       const { 
         name, cpf, cnpj, creci, phone, email, password, 
         role, saleCommission, rentCommission, 
-        captureCommission, managerCommission, inRoulette, taxRuleId 
+        captureCommission, managerCommission, inRoulette, taxRuleId,
+        profileImageUrl, avatarUrl 
       } = req.body;
 
       const dataToUpdate: any = { 
@@ -96,7 +99,8 @@ export class BrokerController {
         captureCommission: captureCommission !== undefined ? Number(captureCommission) : 10,
         managerCommission: managerCommission !== undefined ? Number(managerCommission) : 5,
         inRoulette: inRoulette !== undefined ? Boolean(inRoulette) : true,
-        taxRuleId: taxRuleId || null
+        taxRuleId: taxRuleId || null,
+        profileImageUrl: (profileImageUrl !== undefined || avatarUrl !== undefined) ? (profileImageUrl || avatarUrl || null) : undefined
       };
 
       if (password) {
@@ -213,7 +217,6 @@ export class BrokerController {
 
       const { brokerId, startDate, endDate, type } = req.query;
 
-      // Busca as regras de Split da loja e o Gerente ativo
       const [store, managerBroker] = await Promise.all([
         prisma.realEstate.findUnique({ where: { id: realEstateId } }),
         prisma.broker.findFirst({ where: { realEstateId, role: 'Gerente', isActive: true } })
@@ -251,11 +254,9 @@ export class BrokerController {
       });
 
       const fullReport = contracts.map((c: any) => {
-        // 1. Identifica os participantes do negócio
         const sellerBroker = c.tenant?.broker || c.property?.broker || null;
         const captatorBroker = c.property?.captator || c.property?.broker || null;
 
-        // 2. Define a % de Comissão Bruta Total do negócio (Honorários Totais)
         const fallbackPercent = c.type === 'Venda' 
           ? (sellerBroker?.saleCommission || 6) 
           : (sellerBroker?.rentCommission || 100);
@@ -266,14 +267,12 @@ export class BrokerController {
 
         const grossCommissionValue = (c.rentValue * grossCommissionPercent) / 100;
 
-        // 3. Calcula os valores em R$ do Rateio (Split) sobre a Comissão Bruta
         const sellerAmount = sellerBroker ? (grossCommissionValue * splitRules.seller) / 100 : 0;
         const captatorAmount = captatorBroker ? (grossCommissionValue * splitRules.captator) / 100 : 0;
         const managerAmount = managerBroker ? (grossCommissionValue * splitRules.manager) / 100 : 0;
         
         const agencyAmount = grossCommissionValue - (sellerAmount + captatorAmount + managerAmount);
 
-        // 4. Se o filtro for por um corretor específico, soma quanto ELE ganhou neste contrato
         let filteredBrokerShare = 0;
         let filteredBrokerRoles: string[] = [];
 
