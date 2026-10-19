@@ -93,11 +93,8 @@ const incorporadoraController = new IncorporadoraController();
 routes.post('/login', authController.login);
 routes.post('/portal/login', clientPortalController.login);
 
-// Rotas públicas da Landing Page
+// Rotas públicas da Landing Page (Site Master) e Planos Ativos
 routes.get('/public/landing-page', masterConfigController.getLandingPagePublic);
-
-// Rota restrita ao Master para salvar o editor visual da Home
-routes.put('/master/landing-page', authMiddleware, masterOnly, masterConfigController.updateLandingPage);
 
 routes.get('/public/stores/:slug', propertyController.listPublicByStore);
 routes.get('/public/stores/:slug/properties/:propertyId', propertyController.getPublicProperty);
@@ -497,7 +494,7 @@ for (const prefix of incorpPrefixes) {
 // ==========================================
 // ROTAS RESTRITAS (Apenas MASTER)
 // ==========================================
-
+routes.put('/master/landing-page', authMiddleware, masterOnly, masterConfigController.updateLandingPage);
 routes.put('/master/admins/:id', authMiddleware, masterOnly, masterConfigController.updateAdmin);
 
 routes.get('/master/dashboard/metrics', authMiddleware, masterOnly, dashboardController.getMasterStats);
