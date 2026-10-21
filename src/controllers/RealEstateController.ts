@@ -35,7 +35,7 @@ async getMyStore(req: Request, res: Response) {
         return res.status(404).json({ error: 'Imobiliária não encontrada.' });
       }
 
-      // Removemos os campos sensíveis. Usamos default objects ({}) caso o store.plan venha nulo
+      // Retira campos sensíveis antes de enviar a resposta
       const { password, mpAccessToken, ...safeStore } = store;
 
       // Tratamento à prova de bala para garantir que os módulos sejam sempre um Array
@@ -87,7 +87,7 @@ async getMyStore(req: Request, res: Response) {
       if (safeSlug) {
          safeSlug = safeSlug.toLowerCase().replace(/[^a-z0-9-]+/g, '').replace(/(^-|-$)+/g, '');
          
-         // Verificar se o novo slug já está a ser usado por outra loja (que não seja a nossa)
+         // Verificar se o novo slug já está a ser usado por outra loja
          const existingSlug = await prisma.realEstate.findUnique({ where: { slug: safeSlug } });
          if (existingSlug && existingSlug.id !== realEstateId) {
             return res.status(400).json({ error: 'Este link (slug) já está em uso por outra imobiliária.' });
