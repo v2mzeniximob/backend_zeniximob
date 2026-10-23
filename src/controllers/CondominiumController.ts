@@ -48,7 +48,7 @@ export class CondominiumController {
     }
   }
 
-  async list(req: Request, res: Response) {
+async list(req: Request, res: Response) {
     try {
       const realEstateId = await getRealEstateId(req);
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
@@ -57,7 +57,12 @@ export class CondominiumController {
         where: { realEstateId },
         include: {
           properties: true,
-          units: true,
+          units: {
+            include: {
+              owner: { select: { id: true, name: true } },
+              client: { select: { id: true, name: true } }
+            }
+          },
           expenses: true,
           reservations: true,
           occurrences: true,
@@ -73,6 +78,7 @@ export class CondominiumController {
       return res.status(500).json({ error: 'Erro ao listar condomínios.' });
     }
   }
+
 
   async update(req: Request, res: Response) {
     try {
@@ -161,8 +167,8 @@ export class CondominiumController {
       const units = await prisma.condoUnit.findMany({
         where: { condominiumId },
         include: {
-          owner: { select: { id: true, name: true, email: true, phone: true } },
-          client: { select: { id: true, name: true, email: true, phone: true } }
+          owner: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true } }
         },
         orderBy: { unitNumber: 'asc' }
       });
