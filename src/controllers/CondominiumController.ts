@@ -246,6 +246,31 @@ export class CondominiumController {
   }
 
   // ==========================================
+  // ATUALIZAR DESPESA DO CONDOMÍNIO
+  // ==========================================
+  async updateExpense(req: Request, res: Response) {
+    try {
+      const { expenseId } = req.params;
+      const { description, amount, dueDate, category } = req.body;
+
+      const updated = await prisma.condoExpense.update({
+        where: { id: expenseId },
+        data: {
+          description,
+          amount: amount !== undefined ? Number(amount) : undefined,
+          dueDate: dueDate ? new Date(dueDate) : undefined,
+          category
+        }
+      });
+
+      return res.json({ message: 'Despesa atualizada com sucesso!', expense: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar despesa.' });
+    }
+  }
+
+  // ==========================================
   // LISTAR DESPESAS DO CONDOMÍNIO
   // ==========================================
   async listExpenses(req: Request, res: Response) {
@@ -458,6 +483,9 @@ export class CondominiumController {
     }
   }
 
+  // ==========================================
+  // ATUALIZAR BOLETO / FATURA GERADA
+  // ==========================================
   async updateBill(req: Request, res: Response) {
     try {
       const { billId } = req.params;

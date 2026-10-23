@@ -325,6 +325,7 @@ routes.put('/condominiums/units/:unitId', authMiddleware, condominiumController.
 // Despesas do Condomínio
 routes.post('/condominiums/:condominiumId/expenses', authMiddleware, condominiumController.createExpense);
 routes.get('/condominiums/:condominiumId/expenses', authMiddleware, condominiumController.listExpenses);
+routes.put('/condominiums/expenses/:expenseId', authMiddleware, condominiumController.updateExpense);
 
 // Boletos & Rateios
 routes.post('/condominiums/:condominiumId/bills/generate', authMiddleware, condominiumController.generateMonthlyBills);
