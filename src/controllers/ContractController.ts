@@ -221,28 +221,6 @@ export class ContractController {
     }
   }
 
-  // ADICIONAR VISTORIA (INSPECTION)
- /* async addInspection(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const { type, date, reportUrl } = req.body;
-
-      const inspection = await prisma.inspection.create({
-        data: {
-          contractId: id,
-          type: type || 'Rotina',
-          date: date ? new Date(date) : new Date(),
-          reportUrl
-        }
-      });
-
-      return res.status(201).json(inspection);
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao adicionar vistoria.' });
-    }
-  }*/
-
   // 4.  DELETAR CONTRATO (E EXCLUIR FATURAS)
   async delete(req: Request, res: Response) {
     try {

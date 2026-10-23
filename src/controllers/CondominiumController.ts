@@ -61,7 +61,9 @@ export class CondominiumController {
           expenses: true,
           reservations: true,
           occurrences: true,
-          _count: { select: { properties: true, units: true } }
+          bills: true,
+          settings: true,
+          _count: { select: { properties: true, units: true, bills: true } }
         },
         orderBy: { name: 'asc' }
       });
@@ -130,7 +132,7 @@ export class CondominiumController {
   async createUnit(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
-      const { unitNumber, block, floor, fractionIdeal, ownerName, tenantName } = req.body;
+      const { unitNumber, block, floor, fractionIdeal, ownerName, tenantName, ownerId, clientId } = req.body;
 
       const unit = await prisma.condoUnit.create({
         data: {
@@ -140,7 +142,9 @@ export class CondominiumController {
           floor: floor ? Number(floor) : null,
           fractionIdeal: fractionIdeal ? Number(fractionIdeal) : 1.0,
           ownerName,
-          tenantName
+          tenantName,
+          ownerId: ownerId || null,
+          clientId: clientId || null
         }
       });
 
@@ -156,6 +160,10 @@ export class CondominiumController {
       const { condominiumId } = req.params;
       const units = await prisma.condoUnit.findMany({
         where: { condominiumId },
+        include: {
+          owner: { select: { id: true, name: true, email: true, phone: true } },
+          client: { select: { id: true, name: true, email: true, phone: true } }
+        },
         orderBy: { unitNumber: 'asc' }
       });
       return res.json(units);
@@ -272,6 +280,234 @@ export class CondominiumController {
       return res.json(occurrences);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao listar ocorrências.' });
+    }
+  }
+
+  // ==========================================
+  // CONFIGURAÇÕES DE JUROS E MULTA DO CONDOMÍNIO
+  // ==========================================
+  async updateSettings(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const { finePercent, interestPercent, calcType, bankIntegration } = req.body;
+
+      const settings = await prisma.condoSetting.upsert({
+        where: { condominiumId },
+        update: {
+          finePercent: finePercent !== undefined ? Number(finePercent) : undefined,
+          interestPercent: interestPercent !== undefined ? Number(interestPercent) : undefined,
+          calcType: calcType || undefined,
+          bankIntegration: bankIntegration || undefined
+        },
+        create: {
+          condominiumId,
+          finePercent: finePercent ? Number(finePercent) : 2.0,
+          interestPercent: interestPercent ? Number(interestPercent) : 1.0,
+          calcType: calcType || 'PRO_RATA',
+          bankIntegration: bankIntegration || 'API'
+        }
+      });
+
+      return res.json({ message: 'Configurações de juros e multas atualizadas com sucesso!', settings });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar configurações.' });
+    }
+  }
+
+  async getSettings(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      let settings = await prisma.condoSetting.findUnique({ where: { condominiumId } });
+      
+      if (!settings) {
+        settings = await prisma.condoSetting.create({
+          data: { condominiumId, finePercent: 2.0, interestPercent: 1.0, calcType: 'PRO_RATA', bankIntegration: 'API' }
+        });
+      }
+
+      return res.json(settings);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao buscar configurações.' });
+    }
+  }
+
+  // ==========================================
+  // GERAR COBRANÇAS / RATEIO AUTOMÁTICO (COM JUROS E MULTAS CONFIGURADOS)
+  // ==========================================
+  async generateMonthlyBills(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const { referenceMonth, dueDate, baseAmount } = req.body;
+
+      // Busca as regras de juros e multa definidas pelo administrador
+      let settings = await prisma.condoSetting.findUnique({ where: { condominiumId } });
+      const fineRate = settings ? settings.finePercent : 2.0;
+      const interestRate = settings ? settings.interestPercent : 1.0;
+
+      const units = await prisma.condoUnit.findMany({ where: { condominiumId } });
+      if (!units.length) return res.status(400).json({ error: 'Nenhuma unidade cadastrada neste condomínio.' });
+
+      const totalFraction = units.reduce((acc: number, u: any) => acc + (u.fractionIdeal || 1.0), 0);
+      const generatedBills = [];
+
+      for (const unit of units) {
+        const proportion = (unit.fractionIdeal || 1.0) / totalFraction;
+        const unitAmount = Number(baseAmount) * proportion;
+
+        const bill = await prisma.condoBill.create({
+          data: {
+            condominiumId,
+            unitId: unit.id,
+            referenceMonth: referenceMonth || 'Atual',
+            dueDate: new Date(dueDate || Date.now()),
+            amount: Number(unitAmount.toFixed(2)),
+            status: 'Pendente',
+            destinationsJson: {
+              taxaCondominio: unitAmount,
+              fineAppliedPercent: fineRate,
+              interestAppliedPercent: interestRate
+            }
+          }
+        });
+        generatedBills.push(bill);
+      }
+
+      return res.status(201).json({ message: 'Cobranças mensais geradas com sucesso!', count: generatedBills.length, bills: generatedBills });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao gerar cobranças mensais.' });
+    }
+  }
+
+  async listBills(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const bills = await prisma.condoBill.findMany({
+        where: { condominiumId },
+        include: { unit: true },
+        orderBy: { dueDate: 'desc' }
+      });
+      return res.json(bills);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao listar faturas/boletos.' });
+    }
+  }
+
+  async markBillAsPaid(req: Request, res: Response) {
+    try {
+      const { billId } = req.params;
+      const { paymentMethod } = req.body;
+
+      const updated = await prisma.condoBill.update({
+        where: { id: billId },
+        data: {
+          status: 'Pago',
+          paidDate: new Date(),
+          paymentMethod: paymentMethod || 'Baixa Manual'
+        }
+      });
+
+      return res.json({ message: 'Baixa realizada com sucesso!', bill: updated });
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao dar baixa no boleto.' });
+    }
+  }
+
+  // ==========================================
+  // LEITURA DE CONSUMO (ÁGUA, GÁS, ENERGIA) COM FOTO/IA
+  // ==========================================
+  async createConsumptionReading(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const { unitId, utilityType, previousValue, currentValue, unitPrice, referenceMonth, photoUrl } = req.body;
+
+      const prev = Number(previousValue || 0);
+      const curr = Number(currentValue || 0);
+      const consumption = Math.max(0, curr - prev);
+      const price = Number(unitPrice || 0);
+      const totalAmount = consumption * price;
+
+      const reading = await prisma.condoConsumptionReading.create({
+        data: {
+          condominiumId,
+          unitId,
+          utilityType: utilityType || 'Água',
+          previousValue: prev,
+          currentValue: curr,
+          consumption,
+          unitPrice: price,
+          totalAmount: Number(totalAmount.toFixed(2)),
+          referenceMonth: referenceMonth || 'Atual',
+          photoUrl: photoUrl || null
+        }
+      });
+
+      return res.status(201).json({ message: 'Leitura registrada com sucesso!', reading });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao registrar leitura de consumo.' });
+    }
+  }
+
+  async listConsumptionReadings(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const readings = await prisma.condoConsumptionReading.findMany({
+        where: { condominiumId },
+        include: { unit: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      return res.json(readings);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao listar leituras.' });
+    }
+  }
+
+  // ==========================================
+  // ACORDOS E PARCELAMENTO DE DÉBITOS
+  // ==========================================
+  async createAgreement(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const { unitId, totalDebt, installments } = req.body;
+
+      const debt = Number(totalDebt);
+      const instCount = Number(installments);
+      const installmentValue = Number((debt / instCount).toFixed(2));
+
+      const agreement = await prisma.condoAgreement.create({
+        data: {
+          condominiumId,
+          unitId,
+          totalDebt: debt,
+          installments: instCount,
+          installmentValue,
+          status: 'Ativo'
+        }
+      });
+
+      for (let i = 1; i <= instCount; i++) {
+        const dueDate = new Date();
+        dueDate.setMonth(dueDate.getMonth() + i);
+
+        await prisma.condoBill.create({
+          data: {
+            condominiumId,
+            unitId,
+            referenceMonth: `Acordo ${i}/${instCount}`,
+            dueDate,
+            amount: installmentValue,
+            status: 'Pendente',
+            destinationsJson: { tipo: 'Parcela de Acordo', parcela: `${i}/${instCount}` }
+          }
+        });
+      }
+
+      return res.status(201).json({ message: 'Acordo formalizado e boletos gerados!', agreement });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao registrar acordo de débitos.' });
     }
   }
 }

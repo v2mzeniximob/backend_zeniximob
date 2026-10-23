@@ -104,17 +104,23 @@ export class ClientPortalController {
           }
         }));
 
-        // AJUSTE 1: Trazendo as mensagens (chat) para o Inquilino ver
+        // Busca boletos de condomínio vinculados a este cliente (unidade)
+        const condoBills = await prisma.condoBill.findMany({
+          where: { unit: { clientId: user.id } },
+          include: { condominium: { select: { name: true, address: true } }, unit: true },
+          orderBy: { dueDate: 'asc' }
+        });
+
         const tickets = await prisma.ticket.findMany({
           where: { clientId: user.id },
           include: { 
             property: { select: { title: true } },
-            messages: { orderBy: { createdAt: 'asc' } } // <-- ISTO FAZ O CHAT APARECER
+            messages: { orderBy: { createdAt: 'asc' } }
           },
           orderBy: { createdAt: 'desc' }
         });
 
-        return res.json({ contracts, tickets });
+        return res.json({ contracts, condoBills, tickets });
       }
 
       // ----------------------------------------------------
@@ -132,20 +138,26 @@ export class ClientPortalController {
           orderBy: { createdAt: 'desc' }
         });
 
-        // AJUSTE 2: Isolando os chamados e trazendo as mensagens para o Proprietário
+        // Busca boletos de condomínio das unidades que pertencem a este proprietário
+        const condoBills = await prisma.condoBill.findMany({
+          where: { unit: { ownerId: user.id } },
+          include: { condominium: { select: { name: true, address: true } }, unit: true },
+          orderBy: { dueDate: 'asc' }
+        });
+
         const tickets = await prisma.ticket.findMany({
           where: { 
             property: { ownerId: user.id },
-            clientId: null // <-- ISTO BLOQUEIA OS TICKETS DO INQUILINO! Mostra só os do proprietário.
+            clientId: null 
           },
           include: { 
             property: { select: { title: true } },
-            messages: { orderBy: { createdAt: 'asc' } } // <-- ISTO FAZ O CHAT APARECER
+            messages: { orderBy: { createdAt: 'asc' } }
           },
           orderBy: { createdAt: 'desc' }
         });
 
-        return res.json({ properties, tickets });
+        return res.json({ properties, condoBills, tickets });
       }
 
       return res.status(403).json({ error: 'Perfil não reconhecido.' });

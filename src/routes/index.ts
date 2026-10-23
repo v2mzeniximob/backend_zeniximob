@@ -18,7 +18,7 @@ import { InvoiceController } from '../controllers/InvoiceController';
 import { SignatureController } from '../controllers/SignatureController';
 import { VisitController } from '../controllers/VisitController';
 import { ProposalController } from '../controllers/ProposalController'; 
-import { KeyTermController } from '../controllers/KeyTermController';    
+import { KeyTermController } from '../controllers/KeyTermController';     
 import { InsuranceCompanyController } from '../controllers/InsuranceCompanyController';
 import { AiController } from '../controllers/AiController';
 import { XmlController } from '../controllers/XmlController';
@@ -64,7 +64,7 @@ const invoiceController = new InvoiceController();
 const signatureController = new SignatureController();
 const visitController = new VisitController();
 const proposalController = new ProposalController(); 
-const keyTermController = new KeyTermController();    
+const keyTermController = new KeyTermController();     
 const insuranceCompanyController = new InsuranceCompanyController();
 const aiController = new AiController();
 const xmlController = new XmlController();
@@ -307,10 +307,33 @@ routes.get('/tenants', authMiddleware, tenantController.list);
 routes.put('/tenants/:id', authMiddleware, tenantController.update);
 routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
 
+// ==========================================
+// ROTAS DO MÓDULO DE CONDOMÍNIOS AVANÇADO
+// ==========================================
 routes.post('/condominiums', authMiddleware, condominiumController.create);
 routes.get('/condominiums', authMiddleware, condominiumController.list);
 routes.put('/condominiums/:id', authMiddleware, condominiumController.update);
 routes.patch('/condominiums/:id/status', authMiddleware, condominiumController.toggleStatus);
+
+// Unidades do Condomínio
+routes.post('/condominiums/:condominiumId/units', authMiddleware, condominiumController.createUnit);
+routes.get('/condominiums/:condominiumId/units', authMiddleware, condominiumController.listUnits);
+
+// Cobranças, Rateios e Boletos
+routes.post('/condominiums/:condominiumId/bills/generate', authMiddleware, condominiumController.generateMonthlyBills);
+routes.get('/condominiums/:condominiumId/bills', authMiddleware, condominiumController.listBills);
+routes.patch('/condominiums/bills/:billId/pay', authMiddleware, condominiumController.markBillAsPaid);
+
+// Leitura de Consumo (Água, Gás, Energia com IA/Foto)
+routes.post('/condominiums/:condominiumId/consumption', authMiddleware, condominiumController.createConsumptionReading);
+routes.get('/condominiums/:condominiumId/consumption', authMiddleware, condominiumController.listConsumptionReadings);
+
+// Acordos e Parcelamentos de Inadimplência
+routes.post('/condominiums/:condominiumId/agreements', authMiddleware, condominiumController.createAgreement);
+
+// Configurações de Juros e Multas
+routes.get('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.getSettings);
+routes.put('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.updateSettings);
 
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 routes.get('/properties', authMiddleware, propertyController.list);

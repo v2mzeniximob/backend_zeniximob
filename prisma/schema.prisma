@@ -281,74 +281,94 @@ model Deal {
   updatedAt       DateTime      @updatedAt
 }
 
-model DealHistory {
-  id         String   @id @default(uuid())
-  dealId     String
-  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
-  authorName String?  // Nome de quem escreveu
-  note       String   @db.Text // Texto da observação
-  createdAt  DateTime @default(now())
+model CondoUnit {
+  id            String       @id @default(uuid())
+  condominiumId String
+  condominium   Condominium  @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  unitNumber    String       // Ex: "Apt 101", "Casa 12"
+  block         String?      // Torre ou Bloco
+  floor         Int?         // Andar
+  fractionIdeal Float        @default(1.0) // Fração ideal para rateio
+  
+  // Vínculos com o CRM da Imobiliária
+  ownerId       String?      
+  owner         Owner?       @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  
+  clientId      String?      // Inquilino
+  client        Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  ownerName     String?      // Legado / Descritivo
+  tenantName    String?      // Legado / Descritivo
+  
+  bills         CondoBill[]
+  agreements    CondoAgreement[]
+  readings      CondoConsumptionReading[]
+  correspondences CondoCorrespondence[]
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("condo_units")
 }
 
 // ==========================================
 // CONDOMÍNIOS & ADMINISTRAÇÃO CONDOMINIAL
 // ==========================================
+// ==========================================
+// CONDOMÍNIOS & ADMINISTRAÇÃO CONDOMINIAL
+// ==========================================
 model Condominium {
-  id               String     @id @default(uuid())
+  id               String       @id @default(uuid())
   cnpj             String?
-  name             String     // Razão Social / Nome do condomínio
+  name             String       // Razão Social / Nome do condomínio
   
   // Endereço
   cep              String?
-  address          String?    // Logradouro, número, complemento
+  address          String?      // Logradouro, número, complemento
   neighborhood     String?
   city             String?
   state            String?
   
-  type             String?    // Horizontal (casas) ou Vertical (prédios)
+  type             String?      // Horizontal (casas) ou Vertical (prédios)
   
   // Administração
-  adminName        String?    // Nome da administradora
-  managerName      String?    // Síndico atual
-  email            String?    // E-mail de contato
-  phone            String?    // Telefone de contato
+  adminName        String?      // Nome da administradora
+  managerName      String?      // Síndico atual
+  email            String?      // E-mail de contato
+  phone            String?      // Telefone de contato
   
   // Detalhes Técnicos e Vagas
-  towerOrBlock     String?    // Torre, bloco ou quadra
-  privateArea      Float?     // Fração ideal / Área privativa (m²)
-  hasGarage        Boolean    @default(false)
-  hasCoveredGarage Boolean    @default(false)
+  towerOrBlock     String?      // Torre, bloco ou quadra
+  privateArea      Float?       // Fração ideal / Área privativa (m²)
+  hasGarage        Boolean      @default(false)
+  hasCoveredGarage Boolean      @default(false)
   
-  isActive         Boolean    @default(true)
+  isActive         Boolean      @default(true)
   
   // Relacionamentos
   realEstateId     String
-  realEstate       RealEstate @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
+  realEstate       RealEstate   @relation(fields: [realEstateId], references: [id], onDelete: Cascade)
   
-  properties       Property[] // Imóveis vinculados a este condomínio
+  properties       Property[]   // Imóveis vinculados a este condomínio
   units            CondoUnit[]
   expenses         CondoExpense[]
   reservations     CondoReservation[]
   occurrences      CondoOccurrence[]
+  
+  // Relações Avançadas de Cobrança, Consumo e Gestão Condominial
+  bills            CondoBill[]
+  agreements       CondoAgreement[]
+  readings         CondoConsumptionReading[]
+  settings         CondoSetting?
+  accounts         CondoAccount[]
+  entries          CondoAccountingEntry[]
+  assemblies       CondoAssembly[]
+  correspondences  CondoCorrespondence[]
 
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@map("condominiums")
-}
-
-model CondoUnit {
-  id            String      @id @default(uuid())
-  condominiumId String
-  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
-  unitNumber    String      // Ex: "Apt 101", "Casa 12"
-  block         String?     // Torre ou Bloco
-  floor         Int?        // Andar
-  fractionIdeal Float       @default(1.0) // Fração ideal para rateio
-  ownerName     String?     // Nome do proprietário da unidade
-  tenantName    String?     // Nome do inquilino da unidade
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
 }
 
 model CondoExpense {
@@ -488,6 +508,8 @@ model Owner {
 
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
+
+  condoUnits CondoUnit[]
 
   @@map("owners")
 }
@@ -686,6 +708,7 @@ model Client {
 
   proposals                    Proposal[]
   keyTerms                     KeyTerm[]
+  condoUnits CondoUnit[]
   
   createdAt                    DateTime          @default(now())
   updatedAt                    DateTime          @updatedAt
@@ -746,6 +769,15 @@ model LeadHistory {
   actionType  String   // "WhatsApp", "Ligação", "E-mail", "Visita", "Anotação"
   description String   @db.Text
   date        DateTime @default(now())
+}
+
+model DealHistory {
+  id         String   @id @default(uuid())
+  dealId     String
+  deal       Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  authorName String?  // Nome de quem escreveu
+  note       String   @db.Text // Texto da observação
+  createdAt  DateTime @default(now())
 }
 
 // ==========================================
@@ -1495,4 +1527,193 @@ model UnitCustomizationOrder {
 
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
+}
+
+// ==========================================
+// MÓDULO CONDOMÍNIO: COBRANÇAS, BOLETOS & RATEIOS
+// ==========================================
+model CondoBill {
+  id              String      @id @default(uuid())
+  condominiumId   String
+  condominium     Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  unitId          String
+  unit            CondoUnit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  
+  referenceMonth  String      // Ex: "10/2026"
+  dueDate         DateTime    // Data de vencimento personalizada por unidade
+  amount          Float       // Valor total da cobrança (Taxa + Rateios + Fundo de Reserva + Multas)
+  status          String      @default("Pendente") // "Pendente", "Pago", "Atrasado", "Acordo"
+  
+  // Destinações e Detalhes
+  destinationsJson Json?      // Detalhamento (Taxa Condomínio, Fundo de Reserva, Taxa Extra, etc.)
+  fineAmount      Float       @default(0) // Multa aplicada por atraso
+  interestAmount  Float       @default(0) // Juros calculados pró-rata
+  
+  // Integração Bancária / Gateway (PIX / Boleto)
+  barcode         String?
+  pixQrCode       String?     @db.Text
+  pixQrCodeBase64 String?     @db.Text
+  ticketUrl       String?     @db.Text
+  paidDate        DateTime?
+  paymentMethod   String?     // "PIX", "Boleto", "Baixa Manual", "Dinheiro"
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("condo_bills")
+}
+
+// ==========================================
+// ACORDOS E PARCELAMENTO DE DÉBITOS
+// ==========================================
+model CondoAgreement {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  unitId        String
+  unit          CondoUnit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  
+  totalDebt     Float       // Dívida original negociada
+  installments  Int         // Número de parcelas
+  installmentValue Float    // Valor de cada parcela do acordo
+  status        String      @default("Ativo") // "Ativo", "Quitado", "Quebrado"
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("condo_agreements")
+}
+
+model CondoConsumptionReading {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  unitId        String
+  unit          CondoUnit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  
+  utilityType   String      // "Água", "Gás", "Energia"
+  previousValue Float       // Leitura anterior
+  currentValue  Float       // Leitura atual
+  consumption   Float       // Consumo calculado (current - previous)
+  unitPrice     Float       // Valor por m³, litro ou kWh
+  totalAmount   Float       // Valor total a cobrar na fatura da unidade
+  photoUrl      String?     @db.Text // Foto do hidrômetro para leitura por IA
+  
+  referenceMonth String     // Ex: "10/2026"
+  createdAt     DateTime    @default(now())
+
+  @@map("condo_consumption_readings")
+}
+
+// ==========================================
+// CONFIGURAÇÕES DE JUROS, MULTA E PARÂMETROS DO CONDOMÍNIO
+// ==========================================
+model CondoSetting {
+  id              String      @id @default(uuid())
+  condominiumId   String      @unique
+  condominium     Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  
+  finePercent     Float       @default(2.00) // Multa padrão por atraso (%)
+  interestPercent Float       @default(1.00) // Juros ao mês (%)
+  calcType        String      @default("PRO_RATA") // "PRO_RATA" (diário proporcional) ou "FIXO"
+  bankIntegration String      @default("API") // "API", "REMESSA_RETORNO"
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("condo_settings")
+}
+
+// ==========================================
+// CONTABILIDADE E PLANO DE CONTAS (DRE / OFX)
+// ==========================================
+model CondoAccount {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  
+  code          String      // Ex: "1.1.01"
+  name          String      // Ex: "Taxa de Condomínio", "Manutenção de Elevadores"
+  type          String      // "Receita" ou "Despesa"
+  
+  entries       CondoAccountingEntry[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("condo_accounts")
+}
+
+model CondoAccountingEntry {
+  id            String       @id @default(uuid())
+  condominiumId String
+  condominium   Condominium  @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       CondoAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  referenceMonth String      // Ex: "10/2026"
+  entryDate     DateTime     @default(now())
+  amount        Float
+  type          String       // "CREDIT" (Receita) ou "DEBIT" (Despesa)
+  description   String
+  documentUrl   String?      @db.Text
+  ofxReference  String?      // ID de conciliação OFX
+
+  createdAt     DateTime     @default(now())
+
+  @@map("condo_accounting_entries")
+}
+
+// ==========================================
+// ASSEMBLEIAS E VOTAÇÕES DIGITAIS
+// ==========================================
+model CondoAssembly {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  
+  title         String      // Ex: "Assembleia Geral Ordinária 2026"
+  assemblyDate  DateTime
+  description   String      @db.Text
+  status        String      @default("Agendada") // "Agendada", "Em Andamento", "Encerrada"
+  minutesUrl    String?     @db.Text // Ata da assembleia assinada
+
+  topics        CondoAssemblyTopic[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("condo_assemblies")
+}
+
+model CondoAssemblyTopic {
+  id         String        @id @default(uuid())
+  assemblyId String
+  assembly   CondoAssembly @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  
+  title      String        // Pauta da votação
+  options    Json          // Opções de voto (ex: ["Aprovado", "Rejeitado"])
+  result     String?       // Resultado apurado
+
+  @@map("condo_assembly_topics")
+}
+
+// ==========================================
+// CONTROLE DE CORRESPONDÊNCIAS E ENCOMENDAS
+// ==========================================
+model CondoCorrespondence {
+  id            String      @id @default(uuid())
+  condominiumId String
+  condominium   Condominium @relation(fields: [condominiumId], references: [id], onDelete: Cascade)
+  unitId        String
+  unit          CondoUnit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  
+  trackingCode  String?     // Código de rastreio dos Correios/Transportadora
+  sender        String?     // Remetente (ex: Amazon, Mercado Livre)
+  receivedAt    DateTime    @default(now())
+  withdrawnAt   DateTime?   // Data de retirada pelo morador
+  withdrawnBy   String?     // Quem retirou
+  status        String      @default("Aguardando Retirada") // "Aguardando Retirada", "Retirado"
+
+  @@map("condo_correspondences")
 }
