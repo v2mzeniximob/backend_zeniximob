@@ -337,6 +337,8 @@ routes.post('/condominiums/:condominiumId/agreements', authMiddleware, condomini
 routes.get('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.getSettings);
 routes.put('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.updateSettings);
 
+routes.put('/condominiums/units/:unitId', authMiddleware, condominiumController.updateUnit);
+
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
