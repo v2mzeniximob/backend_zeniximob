@@ -178,6 +178,30 @@ async list(req: Request, res: Response) {
     }
   }
 
+  async updateUnit(req: Request, res: Response) {
+    try {
+      const { unitId } = req.params;
+      const { unitNumber, block, floor, fractionIdeal, ownerId, clientId } = req.body;
+
+      const unit = await prisma.condoUnit.update({
+        where: { id: unitId },
+        data: {
+          unitNumber,
+          block,
+          floor: floor ? Number(floor) : null,
+          fractionIdeal: fractionIdeal ? Number(fractionIdeal) : 1.0,
+          ownerId: ownerId || null,
+          clientId: clientId || null
+        }
+      });
+
+      return res.json({ message: 'Unidade atualizada com sucesso!', unit });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar unidade.' });
+    }
+  }
+
   // ==========================================
   // RATEIO DE DESPESAS DO CONDOMÍNIO
   // ==========================================
