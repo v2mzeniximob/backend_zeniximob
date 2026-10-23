@@ -310,34 +310,49 @@ routes.put('/tenants/:id', authMiddleware, tenantController.update);
 routes.patch('/tenants/:id/status', authMiddleware, tenantController.toggleStatus);
 
 // ==========================================
-// ROTAS DO MÓDULO DE CONDOMÍNIOS AVANÇADO
+// MÓDULO DE CONDOMÍNIOS & ADMINISTRAÇÃO
 // ==========================================
 routes.post('/condominiums', authMiddleware, condominiumController.create);
 routes.get('/condominiums', authMiddleware, condominiumController.list);
 routes.put('/condominiums/:id', authMiddleware, condominiumController.update);
 routes.patch('/condominiums/:id/status', authMiddleware, condominiumController.toggleStatus);
 
-// Unidades do Condomínio
+// Unidades
 routes.post('/condominiums/:condominiumId/units', authMiddleware, condominiumController.createUnit);
 routes.get('/condominiums/:condominiumId/units', authMiddleware, condominiumController.listUnits);
+routes.put('/condominiums/units/:unitId', authMiddleware, condominiumController.updateUnit);
 
-// Cobranças, Rateios e Boletos
+// Despesas do Condomínio
+routes.post('/condominiums/:condominiumId/expenses', authMiddleware, condominiumController.createExpense);
+routes.get('/condominiums/:condominiumId/expenses', authMiddleware, condominiumController.listExpenses);
+
+// Boletos & Rateios
 routes.post('/condominiums/:condominiumId/bills/generate', authMiddleware, condominiumController.generateMonthlyBills);
 routes.get('/condominiums/:condominiumId/bills', authMiddleware, condominiumController.listBills);
 routes.patch('/condominiums/bills/:billId/pay', authMiddleware, condominiumController.markBillAsPaid);
 
-// Leitura de Consumo (Água, Gás, Energia com IA/Foto)
+// Consumo por IA (Água, Gás, Energia)
 routes.post('/condominiums/:condominiumId/consumption', authMiddleware, condominiumController.createConsumptionReading);
 routes.get('/condominiums/:condominiumId/consumption', authMiddleware, condominiumController.listConsumptionReadings);
 
-// Acordos e Parcelamentos de Inadimplência
+// Acordos de Inadimplência
 routes.post('/condominiums/:condominiumId/agreements', authMiddleware, condominiumController.createAgreement);
 
 // Configurações de Juros e Multas
 routes.get('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.getSettings);
 routes.put('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.updateSettings);
 
-routes.put('/condominiums/units/:unitId', authMiddleware, condominiumController.updateUnit);
+// Áreas Comuns e Reservas
+routes.post('/condominiums/:condominiumId/reservations', authMiddleware, condominiumController.createReservation);
+routes.get('/condominiums/:condominiumId/reservations', authMiddleware, condominiumController.listReservations);
+
+// Ocorrências
+routes.post('/condominiums/:condominiumId/occurrences', authMiddleware, condominiumController.createOccurrence);
+routes.get('/condominiums/:condominiumId/occurrences', authMiddleware, condominiumController.listOccurrences);
+
+// Reuniões & Assembleias (Atas)
+routes.post('/condominiums/:condominiumId/assemblies', authMiddleware, condominiumController.createAssembly);
+routes.get('/condominiums/:condominiumId/assemblies', authMiddleware, condominiumController.listAssemblies);
 
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 routes.get('/properties', authMiddleware, propertyController.list);

@@ -19,6 +19,9 @@ async function getRealEstateId(req: Request): Promise<string | null> {
 
 export class CondominiumController {
   
+  //=========================================
+  // CADASTRAR CONDOMÍNIO
+  //=========================================
   async create(req: Request, res: Response) {
     try {
       const realEstateId = await getRealEstateId(req);
@@ -48,7 +51,10 @@ export class CondominiumController {
     }
   }
 
-async list(req: Request, res: Response) {
+  //=========================================
+  // LISTAR CONDOMÍNIOS
+  //=========================================
+  async list(req: Request, res: Response) {
     try {
       const realEstateId = await getRealEstateId(req);
       if (!realEstateId) return res.status(403).json({ error: 'Acesso negado.' });
@@ -79,7 +85,9 @@ async list(req: Request, res: Response) {
     }
   }
 
-
+  // ==========================================
+  // ATUALIZAR CONDOMÍNIO
+  // ==========================================
   async update(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -109,6 +117,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  // ==========================================
+  // ATIVAR / DESATIVAR CONDOMÍNIO
+  // ==========================================
   async toggleStatus(req: Request, res: Response) {
     try {
       const { id } = req.params;
@@ -161,6 +172,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  //===========================================
+  // LISTAR UNIDADES DO CONDOMÍNIO
+  //===========================================
   async listUnits(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -177,7 +191,10 @@ async list(req: Request, res: Response) {
       return res.status(500).json({ error: 'Erro ao listar unidades.' });
     }
   }
-
+  
+  // ==========================================
+  // ATUALIZAR UNIDADE DO CONDOMÍNIO
+  // ==========================================
   async updateUnit(req: Request, res: Response) {
     try {
       const { unitId } = req.params;
@@ -226,6 +243,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  // ==========================================
+  // LISTAR DESPESAS DO CONDOMÍNIO
+  // ==========================================
   async listExpenses(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -263,6 +283,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  // ==========================================
+  // LISTAR RESERVAS DE ÁREAS COMUNS
+  // ========================================== 
   async listReservations(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -300,6 +323,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  //==========================================
+  // LISTAR OCORRÊNCIAS DO LIVRO DE OCORRÊNCIAS
+  //==========================================
   async listOccurrences(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -345,6 +371,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  //==========================================
+  // OBTER CONFIGURAÇÕES DE JUROS E MULTA DO CONDOMÍNIO
+  //==========================================  
   async getSettings(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -410,6 +439,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  // ==========================================
+  // LISTAR BOLETOS / FATURAS GERADAS
+  // ==========================================
   async listBills(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -424,6 +456,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  // ==========================================
+  // BAIXA DE BOLETOS / MARCAR COMO PAGO
+  // ==========================================
   async markBillAsPaid(req: Request, res: Response) {
     try {
       const { billId } = req.params;
@@ -480,6 +515,9 @@ async list(req: Request, res: Response) {
     }
   }
 
+  // ==========================================
+  // LISTAR LEITURAS DE CONSUMO
+  // ==========================================
   async listConsumptionReadings(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -538,6 +576,48 @@ async list(req: Request, res: Response) {
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao registrar acordo de débitos.' });
+    }
+  }
+
+  // ==========================================
+  // ASSEMBLEIAS, REUNIÕES E ATAS
+  // ==========================================
+  async createAssembly(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const { title, assemblyDate, description, status, minutesUrl } = req.body;
+
+      const assembly = await prisma.condoAssembly.create({
+        data: {
+          condominiumId,
+          title,
+          assemblyDate: new Date(assemblyDate),
+          description,
+          status: status || 'Agendada',
+          minutesUrl: minutesUrl || null
+        }
+      });
+
+      return res.status(201).json({ message: 'Assembleia cadastrada com sucesso!', assembly });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao cadastrar assembleia.' });
+    }
+  }
+
+   // ==========================================
+   //  LISTAR ASSEMBLEIAS
+   // ==========================================
+  async listAssemblies(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const assemblies = await prisma.condoAssembly.findMany({
+        where: { condominiumId },
+        orderBy: { assemblyDate: 'desc' }
+      });
+      return res.json(assemblies);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao listar assembleias.' });
     }
   }
 }
