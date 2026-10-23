@@ -72,7 +72,9 @@ export class CondominiumController {
           expenses: true,
           reservations: true,
           occurrences: true,
-          bills: true,
+          bills: { include: { unit: true } },
+          readings: { include: { unit: true } }, 
+          assemblies: true,
           settings: true,
           _count: { select: { properties: true, units: true, bills: true } }
         },
@@ -453,6 +455,62 @@ export class CondominiumController {
       return res.json(bills);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao listar faturas/boletos.' });
+    }
+  }
+
+  async updateBill(req: Request, res: Response) {
+    try {
+      const { billId } = req.params;
+      const { dueDate, amount, referenceMonth, status } = req.body;
+
+      const updated = await prisma.condoBill.update({
+        where: { id: billId },
+        data: {
+          dueDate: dueDate ? new Date(dueDate) : undefined,
+          amount: amount !== undefined ? Number(amount) : undefined,
+          referenceMonth,
+          status
+        }
+      });
+
+      return res.json({ message: 'Boleto atualizado com sucesso!', bill: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar boleto.' });
+    }
+  }
+
+  // ==========================================
+  // ATUALIZAR LEITURA DE CONSUMO (ÁGUA, GÁS, ENERGIA)
+  // ==========================================
+  async updateConsumptionReading(req: Request, res: Response) {
+    try {
+      const { readingId } = req.params;
+      const { previousValue, currentValue, unitPrice, referenceMonth, utilityType } = req.body;
+
+      const prev = Number(previousValue || 0);
+      const curr = Number(currentValue || 0);
+      const consumption = Math.max(0, curr - prev);
+      const price = Number(unitPrice || 0);
+      const totalAmount = consumption * price;
+
+      const updated = await prisma.condoConsumptionReading.update({
+        where: { id: readingId },
+        data: {
+          utilityType,
+          previousValue: prev,
+          currentValue: curr,
+          consumption,
+          unitPrice: price,
+          totalAmount: Number(totalAmount.toFixed(2)),
+          referenceMonth
+        }
+      });
+
+      return res.json({ message: 'Leitura atualizada com sucesso!', reading: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar leitura de consumo.' });
     }
   }
 

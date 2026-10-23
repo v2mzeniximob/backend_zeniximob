@@ -354,6 +354,9 @@ routes.get('/condominiums/:condominiumId/occurrences', authMiddleware, condomini
 routes.post('/condominiums/:condominiumId/assemblies', authMiddleware, condominiumController.createAssembly);
 routes.get('/condominiums/:condominiumId/assemblies', authMiddleware, condominiumController.listAssemblies);
 
+routes.put('/condominiums/bills/:billId', authMiddleware, condominiumController.updateBill);
+routes.put('/condominiums/consumption/:readingId', authMiddleware, condominiumController.updateConsumptionReading);
+
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 routes.get('/properties', authMiddleware, propertyController.list);
 routes.post('/properties', authMiddleware, propertyController.create);
