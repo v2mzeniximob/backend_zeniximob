@@ -706,4 +706,114 @@ export class CondominiumController {
       return res.status(500).json({ error: 'Erro ao listar assembleias.' });
     }
   }
+
+  // ==========================================
+  // ATUALIZAR RESERVA DE ÁREA COMUM
+  // ==========================================
+  async updateReservation(req: Request, res: Response) {
+    try {
+      const { reservationId } = req.params;
+      const { areaName, reservedBy, reservationDate, notes } = req.body;
+
+      const updated = await prisma.condoReservation.update({
+        where: { id: reservationId },
+        data: {
+          areaName,
+          reservedBy,
+          reservationDate: reservationDate ? new Date(reservationDate) : undefined,
+          notes
+        }
+      });
+
+      return res.json({ message: 'Reserva atualizada com sucesso!', reservation: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar reserva.' });
+    }
+  }
+
+  // ==========================================
+  // ATUALIZAR ASSEMBLEIA
+  // ========================================== 
+  async updateAssembly(req: Request, res: Response) {
+    try {
+      const { assemblyId } = req.params;
+      const { title, assemblyDate, description, status, minutesUrl } = req.body;
+
+      const updated = await prisma.condoAssembly.update({
+        where: { id: assemblyId },
+        data: {
+          title,
+          assemblyDate: assemblyDate ? new Date(assemblyDate) : undefined,
+          description,
+          status,
+          minutesUrl: minutesUrl || null
+        }
+      });
+
+      return res.json({ message: 'Assembleia atualizada com sucesso!', assembly: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar assembleia.' });
+    }
+  }
+
+  async listAgreements(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const agreements = await prisma.condoAgreement.findMany({
+        where: { condominiumId },
+        include: { unit: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      return res.json(agreements);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao listar acordos.' });
+    }
+  }
+
+  async updateAgreement(req: Request, res: Response) {
+    try {
+      const { agreementId } = req.params;
+      const { totalDebt, installments, status } = req.body;
+
+      const updated = await prisma.condoAgreement.update({
+        where: { id: agreementId },
+        data: {
+          totalDebt: totalDebt !== undefined ? Number(totalDebt) : undefined,
+          installments: installments !== undefined ? Number(installments) : undefined,
+          status
+        }
+      });
+
+      return res.json({ message: 'Acordo atualizado com sucesso!', agreement: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar acordo.' });
+    }
+  }
+
+  async updateOccurrence(req: Request, res: Response) {
+    try {
+      const { occurrenceId } = req.params;
+      const { title, description, reportedBy, priority, status } = req.body;
+
+      const updated = await prisma.condoOccurrence.update({
+        where: { id: occurrenceId },
+        data: {
+          title,
+          description,
+          reportedBy,
+          priority,
+          status
+        }
+      });
+
+      return res.json({ message: 'Ocorrência atualizada com sucesso!', occurrence: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar ocorrência.' });
+    }
+  }
+
 }

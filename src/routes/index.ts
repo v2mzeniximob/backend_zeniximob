@@ -331,13 +331,17 @@ routes.put('/condominiums/expenses/:expenseId', authMiddleware, condominiumContr
 routes.post('/condominiums/:condominiumId/bills/generate', authMiddleware, condominiumController.generateMonthlyBills);
 routes.get('/condominiums/:condominiumId/bills', authMiddleware, condominiumController.listBills);
 routes.patch('/condominiums/bills/:billId/pay', authMiddleware, condominiumController.markBillAsPaid);
+routes.put('/condominiums/bills/:billId', authMiddleware, condominiumController.updateBill);
 
 // Consumo por IA (Água, Gás, Energia)
 routes.post('/condominiums/:condominiumId/consumption', authMiddleware, condominiumController.createConsumptionReading);
 routes.get('/condominiums/:condominiumId/consumption', authMiddleware, condominiumController.listConsumptionReadings);
+routes.put('/condominiums/consumption/:readingId', authMiddleware, condominiumController.updateConsumptionReading);
 
 // Acordos de Inadimplência
 routes.post('/condominiums/:condominiumId/agreements', authMiddleware, condominiumController.createAgreement);
+routes.get('/condominiums/:condominiumId/agreements', authMiddleware, condominiumController.listAgreements);
+routes.put('/condominiums/agreements/:agreementId', authMiddleware, condominiumController.updateAgreement);
 
 // Configurações de Juros e Multas
 routes.get('/condominiums/:condominiumId/settings', authMiddleware, condominiumController.getSettings);
@@ -346,17 +350,18 @@ routes.put('/condominiums/:condominiumId/settings', authMiddleware, condominiumC
 // Áreas Comuns e Reservas
 routes.post('/condominiums/:condominiumId/reservations', authMiddleware, condominiumController.createReservation);
 routes.get('/condominiums/:condominiumId/reservations', authMiddleware, condominiumController.listReservations);
+routes.put('/condominiums/reservations/:reservationId', authMiddleware, condominiumController.updateReservation);
 
 // Ocorrências
 routes.post('/condominiums/:condominiumId/occurrences', authMiddleware, condominiumController.createOccurrence);
 routes.get('/condominiums/:condominiumId/occurrences', authMiddleware, condominiumController.listOccurrences);
+routes.put('/condominiums/occurrences/:occurrenceId', authMiddleware, condominiumController.updateOccurrence);
 
 // Reuniões & Assembleias (Atas)
 routes.post('/condominiums/:condominiumId/assemblies', authMiddleware, condominiumController.createAssembly);
 routes.get('/condominiums/:condominiumId/assemblies', authMiddleware, condominiumController.listAssemblies);
+routes.put('/condominiums/assemblies/:assemblyId', authMiddleware, condominiumController.updateAssembly);
 
-routes.put('/condominiums/bills/:billId', authMiddleware, condominiumController.updateBill);
-routes.put('/condominiums/consumption/:readingId', authMiddleware, condominiumController.updateConsumptionReading);
 
 routes.get('/properties/public/:slug', propertyController.listPublicByStore);
 routes.get('/properties', authMiddleware, propertyController.list);
