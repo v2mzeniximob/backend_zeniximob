@@ -93,6 +93,8 @@ const incorporadoraController = new IncorporadoraController();
 routes.post('/login', authController.login);
 routes.post('/portal/login', clientPortalController.login);
 
+routes.post('/portal/condo/reservations', authMiddleware, portalOnly, clientPortalController.createReservation);
+
 // Rotas públicas da Landing Page (Site Master) e Planos Ativos
 routes.get('/public/landing-page', masterConfigController.getLandingPagePublic);
 

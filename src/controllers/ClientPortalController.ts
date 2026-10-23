@@ -120,6 +120,24 @@ export class ClientPortalController {
           orderBy: { createdAt: 'desc' }
         });
 
+        const condoUnit = await prisma.condoUnit.findFirst({
+          where: user.role === 'CLIENT' ? { clientId: user.id } : { ownerId: user.id }
+        });
+
+        let condoReservations = [];
+        let condoAssemblies = [];
+
+        if (condoUnit) {
+          condoReservations = await prisma.condoReservation.findMany({
+            where: { condominiumId: condoUnit.condominiumId },
+            orderBy: { reservationDate: 'asc' }
+          });
+          condoAssemblies = await prisma.condoAssembly.findMany({
+            where: { condominiumId: condoUnit.condominiumId },
+            orderBy: { assemblyDate: 'desc' }
+          });
+        }
+
         return res.json({ contracts, condoBills, tickets });
       }
 
@@ -164,6 +182,36 @@ export class ClientPortalController {
     } catch (error) {
       console.error('Erro ao buscar dashboard:', error);
       return res.status(500).json({ error: 'Erro ao carregar os dados do painel.' });
+    }
+  }
+
+  async createReservation(req: Request, res: Response) {
+    try {
+      const user = req.user as any;
+      const { areaName, reservationDate, notes } = req.body;
+
+      const unit = await prisma.condoUnit.findFirst({
+        where: user.role === 'CLIENT' ? { clientId: user.id } : { ownerId: user.id }
+      });
+
+      if (!unit) {
+        return res.status(400).json({ error: 'Nenhuma unidade de condomínio vinculada ao seu usuário.' });
+      }
+
+      const reservation = await prisma.condoReservation.create({
+        data: {
+          condominiumId: unit.condominiumId,
+          areaName: areaName || 'Salão de Festas',
+          reservedBy: `${user.name} (Unidade ${unit.unitNumber})`,
+          reservationDate: new Date(reservationDate),
+          notes: notes || ''
+        }
+      });
+
+      return res.status(201).json({ message: 'Reserva realizada com sucesso!', reservation });
+    } catch (error) {
+      console.error('Erro ao criar reserva no portal:', error);
+      return res.status(500).json({ error: 'Erro ao registrar reserva de área comum.' });
     }
   }
 
