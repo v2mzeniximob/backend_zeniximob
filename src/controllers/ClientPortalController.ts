@@ -98,21 +98,31 @@ export class ClientPortalController {
         try {
           const token = req.headers.authorization.replace('Bearer ', '').trim();
           user = jwt.verify(token, secret);
-        } catch (e) {
-          // ignora
-        }
+        } catch (e) {}
       }
 
       if (!user || !user.id) {
         return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
       }
 
-      // 1. Busca Contratos considerando se é CLIENT (por ID ou Nome) ou OWNER (por Imóveis)
+      // Busca dados complementares do cliente no banco para garantir o match do contrato
+      let clientDoc = null;
+      let clientName = user.name;
+      if (user.role === 'CLIENT') {
+        const clientRecord = await prisma.client.findUnique({ where: { id: user.id } }).catch(() => null);
+        if (clientRecord) {
+          clientDoc = clientRecord.document;
+          clientName = clientRecord.name || clientName;
+        }
+      }
+
+      // 1. Busca Contratos com critérios amplos (ID, Nome ou Documento)
       const contractWhere = user.role === 'CLIENT'
         ? {
             OR: [
               { clientId: user.id },
-              ...(user.name ? [{ client: { name: { contains: user.name, mode: 'insensitive' } } }] : [])
+              ...(clientName ? [{ client: { name: { contains: clientName, mode: 'insensitive' } } }] : []),
+              ...(clientDoc ? [{ client: { document: clientDoc } }] : [])
             ]
           }
         : { property: { ownerId: user.id } };
@@ -148,19 +158,19 @@ export class ClientPortalController {
         include: { property: true }
       }).catch(() => []) || [];
 
-      // 2. Busca as Unidades de Condomínio vinculadas
+      // 2. Busca Unidades de Condomínio vinculadas
       const userUnits = await prisma.condoUnit.findMany({
         where: user.role === 'CLIENT'
           ? {
               OR: [
                 { clientId: user.id },
-                ...(user.name ? [{ tenantName: { contains: user.name, mode: 'insensitive' } }] : [])
+                ...(clientName ? [{ tenantName: { contains: clientName, mode: 'insensitive' } }] : [])
               ]
             }
           : {
               OR: [
                 { ownerId: user.id },
-                ...(user.name ? [{ ownerName: { contains: user.name, mode: 'insensitive' } }] : [])
+                ...(clientName ? [{ ownerName: { contains: clientName, mode: 'insensitive' } }] : [])
               ]
             },
         include: { condominium: true }
