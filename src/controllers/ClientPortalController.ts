@@ -77,7 +77,8 @@ export class ClientPortalController {
       return res.status(500).json({ error: 'Erro interno ao realizar login.' });
     }
   }
-// ==========================================
+
+  // ==========================================
   // 2. BUSCAR DADOS DO DASHBOARD 
   // ==========================================
   async getDashboard(req: Request, res: Response) {
@@ -104,32 +105,38 @@ export class ClientPortalController {
         return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
       }
 
-      let clientDoc = null;
-      let clientName = user.name;
+      console.log('=== DEBUG PORTAL DASHBOARD ===');
+      console.log('Usuário Logado:', user);
+
+      // Busca o registo completo do cliente na base de dados para pegar documento e nome corretos
+      let clientRecord = null;
       if (user.role === 'CLIENT') {
-        const clientRecord = await prisma.client.findUnique({ where: { id: user.id } }).catch(() => null);
-        if (clientRecord) {
-          clientDoc = clientRecord.document;
-          clientName = clientRecord.name || clientName;
-        }
+        clientRecord = await prisma.client.findUnique({ where: { id: user.id } }).catch(() => null);
+        console.log('Cliente encontrado na BD:', clientRecord);
       }
 
-      // 1. CONTRATOS: Se for Inquilino, busca pelo ID, Nome ou Documento do Cliente. Se for Proprietário, busca pelos imóveis dele.
+      // 1. Busca Contratos de forma extremamente ampla para garantir que encontre a Raquel
       let contracts: any[] = [];
       if (user.role === 'CLIENT') {
         contracts = await prisma.contract.findMany({
           where: {
             OR: [
               { clientId: user.id },
-              ...(clientName ? [{ client: { name: { contains: clientName, mode: 'insensitive' } } }] : []),
-              ...(clientDoc ? [{ client: { document: clientDoc } }] : [])
+              ...(clientRecord ? [
+                { clientId: clientRecord.id },
+                { client: { document: clientRecord.document } },
+                { client: { name: { contains: clientRecord.name, mode: 'insensitive' } } }
+              ] : []),
+              ...(user.name ? [{ client: { name: { contains: user.name, mode: 'insensitive' } } }] : [])
             ]
           },
           include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
           orderBy: { createdAt: 'desc' }
-        }).catch(() => []);
+        }).catch((err: any) => {
+          console.error('Erro ao buscar contratos no portal:', err);
+          return [];
+        });
       } else {
-        // Se for proprietário, busca os contratos dos imóveis que pertencem a ele
         const ownerProperties = await prisma.property.findMany({ where: { ownerId: user.id } }).catch(() => []);
         const propIds = ownerProperties.map((p: any) => p.id);
         if (propIds.length > 0) {
@@ -141,7 +148,8 @@ export class ClientPortalController {
         }
       }
 
-      // Imóveis do Proprietário
+      console.log('Contratos encontrados para o usuário:', contracts.length);
+
       const properties = await prisma.property.findMany({
         where: { ownerId: user.id },
         include: { contracts: { include: { invoices: true } } },
@@ -170,13 +178,14 @@ export class ClientPortalController {
           ? {
               OR: [
                 { clientId: user.id },
-                ...(clientName ? [{ tenantName: { contains: clientName, mode: 'insensitive' } }] : [])
+                ...(clientRecord?.name ? [{ tenantName: { contains: clientRecord.name, mode: 'insensitive' } }] : []),
+                ...(user.name ? [{ tenantName: { contains: user.name, mode: 'insensitive' } }] : [])
               ]
             }
           : {
               OR: [
                 { ownerId: user.id },
-                ...(clientName ? [{ ownerName: { contains: clientName, mode: 'insensitive' } }] : [])
+                ...(clientRecord?.name ? [{ ownerName: { contains: clientRecord.name, mode: 'insensitive' } }] : [])
               ]
             },
         include: { condominium: true }
