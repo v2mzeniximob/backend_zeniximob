@@ -79,109 +79,76 @@ export class ClientPortalController {
   // ==========================================
   // 2. BUSCAR DADOS DO DASHBOARD 
   // ==========================================
-  async getDashboard(req: Request, res: Response) {
+ async getDashboard(req: Request, res: Response) {
     try {
       const user = req.user as any;
-      if (!user) return res.status(401).json({ error: 'Não autorizado.' });
 
-      // ----------------------------------------------------
-      // VISÃO DO INQUILINO (CLIENT)
-      // ----------------------------------------------------
-      if (user.role === 'CLIENT') {
-        const contractsRaw = await prisma.contract.findMany({
-          where: { tenantId: user.id, status: 'Ativo' },
-          include: {
-            property: { select: { title: true, address: true, imageUrls: true } },
-            invoices: { orderBy: { dueDate: 'desc' } }
-          }
+      // Busca a unidade de condomínio vinculada ao cliente ou proprietário logado
+      const condoUnit = await prisma.condoUnit.findFirst({
+        where: user.role === 'CLIENT' ? { clientId: user.id } : { ownerId: user.id },
+        include: { condominium: true }
+      });
+
+      let condoBills = [];
+      let condoReservations = [];
+      let condoAssemblies = [];
+      let condoOccurrences = [];
+
+      if (condoUnit) {
+        // Busca boletos da unidade
+        condoBills = await prisma.condoBill.findMany({
+          where: { unitId: condoUnit.id },
+          include: { condominium: true, unit: true },
+          orderBy: { dueDate: 'desc' }
         });
 
-        const contracts = contractsRaw.map((c: any) => ({
-          ...c,
-          property: {
-            ...c.property,
-            coverImage: c.property.imageUrls && c.property.imageUrls.length > 0 ? c.property.imageUrls[0] : null
-          }
-        }));
-
-        // Busca boletos de condomínio vinculados a este cliente (unidade)
-        const condoBills = await prisma.condoBill.findMany({
-          where: { unit: { clientId: user.id } },
-          include: { condominium: { select: { name: true, address: true } }, unit: true },
-          orderBy: { dueDate: 'asc' }
+        // Busca reservas de áreas comuns do condomínio
+        condoReservations = await prisma.condoReservation.findMany({
+          where: { condominiumId: condoUnit.condominiumId },
+          orderBy: { reservationDate: 'asc' }
         });
 
-        const tickets = await prisma.ticket.findMany({
-          where: { clientId: user.id },
-          include: { 
-            property: { select: { title: true } },
-            messages: { orderBy: { createdAt: 'asc' } }
-          },
+        // Busca reuniões e atas publicadas
+        condoAssemblies = await prisma.condoAssembly.findMany({
+          where: { condominiumId: condoUnit.condominiumId },
+          orderBy: { assemblyDate: 'desc' }
+        });
+
+        // Busca ocorrências do condomínio
+        condoOccurrences = await prisma.condoOccurrence.findMany({
+          where: { condominiumId: condoUnit.condominiumId },
           orderBy: { createdAt: 'desc' }
         });
-
-        const condoUnit = await prisma.condoUnit.findFirst({
-          where: user.role === 'CLIENT' ? { clientId: user.id } : { ownerId: user.id }
-        });
-
-        let condoReservations = [];
-        let condoAssemblies = [];
-
-        if (condoUnit) {
-          condoReservations = await prisma.condoReservation.findMany({
-            where: { condominiumId: condoUnit.condominiumId },
-            orderBy: { reservationDate: 'asc' }
-          });
-          condoAssemblies = await prisma.condoAssembly.findMany({
-            where: { condominiumId: condoUnit.condominiumId },
-            orderBy: { assemblyDate: 'desc' }
-          });
-        }
-
-        return res.json({ contracts, condoBills, tickets });
       }
 
-      // ----------------------------------------------------
-      // VISÃO DO PROPRIETÁRIO (OWNER)
-      // ----------------------------------------------------
-      if (user.role === 'OWNER') {
-        const properties = await prisma.property.findMany({
-          where: { ownerId: user.id },
-          include: {
-            contracts: {
-              where: { status: 'Ativo' },
-              include: { invoices: { orderBy: { dueDate: 'desc' } } }
-            }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
+      // Demais dados de contratos / imóveis do portal...
+      const contracts = await prisma.contract.findMany({
+        where: { clientId: user.id },
+        include: { property: true, invoices: true }
+      });
 
-        // Busca boletos de condomínio das unidades que pertencem a este proprietário
-        const condoBills = await prisma.condoBill.findMany({
-          where: { unit: { ownerId: user.id } },
-          include: { condominium: { select: { name: true, address: true } }, unit: true },
-          orderBy: { dueDate: 'asc' }
-        });
+      const properties = await prisma.property.findMany({
+        where: { ownerId: user.id },
+        include: { contracts: { include: { invoices: true } } }
+      });
 
-        const tickets = await prisma.ticket.findMany({
-          where: { 
-            property: { ownerId: user.id },
-            clientId: null 
-          },
-          include: { 
-            property: { select: { title: true } },
-            messages: { orderBy: { createdAt: 'asc' } }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
+      const tickets = await prisma.ticket.findMany({
+        where: user.role === 'CLIENT' ? { clientId: user.id } : { propertyId: { in: properties.map((p: { id: string }) => p.id) } },
+        include: { messages: true }
+      });
 
-        return res.json({ properties, condoBills, tickets });
-      }
-
-      return res.status(403).json({ error: 'Perfil não reconhecido.' });
+      return res.json({
+        contracts,
+        properties,
+        tickets,
+        condoBills,
+        condoReservations,
+        condoAssemblies,
+        condoOccurrences
+      });
     } catch (error) {
-      console.error('Erro ao buscar dashboard:', error);
-      return res.status(500).json({ error: 'Erro ao carregar os dados do painel.' });
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao carregar dados do portal.' });
     }
   }
 
