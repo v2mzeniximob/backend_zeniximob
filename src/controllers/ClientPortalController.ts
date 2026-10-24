@@ -105,25 +105,20 @@ export class ClientPortalController {
         return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
       }
 
-      console.log('=== DEBUG PORTAL DASHBOARD ===');
-      console.log('Usuário Logado:', user);
-
-      // Busca o registo completo do cliente na base de dados para pegar documento e nome corretos
       let clientRecord = null;
       if (user.role === 'CLIENT') {
         clientRecord = await prisma.client.findUnique({ where: { id: user.id } }).catch(() => null);
-        console.log('Cliente encontrado na BD:', clientRecord);
       }
 
-      // 1. Busca Contratos de forma extremamente ampla para garantir que encontre a Raquel
+      // 1. Busca Contratos corrigida usando a relação `client: { id: ... }` em vez de `clientId`
       let contracts: any[] = [];
       if (user.role === 'CLIENT') {
         contracts = await prisma.contract.findMany({
           where: {
             OR: [
-              { clientId: user.id },
+              { client: { id: user.id } },
               ...(clientRecord ? [
-                { clientId: clientRecord.id },
+                { client: { id: clientRecord.id } },
                 { client: { document: clientRecord.document } },
                 { client: { name: { contains: clientRecord.name, mode: 'insensitive' } } }
               ] : []),
@@ -147,8 +142,6 @@ export class ClientPortalController {
           }).catch(() => []);
         }
       }
-
-      console.log('Contratos encontrados para o usuário:', contracts.length);
 
       const properties = await prisma.property.findMany({
         where: { ownerId: user.id },
