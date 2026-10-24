@@ -67,14 +67,16 @@ export class CondominiumController {
             include: {
               owner: { select: { id: true, name: true } },
               client: { select: { id: true, name: true } }
-            }
+            },
+            orderBy: { unitNumber: 'asc' }
           },
-          expenses: true,
-          reservations: true,
-          occurrences: true,
-          bills: { include: { unit: true } },
-          readings: { include: { unit: true } }, 
-          assemblies: true,
+          expenses: { orderBy: { dueDate: 'desc' } },
+          reservations: { orderBy: { reservationDate: 'asc' } },
+          occurrences: { orderBy: { createdAt: 'desc' } },
+          bills: { include: { unit: true }, orderBy: { dueDate: 'desc' } },
+          readings: { include: { unit: true }, orderBy: { createdAt: 'desc' } }, 
+          agreements: { include: { unit: true }, orderBy: { createdAt: 'desc' } },
+          assemblies: { orderBy: { assemblyDate: 'desc' } },
           settings: true,
           _count: { select: { properties: true, units: true, bills: true } }
         },
@@ -83,6 +85,7 @@ export class CondominiumController {
 
       return res.json(condominiums);
     } catch (error) {
+      console.error(error);
       return res.status(500).json({ error: 'Erro ao listar condomínios.' });
     }
   }
@@ -151,7 +154,17 @@ export class CondominiumController {
   async createUnit(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
-      const { unitNumber, block, floor, fractionIdeal, ownerName, tenantName, ownerId, clientId } = req.body;
+      let { unitNumber, block, floor, fractionIdeal, ownerName, tenantName, ownerId, clientId } = req.body;
+
+      if (ownerId && !ownerName) {
+        const ownerObj = await prisma.owner.findUnique({ where: { id: ownerId } }).catch(() => null);
+        if (ownerObj) ownerName = ownerObj.name || ownerObj.corporateName;
+      }
+
+      if (clientId && !tenantName) {
+        const clientObj = await prisma.client.findUnique({ where: { id: clientId } }).catch(() => null);
+        if (clientObj) tenantName = clientObj.name;
+      }
 
       const unit = await prisma.condoUnit.create({
         data: {
@@ -160,10 +173,14 @@ export class CondominiumController {
           block,
           floor: floor ? Number(floor) : null,
           fractionIdeal: fractionIdeal ? Number(fractionIdeal) : 1.0,
-          ownerName,
-          tenantName,
+          ownerName: ownerName || null,
+          tenantName: tenantName || null,
           ownerId: ownerId || null,
           clientId: clientId || null
+        },
+        include: {
+          owner: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true } }
         }
       });
 
@@ -202,6 +219,19 @@ export class CondominiumController {
       const { unitId } = req.params;
       const { unitNumber, block, floor, fractionIdeal, ownerId, clientId } = req.body;
 
+      let ownerName = null;
+      let tenantName = null;
+
+      if (ownerId) {
+        const ownerObj = await prisma.owner.findUnique({ where: { id: ownerId } }).catch(() => null);
+        if (ownerObj) ownerName = ownerObj.name || ownerObj.corporateName;
+      }
+
+      if (clientId) {
+        const clientObj = await prisma.client.findUnique({ where: { id: clientId } }).catch(() => null);
+        if (clientObj) tenantName = clientObj.name;
+      }
+
       const unit = await prisma.condoUnit.update({
         where: { id: unitId },
         data: {
@@ -210,7 +240,13 @@ export class CondominiumController {
           floor: floor ? Number(floor) : null,
           fractionIdeal: fractionIdeal ? Number(fractionIdeal) : 1.0,
           ownerId: ownerId || null,
-          clientId: clientId || null
+          clientId: clientId || null,
+          ownerName,
+          tenantName
+        },
+        include: {
+          owner: { select: { id: true, name: true } },
+          client: { select: { id: true, name: true } }
         }
       });
 
@@ -327,6 +363,31 @@ export class CondominiumController {
   }
 
   // ==========================================
+  // ATUALIZAR RESERVA DE ÁREA COMUM
+  // ==========================================
+  async updateReservation(req: Request, res: Response) {
+    try {
+      const { reservationId } = req.params;
+      const { areaName, reservedBy, reservationDate, notes } = req.body;
+
+      const updated = await prisma.condoReservation.update({
+        where: { id: reservationId },
+        data: {
+          areaName,
+          reservedBy,
+          reservationDate: reservationDate ? new Date(reservationDate) : undefined,
+          notes
+        }
+      });
+
+      return res.json({ message: 'Reserva atualizada com sucesso!', reservation: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar reserva.' });
+    }
+  }
+
+  // ==========================================
   // LIVRO DE OCORRÊNCIAS
   // ==========================================
   async createOccurrence(req: Request, res: Response) {
@@ -363,6 +424,32 @@ export class CondominiumController {
       return res.json(occurrences);
     } catch (error) {
       return res.status(500).json({ error: 'Erro ao listar ocorrências.' });
+    }
+  }
+
+  // ==========================================
+  // ATUALIZAR OCORRÊNCIA
+  // ==========================================
+  async updateOccurrence(req: Request, res: Response) {
+    try {
+      const { occurrenceId } = req.params;
+      const { title, description, reportedBy, priority, status } = req.body;
+
+      const updated = await prisma.condoOccurrence.update({
+        where: { id: occurrenceId },
+        data: {
+          title,
+          description,
+          reportedBy,
+          priority,
+          status
+        }
+      });
+
+      return res.json({ message: 'Ocorrência atualizada com sucesso!', occurrence: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar ocorrência.' });
     }
   }
 
@@ -419,14 +506,13 @@ export class CondominiumController {
   }
 
   // ==========================================
-  // GERAR COBRANÇAS / RATEIO AUTOMÁTICO (COM JUROS E MULTAS CONFIGURADOS)
+  // GERAR COBRANÇAS / RATEIO AUTOMÁTICO CONSOLIDADO (TAXA + CONSUMO)
   // ==========================================
   async generateMonthlyBills(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
       const { referenceMonth, dueDate, baseAmount } = req.body;
 
-      // Busca as regras de juros e multa definidas pelo administrador
       let settings = await prisma.condoSetting.findUnique({ where: { condominiumId } });
       const fineRate = settings ? settings.finePercent : 2.0;
       const interestRate = settings ? settings.interestPercent : 1.0;
@@ -436,25 +522,36 @@ export class CondominiumController {
 
       const totalFraction = units.reduce((acc: number, u: any) => acc + (u.fractionIdeal || 1.0), 0);
       const generatedBills = [];
+      const refMonth = referenceMonth || 'Atual';
 
       for (const unit of units) {
         const proportion = (unit.fractionIdeal || 1.0) / totalFraction;
-        const unitAmount = Number(baseAmount) * proportion;
+        const condoFeePortion = Number(baseAmount || 0) * proportion;
+
+        // Soma leituras de consumo (Água, Gás, Energia) da unidade no mesmo mês de referência
+        const readings = await prisma.condoConsumptionReading.findMany({
+          where: { unitId: unit.id, referenceMonth: refMonth }
+        }).catch(() => []);
+
+        const totalConsumptionAmount = readings.reduce((sum: number, r: any) => sum + Number(r.totalAmount || 0), 0);
+        const unitTotalAmount = condoFeePortion + totalConsumptionAmount;
 
         const bill = await prisma.condoBill.create({
           data: {
             condominiumId,
             unitId: unit.id,
-            referenceMonth: referenceMonth || 'Atual',
+            referenceMonth: refMonth,
             dueDate: new Date(dueDate || Date.now()),
-            amount: Number(unitAmount.toFixed(2)),
+            amount: Number(unitTotalAmount.toFixed(2)),
             status: 'Pendente',
             destinationsJson: {
-              taxaCondominio: unitAmount,
+              taxaCondominio: Number(condoFeePortion.toFixed(2)),
+              consumoIndividual: Number(totalConsumptionAmount.toFixed(2)),
               fineAppliedPercent: fineRate,
               interestAppliedPercent: interestRate
             }
-          }
+          },
+          include: { unit: true }
         });
         generatedBills.push(bill);
       }
@@ -509,40 +606,6 @@ export class CondominiumController {
   }
 
   // ==========================================
-  // ATUALIZAR LEITURA DE CONSUMO (ÁGUA, GÁS, ENERGIA)
-  // ==========================================
-  async updateConsumptionReading(req: Request, res: Response) {
-    try {
-      const { readingId } = req.params;
-      const { previousValue, currentValue, unitPrice, referenceMonth, utilityType } = req.body;
-
-      const prev = Number(previousValue || 0);
-      const curr = Number(currentValue || 0);
-      const consumption = Math.max(0, curr - prev);
-      const price = Number(unitPrice || 0);
-      const totalAmount = consumption * price;
-
-      const updated = await prisma.condoConsumptionReading.update({
-        where: { id: readingId },
-        data: {
-          utilityType,
-          previousValue: prev,
-          currentValue: curr,
-          consumption,
-          unitPrice: price,
-          totalAmount: Number(totalAmount.toFixed(2)),
-          referenceMonth
-        }
-      });
-
-      return res.json({ message: 'Leitura atualizada com sucesso!', reading: updated });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao atualizar leitura de consumo.' });
-    }
-  }
-
-  // ==========================================
   // BAIXA DE BOLETOS / MARCAR COMO PAGO
   // ==========================================
   async markBillAsPaid(req: Request, res: Response) {
@@ -591,7 +654,8 @@ export class CondominiumController {
           totalAmount: Number(totalAmount.toFixed(2)),
           referenceMonth: referenceMonth || 'Atual',
           photoUrl: photoUrl || null
-        }
+        },
+        include: { unit: true }
       });
 
       return res.status(201).json({ message: 'Leitura registrada com sucesso!', reading });
@@ -619,6 +683,40 @@ export class CondominiumController {
   }
 
   // ==========================================
+  // ATUALIZAR LEITURA DE CONSUMO (ÁGUA, GÁS, ENERGIA)
+  // ==========================================
+  async updateConsumptionReading(req: Request, res: Response) {
+    try {
+      const { readingId } = req.params;
+      const { previousValue, currentValue, unitPrice, referenceMonth, utilityType } = req.body;
+
+      const prev = Number(previousValue || 0);
+      const curr = Number(currentValue || 0);
+      const consumption = Math.max(0, curr - prev);
+      const price = Number(unitPrice || 0);
+      const totalAmount = consumption * price;
+
+      const updated = await prisma.condoConsumptionReading.update({
+        where: { id: readingId },
+        data: {
+          utilityType,
+          previousValue: prev,
+          currentValue: curr,
+          consumption,
+          unitPrice: price,
+          totalAmount: Number(totalAmount.toFixed(2)),
+          referenceMonth
+        }
+      });
+
+      return res.json({ message: 'Leitura atualizada com sucesso!', reading: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar leitura de consumo.' });
+    }
+  }
+
+  // ==========================================
   // ACORDOS E PARCELAMENTO DE DÉBITOS
   // ==========================================
   async createAgreement(req: Request, res: Response) {
@@ -638,7 +736,8 @@ export class CondominiumController {
           installments: instCount,
           installmentValue,
           status: 'Ativo'
-        }
+        },
+        include: { unit: true }
       });
 
       for (let i = 1; i <= instCount; i++) {
@@ -662,6 +761,44 @@ export class CondominiumController {
     } catch (error) {
       console.error(error);
       return res.status(500).json({ error: 'Erro ao registrar acordo de débitos.' });
+    }
+  }
+
+  async listAgreements(req: Request, res: Response) {
+    try {
+      const { condominiumId } = req.params;
+      const agreements = await prisma.condoAgreement.findMany({
+        where: { condominiumId },
+        include: { unit: true },
+        orderBy: { createdAt: 'desc' }
+      });
+      return res.json(agreements);
+    } catch (error) {
+      return res.status(500).json({ error: 'Erro ao listar acordos.' });
+    }
+  }
+
+  async updateAgreement(req: Request, res: Response) {
+    try {
+      const { agreementId } = req.params;
+      const { totalDebt, installments, status } = req.body;
+
+      const dataToUpdate: any = { status };
+      if (totalDebt !== undefined) dataToUpdate.totalDebt = Number(totalDebt);
+      if (installments !== undefined) dataToUpdate.installments = Number(installments);
+      if (totalDebt !== undefined && installments !== undefined && Number(installments) > 0) {
+        dataToUpdate.installmentValue = Number((Number(totalDebt) / Number(installments)).toFixed(2));
+      }
+
+      const updated = await prisma.condoAgreement.update({
+        where: { id: agreementId },
+        data: dataToUpdate
+      });
+
+      return res.json({ message: 'Acordo atualizado com sucesso!', agreement: updated });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar acordo.' });
     }
   }
 
@@ -691,9 +828,6 @@ export class CondominiumController {
     }
   }
 
-   // ==========================================
-   //  LISTAR ASSEMBLEIAS
-   // ==========================================
   async listAssemblies(req: Request, res: Response) {
     try {
       const { condominiumId } = req.params;
@@ -707,34 +841,6 @@ export class CondominiumController {
     }
   }
 
-  // ==========================================
-  // ATUALIZAR RESERVA DE ÁREA COMUM
-  // ==========================================
-  async updateReservation(req: Request, res: Response) {
-    try {
-      const { reservationId } = req.params;
-      const { areaName, reservedBy, reservationDate, notes } = req.body;
-
-      const updated = await prisma.condoReservation.update({
-        where: { id: reservationId },
-        data: {
-          areaName,
-          reservedBy,
-          reservationDate: reservationDate ? new Date(reservationDate) : undefined,
-          notes
-        }
-      });
-
-      return res.json({ message: 'Reserva atualizada com sucesso!', reservation: updated });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao atualizar reserva.' });
-    }
-  }
-
-  // ==========================================
-  // ATUALIZAR ASSEMBLEIA
-  // ========================================== 
   async updateAssembly(req: Request, res: Response) {
     try {
       const { assemblyId } = req.params;
@@ -757,63 +863,4 @@ export class CondominiumController {
       return res.status(500).json({ error: 'Erro ao atualizar assembleia.' });
     }
   }
-
-  async listAgreements(req: Request, res: Response) {
-    try {
-      const { condominiumId } = req.params;
-      const agreements = await prisma.condoAgreement.findMany({
-        where: { condominiumId },
-        include: { unit: true },
-        orderBy: { createdAt: 'desc' }
-      });
-      return res.json(agreements);
-    } catch (error) {
-      return res.status(500).json({ error: 'Erro ao listar acordos.' });
-    }
-  }
-
-  async updateAgreement(req: Request, res: Response) {
-    try {
-      const { agreementId } = req.params;
-      const { totalDebt, installments, status } = req.body;
-
-      const updated = await prisma.condoAgreement.update({
-        where: { id: agreementId },
-        data: {
-          totalDebt: totalDebt !== undefined ? Number(totalDebt) : undefined,
-          installments: installments !== undefined ? Number(installments) : undefined,
-          status
-        }
-      });
-
-      return res.json({ message: 'Acordo atualizado com sucesso!', agreement: updated });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao atualizar acordo.' });
-    }
-  }
-
-  async updateOccurrence(req: Request, res: Response) {
-    try {
-      const { occurrenceId } = req.params;
-      const { title, description, reportedBy, priority, status } = req.body;
-
-      const updated = await prisma.condoOccurrence.update({
-        where: { id: occurrenceId },
-        data: {
-          title,
-          description,
-          reportedBy,
-          priority,
-          status
-        }
-      });
-
-      return res.json({ message: 'Ocorrência atualizada com sucesso!', occurrence: updated });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({ error: 'Erro ao atualizar ocorrência.' });
-    }
-  }
-
 }
