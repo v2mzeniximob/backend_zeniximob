@@ -77,8 +77,7 @@ export class ClientPortalController {
       return res.status(500).json({ error: 'Erro interno ao realizar login.' });
     }
   }
-
-  // ==========================================
+// ==========================================
   // 2. BUSCAR DADOS DO DASHBOARD 
   // ==========================================
   async getDashboard(req: Request, res: Response) {
@@ -105,7 +104,6 @@ export class ClientPortalController {
         return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
       }
 
-      // Busca dados complementares do cliente no banco para garantir o match do contrato
       let clientDoc = null;
       let clientName = user.name;
       if (user.role === 'CLIENT') {
@@ -116,26 +114,34 @@ export class ClientPortalController {
         }
       }
 
-      // 1. Busca Contratos com critérios amplos (ID, Nome ou Documento)
-      const contractWhere = user.role === 'CLIENT'
-        ? {
+      // 1. CONTRATOS: Se for Inquilino, busca pelo ID, Nome ou Documento do Cliente. Se for Proprietário, busca pelos imóveis dele.
+      let contracts: any[] = [];
+      if (user.role === 'CLIENT') {
+        contracts = await prisma.contract.findMany({
+          where: {
             OR: [
               { clientId: user.id },
               ...(clientName ? [{ client: { name: { contains: clientName, mode: 'insensitive' } } }] : []),
               ...(clientDoc ? [{ client: { document: clientDoc } }] : [])
             ]
-          }
-        : { property: { ownerId: user.id } };
+          },
+          include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
+          orderBy: { createdAt: 'desc' }
+        }).catch(() => []);
+      } else {
+        // Se for proprietário, busca os contratos dos imóveis que pertencem a ele
+        const ownerProperties = await prisma.property.findMany({ where: { ownerId: user.id } }).catch(() => []);
+        const propIds = ownerProperties.map((p: any) => p.id);
+        if (propIds.length > 0) {
+          contracts = await prisma.contract.findMany({
+            where: { propertyId: { in: propIds } },
+            include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
+            orderBy: { createdAt: 'desc' }
+          }).catch(() => []);
+        }
+      }
 
-      const contracts = await prisma.contract.findMany({
-        where: contractWhere,
-        include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
-        orderBy: { createdAt: 'desc' }
-      }).catch((err: any) => {
-        console.error('Erro ao buscar contratos no portal:', err);
-        return [];
-      });
-
+      // Imóveis do Proprietário
       const properties = await prisma.property.findMany({
         where: { ownerId: user.id },
         include: { contracts: { include: { invoices: true } } },
@@ -158,7 +164,7 @@ export class ClientPortalController {
         include: { property: true }
       }).catch(() => []) || [];
 
-      // 2. Busca Unidades de Condomínio vinculadas
+      // 2. Unidades de Condomínio
       const userUnits = await prisma.condoUnit.findMany({
         where: user.role === 'CLIENT'
           ? {
