@@ -110,37 +110,27 @@ export class ClientPortalController {
         clientRecord = await prisma.client.findUnique({ where: { id: user.id } }).catch(() => null);
       }
 
-      // 1. Busca Contratos corrigida usando a relação `client: { id: ... }` em vez de `clientId`
+      // 1. Busca segura de Contratos (evita erros de campos desconhecidos no schema)
+      const allContracts = await prisma.contract.findMany({
+        include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
+        orderBy: { createdAt: 'desc' }
+      }).catch((err: any) => {
+        console.error('Erro ao buscar contratos no portal:', err);
+        return [];
+      });
+
       let contracts: any[] = [];
       if (user.role === 'CLIENT') {
-        contracts = await prisma.contract.findMany({
-          where: {
-            OR: [
-              { client: { id: user.id } },
-              ...(clientRecord ? [
-                { client: { id: clientRecord.id } },
-                { client: { document: clientRecord.document } },
-                { client: { name: { contains: clientRecord.name, mode: 'insensitive' } } }
-              ] : []),
-              ...(user.name ? [{ client: { name: { contains: user.name, mode: 'insensitive' } } }] : [])
-            ]
-          },
-          include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
-          orderBy: { createdAt: 'desc' }
-        }).catch((err: any) => {
-          console.error('Erro ao buscar contratos no portal:', err);
-          return [];
+        contracts = allContracts.filter((c: any) => {
+          const matchesId = c.clientId === user.id || c.tenantId === user.id || (clientRecord && c.clientId === clientRecord.id);
+          const matchesDoc = clientRecord?.document && c.client?.document === clientRecord.document;
+          const matchesName = clientRecord?.name && c.client?.name?.toLowerCase().includes(clientRecord.name.toLowerCase());
+          return matchesId || matchesDoc || matchesName;
         });
       } else {
         const ownerProperties = await prisma.property.findMany({ where: { ownerId: user.id } }).catch(() => []);
         const propIds = ownerProperties.map((p: any) => p.id);
-        if (propIds.length > 0) {
-          contracts = await prisma.contract.findMany({
-            where: { propertyId: { in: propIds } },
-            include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
-            orderBy: { createdAt: 'desc' }
-          }).catch(() => []);
-        }
+        contracts = allContracts.filter((c: any) => propIds.includes(c.propertyId));
       }
 
       const properties = await prisma.property.findMany({
@@ -165,24 +155,22 @@ export class ClientPortalController {
         include: { property: true }
       }).catch(() => []) || [];
 
-      // 2. Unidades de Condomínio
-      const userUnits = await prisma.condoUnit.findMany({
-        where: user.role === 'CLIENT'
-          ? {
-              OR: [
-                { clientId: user.id },
-                ...(clientRecord?.name ? [{ tenantName: { contains: clientRecord.name, mode: 'insensitive' } }] : []),
-                ...(user.name ? [{ tenantName: { contains: user.name, mode: 'insensitive' } }] : [])
-              ]
-            }
-          : {
-              OR: [
-                { ownerId: user.id },
-                ...(clientRecord?.name ? [{ ownerName: { contains: clientRecord.name, mode: 'insensitive' } }] : [])
-              ]
-            },
+      // 2. Unidades de Condomínio com filtro seguro em memória
+      const allUnits = await prisma.condoUnit.findMany({
         include: { condominium: true }
       }).catch(() => []);
+
+      const userUnits = allUnits.filter((u: any) => {
+        if (user.role === 'CLIENT') {
+          return u.clientId === user.id || 
+                 (clientRecord && u.clientId === clientRecord.id) ||
+                 (clientRecord?.name && u.tenantName?.toLowerCase().includes(clientRecord.name.toLowerCase())) ||
+                 (user.name && u.tenantName?.toLowerCase().includes(user.name.toLowerCase()));
+        } else {
+          return u.ownerId === user.id || 
+                 (clientRecord?.name && u.ownerName?.toLowerCase().includes(clientRecord.name.toLowerCase()));
+        }
+      });
 
       const unitIds = userUnits.map((u: any) => u.id);
 
