@@ -86,7 +86,6 @@ export class ClientPortalController {
       const reqAny = req as any;
       let user = reqAny.user;
 
-      // Fallback seguro caso o middleware coloque os dados direto no req
       if (!user && reqAny.userId) {
         user = {
           id: reqAny.userId,
@@ -95,7 +94,6 @@ export class ClientPortalController {
         };
       }
 
-      // Fallback de decodificação do Token JWT se necessário
       if (!user && req.headers.authorization) {
         try {
           const token = req.headers.authorization.replace('Bearer ', '').trim();
@@ -109,9 +107,18 @@ export class ClientPortalController {
         return res.status(401).json({ error: 'Sessão inválida ou expirada.' });
       }
 
-      // 1. Busca Contratos, Imóveis e Chamados do cliente/proprietário
+      // 1. Busca Contratos considerando se é CLIENT (por ID ou Nome) ou OWNER (por Imóveis)
+      const contractWhere = user.role === 'CLIENT'
+        ? {
+            OR: [
+              { clientId: user.id },
+              ...(user.name ? [{ client: { name: { contains: user.name, mode: 'insensitive' } } }] : [])
+            ]
+          }
+        : { property: { ownerId: user.id } };
+
       const contracts = await prisma.contract.findMany({
-        where: { clientId: user.id },
+        where: contractWhere,
         include: { property: true, invoices: { orderBy: { dueDate: 'asc' } } },
         orderBy: { createdAt: 'desc' }
       }).catch((err: any) => {
@@ -141,7 +148,7 @@ export class ClientPortalController {
         include: { property: true }
       }).catch(() => []) || [];
 
-      // 2. Busca as Unidades de Condomínio vinculadas (por ID ou por nome/inquilino)
+      // 2. Busca as Unidades de Condomínio vinculadas
       const userUnits = await prisma.condoUnit.findMany({
         where: user.role === 'CLIENT'
           ? {
@@ -161,7 +168,6 @@ export class ClientPortalController {
 
       const unitIds = userUnits.map((u: any) => u.id);
 
-      // Reúne os IDs de condomínio das unidades e dos contratos/imóveis
       const condoIdsFromUnits = userUnits.map((u: any) => u.condominiumId).filter(Boolean);
       const condoIdsFromContracts = contracts.map((c: any) => c.property?.condominiumId).filter(Boolean);
       const condoIdsFromProperties = properties.map((p: any) => p.condominiumId).filter(Boolean);
